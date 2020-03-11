@@ -4,6 +4,7 @@ import traceback
 from datetime import datetime
 from threading import Thread
 from pathlib import Path
+from inspect import getfile
 
 from vnpy.event import Event, EventEngine
 from vnpy.trader.engine import BaseEngine, MainEngine
@@ -314,6 +315,7 @@ class BacktesterEngine(BaseEngine):
         size: int,
         pricetick: float,
         capital: int,
+        inverse: bool,
         optimization_setting: OptimizationSetting,
         use_ga: bool
     ):
@@ -335,6 +337,7 @@ class BacktesterEngine(BaseEngine):
                 size,
                 pricetick,
                 capital,
+                inverse,
                 optimization_setting,
                 use_ga
             )
@@ -367,18 +370,24 @@ class BacktesterEngine(BaseEngine):
 
         contract = self.main_engine.get_contract(vt_symbol)
 
-        # If history data provided in gateway, then query
-        if contract and contract.history_data:
-            data = self.main_engine.query_history(req, contract.gateway_name)
-        # Otherwise use RQData to query data
-        else:
-            data = rqdata_client.query_history(req)
+        try:
+            # If history data provided in gateway, then query
+            if contract and contract.history_data:
+                data = self.main_engine.query_history(
+                    req, contract.gateway_name
+                )
+            # Otherwise use RQData to query data
+            else:
+                data = rqdata_client.query_history(req)
 
-        if data:
-            database_manager.save_bar_data(data)
-            self.write_log(f"{vt_symbol}-{interval}历史数据下载完成")
-        else:
-            self.write_log(f"数据下载失败，无法获取{vt_symbol}的历史数据")
+            if data:
+                database_manager.save_bar_data(data)
+                self.write_log(f"{vt_symbol}-{interval}历史数据下载完成")
+            else:
+                self.write_log(f"数据下载失败，无法获取{vt_symbol}的历史数据")
+        except Exception:
+            msg = f"数据下载失败，触发异常：\n{traceback.format_exc()}"
+            self.write_log(msg)
 
         # Clear thread object handler.
         self.thread = None
@@ -423,3 +432,9 @@ class BacktesterEngine(BaseEngine):
     def get_history_data(self):
         """"""
         return self.backtesting_engine.history_data
+
+    def get_strategy_class_file(self, class_name: str):
+        """"""
+        strategy_class = self.classes[class_name]
+        file_path = getfile(strategy_class)
+        return file_path

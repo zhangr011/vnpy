@@ -5,7 +5,8 @@ import sys
 from abc import ABC
 from enum import Enum
 from logging import INFO, ERROR
-from vnpy.trader.constant import Direction
+from vnpy.trader.constant import Direction  # noqa
+
 
 class Area(Enum):
     """ Kline area """

@@ -853,7 +853,7 @@ class CtaSpreadTemplate(CtaTemplate):
                         # 属于平多委托单
                         if order_info['direction'] == Direction.SHORT:
                             sell_price = self.cta_engine.get_price(order_vt_symbol) \
-                                         - self.cta_engine.get_price_tick(order_vt_symbol)
+                                         - self.cta_engine.get_price_tick(order_vt_symbol)  # noqa
                             self.write_log(u'重新提交{}平多委托,{}，v:{}'
                                            .format(order_vt_symbol, sell_price, order_volume))
                             vt_orderids = self.sell(price=sell_price,

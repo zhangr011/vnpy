@@ -714,8 +714,14 @@ class CtpTdApi(TdApi):
         """
         self.gateway.write_log("结算信息确认成功")
 
-        self.reqid += 1
-        self.reqQryInstrument({}, self.reqid)
+        while True:
+            self.reqid += 1
+            n = self.reqQryInstrument({}, self.reqid)
+
+            if not n:
+                break
+            else:
+                sleep(1)
 
     def onRspQryInvestorPosition(self, data: dict, error: dict, reqid: int, last: bool):
         """"""

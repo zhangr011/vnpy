@@ -10,7 +10,7 @@ from datetime import datetime
 from threading import Lock
 from urllib.parse import urlparse
 from copy import copy
-
+from typing import Dict
 from requests import ConnectionError
 
 from vnpy.api.rest import Request, RestClient
@@ -36,7 +36,6 @@ from vnpy.trader.object import (
 )
 from vnpy.trader.event import EVENT_TIMER
 
-
 REST_HOST = "https://1token.trade/api"
 # DATA_WEBSOCKET_HOST = "wss://1token.trade/api/v1/ws/tick"
 # TRADE_WEBSOCKET_HOST = "wss://1token.trade/api/v1/ws/trade"
@@ -46,7 +45,6 @@ TRADE_WEBSOCKET_HOST = "wss://cdn.1tokentrade.cn/api/v1/ws/trade"
 
 DIRECTION_VT2ONETOKEN = {Direction.LONG: "b", Direction.SHORT: "s"}
 DIRECTION_ONETOKEN2VT = {v: k for k, v in DIRECTION_VT2ONETOKEN.items()}
-
 
 EXCHANGE_VT2ONETOKEN = {
     Exchange.OKEX: "okex",
@@ -209,9 +207,7 @@ class OnetokenRestApi(RestClient):
         self.exchange = exchange
         self.account = account
 
-        self.connect_time = (
-            int(datetime.now().strftime("%y%m%d%H%M%S")) * self.order_count
-        )
+        self.connect_time = (int(datetime.now().strftime("%y%m%d%H%M%S")) * self.order_count)
 
         self.init(REST_HOST, proxy_host, proxy_port)
 
@@ -372,7 +368,7 @@ class OnetokenDataWebsocketApi(WebsocketClient):
 
         self.gateway = gateway
         self.gateway_name = gateway.gateway_name
-
+        self.subscribed: Dict[str, SubscribeRequest] = {}
         self.ticks = {}
         self.callbacks = {
             "auth": self.on_login,
@@ -380,9 +376,9 @@ class OnetokenDataWebsocketApi(WebsocketClient):
         }
 
     def connect(
-        self,
-        proxy_host: str,
-        proxy_port: int
+            self,
+            proxy_host: str,
+            proxy_port: int
     ):
         """"""
         self.init(DATA_WEBSOCKET_HOST, proxy_host, proxy_port)
@@ -391,6 +387,7 @@ class OnetokenDataWebsocketApi(WebsocketClient):
         """
         Subscribe to tick data upate.
         """
+        self.subscribed[req.vt_symbol] = req
         tick = TickData(
             symbol=req.symbol,
             exchange=req.exchange,
@@ -449,6 +446,8 @@ class OnetokenDataWebsocketApi(WebsocketClient):
     def on_login(self, data: dict):
         """"""
         self.gateway.write_log("行情Websocket API登录成功")
+        for req in list(self.subscribed.values()):
+            self.subscribe(req)
 
     def on_tick(self, data: dict):
         """"""
@@ -503,13 +502,13 @@ class OnetokenTradeWebsocketApi(WebsocketClient):
         }
 
     def connect(
-        self,
-        key: str,
-        secret: str,
-        exchange: str,
-        account: str,
-        proxy_host: str,
-        proxy_port: int
+            self,
+            key: str,
+            secret: str,
+            exchange: str,
+            account: str,
+            proxy_host: str,
+            proxy_port: int
     ):
         """"""
         self.key = key

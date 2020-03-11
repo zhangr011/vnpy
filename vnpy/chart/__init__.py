@@ -1,2 +1,2 @@
-from .widget import ChartWidget, KlineWidget
+from .widget import ChartWidget
 from .item import CandleItem, VolumeItem

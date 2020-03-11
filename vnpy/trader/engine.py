@@ -2,6 +2,7 @@
 """
 
 import logging
+from logging import Logger
 import smtplib
 import os
 from abc import ABC
@@ -9,7 +10,7 @@ from datetime import datetime
 from email.message import EmailMessage
 from queue import Empty, Queue
 from threading import Thread
-from typing import Any, Sequence, Type
+from typing import Any, Sequence, Type, Dict, List, Optional
 
 from vnpy.event import Event, EventEngine
 from .app import BaseApp
@@ -29,7 +30,14 @@ from .object import (
     LogData,
     OrderRequest,
     SubscribeRequest,
-    HistoryRequest
+    HistoryRequest,
+    OrderData,
+    BarData,
+    TickData,
+    TradeData,
+    PositionData,
+    AccountData,
+    ContractData
 )
 from .setting import SETTINGS
 from .utility import get_folder_path, TRADER_DIR
@@ -46,15 +54,15 @@ class MainEngine:
     def __init__(self, event_engine: EventEngine = None):
         """"""
         if event_engine:
-            self.event_engine = event_engine
+            self.event_engine: EventEngine = event_engine
         else:
             self.event_engine = EventEngine()
         self.event_engine.start()
 
-        self.gateways = {}
-        self.engines = {}
-        self.apps = {}
-        self.exchanges = []
+        self.gateways: Dict[str, BaseGateway] = {}
+        self.engines: Dict[str, BaseEngine] = {}
+        self.apps: Dict[str, BaseApp] = {}
+        self.exchanges: List[Exchange] = []
 
         self.rm_engine = None
         self.algo_engine = None
@@ -62,7 +70,7 @@ class MainEngine:
         os.chdir(TRADER_DIR)  # Change working directory
         self.init_engines()  # Initialize function engines
 
-    def add_engine(self, engine_class: Any):
+    def add_engine(self, engine_class: Any) -> "BaseEngine":
         """
         Add function engine.
         """
@@ -70,7 +78,7 @@ class MainEngine:
         self.engines[engine.engine_name] = engine
         return engine
 
-    def add_gateway(self, gateway_class: Type[BaseGateway], gateway_name: str = None):
+    def add_gateway(self, gateway_class: Type[BaseGateway], gateway_name: str = None) -> BaseGateway:
         """
         Add gateway.
         """
@@ -91,7 +99,7 @@ class MainEngine:
 
         return gateway
 
-    def add_app(self, app_class: Type[BaseApp]):
+    def add_app(self, app_class: Type[BaseApp]) -> "BaseEngine":
         """
         Add app.
         """
@@ -106,7 +114,7 @@ class MainEngine:
 
         return engine
 
-    def init_engines(self):
+    def init_engines(self) -> None:
         """
         Init all engines.
         """
@@ -114,7 +122,7 @@ class MainEngine:
         self.add_engine(OmsEngine)
         self.add_engine(EmailEngine)
 
-    def write_log(self, msg: str, source: str = ""):
+    def write_log(self, msg: str, source: str = "") -> None:
         """
         Put log event with specific message.
         """
@@ -122,7 +130,7 @@ class MainEngine:
         event = Event(EVENT_LOG, log)
         self.event_engine.put(event)
 
-    def get_gateway(self, gateway_name: str):
+    def get_gateway(self, gateway_name: str) -> BaseGateway:
         """
         Return gateway object by name.
         """
@@ -131,7 +139,7 @@ class MainEngine:
             self.write_log(f"找不到底层接口：{gateway_name}")
         return gateway
 
-    def get_engine(self, engine_name: str):
+    def get_engine(self, engine_name: str) -> "BaseEngine":
         """
         Return engine object by name.
         """
@@ -140,7 +148,7 @@ class MainEngine:
             self.write_log(f"找不到引擎：{engine_name}")
         return engine
 
-    def get_default_setting(self, gateway_name: str):
+    def get_default_setting(self, gateway_name: str) -> Optional[Dict[str, Any]]:
         """
         Get default setting dict of a specific gateway.
         """
@@ -149,25 +157,25 @@ class MainEngine:
             return gateway.get_default_setting()
         return None
 
-    def get_all_gateway_names(self):
+    def get_all_gateway_names(self) -> List[str]:
         """
         Get all names of gatewasy added in main engine.
         """
         return list(self.gateways.keys())
 
-    def get_all_apps(self):
+    def get_all_apps(self) -> List[BaseApp]:
         """
         Get all app objects.
         """
         return list(self.apps.values())
 
-    def get_all_exchanges(self):
+    def get_all_exchanges(self) -> List[Exchange]:
         """
         Get all exchanges.
         """
         return self.exchanges
 
-    def connect(self, setting: dict, gateway_name: str):
+    def connect(self, setting: dict, gateway_name: str) -> None:
         """
         Start connection of a specific gateway.
         """
@@ -175,7 +183,7 @@ class MainEngine:
         if gateway:
             gateway.connect(setting)
 
-    def subscribe(self, req: SubscribeRequest, gateway_name: str):
+    def subscribe(self, req: SubscribeRequest, gateway_name: str) -> None:
         """
         Subscribe tick data update of a specific gateway.
         如果没有指定gateway，那么所有的gateway都会接收改订阅请求
@@ -189,7 +197,7 @@ class MainEngine:
                 if gateway:
                     gateway.subscribe(req)
 
-    def send_order(self, req: OrderRequest, gateway_name: str):
+    def send_order(self, req: OrderRequest, gateway_name: str) -> str:
         """
         Send new order request to a specific gateway.
         扩展支持自定义套利合约。 由cta_strategy_pro发出算法单委托，由算法引擎进行处理
@@ -206,7 +214,7 @@ class MainEngine:
         else:
             return ""
 
-    def cancel_order(self, req: CancelRequest, gateway_name: str):
+    def cancel_order(self, req: CancelRequest, gateway_name: str) -> bool:
         """
         Send cancel order request to a specific gateway.
         """
@@ -215,7 +223,7 @@ class MainEngine:
             return gateway.cancel_order(req)
         return False
 
-    def send_orders(self, reqs: Sequence[OrderRequest], gateway_name: str):
+    def send_orders(self, reqs: Sequence[OrderRequest], gateway_name: str) -> List[str]:
         """
         批量发单
         """
@@ -225,14 +233,14 @@ class MainEngine:
         else:
             return ["" for req in reqs]
 
-    def cancel_orders(self, reqs: Sequence[CancelRequest], gateway_name: str):
+    def cancel_orders(self, reqs: Sequence[CancelRequest], gateway_name: str) -> None:
         """
         """
         gateway = self.get_gateway(gateway_name)
         if gateway:
             gateway.cancel_orders(reqs)
 
-    def query_history(self, req: HistoryRequest, gateway_name: str):
+    def query_history(self, req: HistoryRequest, gateway_name: str) -> Optional[List[BarData]]:
         """
         Send cancel order request to a specific gateway.
         """
@@ -242,7 +250,7 @@ class MainEngine:
         else:
             return None
 
-    def close(self):
+    def close(self) -> None:
         """
         Make sure every gateway and app is closed properly before
         programme exit.
@@ -263,10 +271,10 @@ class BaseEngine(ABC):
     """
 
     def __init__(
-        self,
-        main_engine: MainEngine,
-        event_engine: EventEngine,
-        engine_name: str,
+            self,
+            main_engine: MainEngine,
+            event_engine: EventEngine,
+            engine_name: str,
     ):
         """"""
         self.main_engine = main_engine
@@ -321,9 +329,9 @@ class LogEngine(BaseEngine):
         if not SETTINGS["log.active"]:
             return
 
-        self.level = SETTINGS["log.level"]
+        self.level: int = SETTINGS["log.level"]
 
-        self.logger = logging.getLogger("VN Trader")
+        self.logger: Logger = logging.getLogger("VN Trader")
         self.logger.setLevel(self.level)
 
         self.formatter = logging.Formatter(
@@ -340,14 +348,14 @@ class LogEngine(BaseEngine):
 
         self.register_event()
 
-    def add_null_handler(self):
+    def add_null_handler(self) -> None:
         """
         Add null handler for logger.
         """
         null_handler = logging.NullHandler()
         self.logger.addHandler(null_handler)
 
-    def add_console_handler(self):
+    def add_console_handler(self) -> None:
         """
         Add console output of log.
         """
@@ -356,7 +364,7 @@ class LogEngine(BaseEngine):
         console_handler.setFormatter(self.formatter)
         self.logger.addHandler(console_handler)
 
-    def add_file_handler(self):
+    def add_file_handler(self) -> None:
         """
         Add file output of log.
         """
@@ -372,11 +380,11 @@ class LogEngine(BaseEngine):
         file_handler.setFormatter(self.formatter)
         self.logger.addHandler(file_handler)
 
-    def register_event(self):
+    def register_event(self) -> None:
         """"""
         self.event_engine.register(EVENT_LOG, self.process_log_event)
 
-    def process_log_event(self, event: Event):
+    def process_log_event(self, event: Event) -> None:
         """
         Process log event.
         """
@@ -393,21 +401,21 @@ class OmsEngine(BaseEngine):
         """"""
         super(OmsEngine, self).__init__(main_engine, event_engine, "oms")
 
-        self.ticks = {}
-        self.orders = {}
-        self.trades = {}
-        self.positions = {}
-        self.accounts = {}
-        self.contracts = {}
+        self.ticks: Dict[str, TickData] = {}
+        self.orders: Dict[str, OrderData] = {}
+        self.trades: Dict[str, TradeData] = {}
+        self.positions: Dict[str, PositionData] = {}
+        self.accounts: Dict[str, AccountData] = {}
+        self.contracts: Dict[str, ContractData] = {}
         self.custom_contracts = {}
         self.prices = {}
 
-        self.active_orders = {}
+        self.active_orders: Dict[str, OrderData] = {}
 
         self.add_function()
         self.register_event()
 
-    def add_function(self):
+    def add_function(self) -> None:
         """Add query function to main engine."""
         self.main_engine.get_tick = self.get_tick
         self.main_engine.get_order = self.get_order
@@ -425,7 +433,7 @@ class OmsEngine(BaseEngine):
         self.main_engine.get_all_active_orders = self.get_all_active_orders
         self.main_engine.get_all_custom_contracts = self.get_all_custom_contracts
 
-    def register_event(self):
+    def register_event(self) -> None:
         """"""
         self.event_engine.register(EVENT_TICK, self.process_tick_event)
         self.event_engine.register(EVENT_ORDER, self.process_order_event)
@@ -434,7 +442,7 @@ class OmsEngine(BaseEngine):
         self.event_engine.register(EVENT_ACCOUNT, self.process_account_event)
         self.event_engine.register(EVENT_CONTRACT, self.process_contract_event)
 
-    def process_tick_event(self, event: Event):
+    def process_tick_event(self, event: Event) -> None:
         """"""
         tick = event.data
         self.ticks[tick.vt_symbol] = tick
@@ -442,7 +450,7 @@ class OmsEngine(BaseEngine):
         if tick.last_price:
             self.prices[tick.vt_symbol] = tick.last_price
 
-    def process_order_event(self, event: Event):
+    def process_order_event(self, event: Event) -> None:
         """"""
         order = event.data
         self.orders[order.vt_orderid] = order
@@ -454,28 +462,28 @@ class OmsEngine(BaseEngine):
         elif order.vt_orderid in self.active_orders:
             self.active_orders.pop(order.vt_orderid)
 
-    def process_trade_event(self, event: Event):
+    def process_trade_event(self, event: Event) -> None:
         """"""
         trade = event.data
         self.trades[trade.vt_tradeid] = trade
 
-    def process_position_event(self, event: Event):
+    def process_position_event(self, event: Event) -> None:
         """"""
         position = event.data
         self.positions[position.vt_positionid] = position
 
-    def process_account_event(self, event: Event):
+    def process_account_event(self, event: Event) -> None:
         """"""
         account = event.data
         self.accounts[account.vt_accountid] = account
 
-    def process_contract_event(self, event: Event):
+    def process_contract_event(self, event: Event) -> None:
         """"""
         contract = event.data
         self.contracts[contract.vt_symbol] = contract
         self.contracts[contract.symbol] = contract
 
-    def get_tick(self, vt_symbol):
+    def get_tick(self, vt_symbol: str) -> Optional[TickData]:
         """
         Get latest market tick data by vt_symbol.
         """
@@ -489,73 +497,73 @@ class OmsEngine(BaseEngine):
         """
         return self.prices.get(vt_symbol, None)
 
-    def get_order(self, vt_orderid):
+    def get_order(self, vt_orderid) -> Optional[OrderData]:
         """
         Get latest order data by vt_orderid.
         """
         return self.orders.get(vt_orderid, None)
 
-    def get_trade(self, vt_tradeid):
+    def get_trade(self, vt_tradeid: str) -> Optional[TradeData]:
         """
         Get trade data by vt_tradeid.
         """
         return self.trades.get(vt_tradeid, None)
 
-    def get_position(self, vt_positionid):
+    def get_position(self, vt_positionid: str) -> Optional[PositionData]:
         """
         Get latest position data by vt_positionid.
         """
         return self.positions.get(vt_positionid, None)
 
-    def get_account(self, vt_accountid):
+    def get_account(self, vt_accountid: str) -> Optional[AccountData]:
         """
         Get latest account data by vt_accountid.
         """
         return self.accounts.get(vt_accountid, None)
 
-    def get_contract(self, vt_symbol):
+    def get_contract(self, vt_symbol: str) -> Optional[ContractData]:
         """
         Get contract data by vt_symbol.
         """
         return self.contracts.get(vt_symbol, None)
 
-    def get_all_ticks(self):
+    def get_all_ticks(self) -> List[TickData]:
         """
         Get all tick data.
         """
         return list(self.ticks.values())
 
-    def get_all_orders(self):
+    def get_all_orders(self) -> List[OrderData]:
         """
         Get all order data.
         """
         return list(self.orders.values())
 
-    def get_all_trades(self):
+    def get_all_trades(self) -> List[TradeData]:
         """
         Get all trade data.
         """
         return list(self.trades.values())
 
-    def get_all_positions(self):
+    def get_all_positions(self) -> List[PositionData]:
         """
         Get all position data.
         """
         return list(self.positions.values())
 
-    def get_all_accounts(self):
+    def get_all_accounts(self) -> List[AccountData]:
         """
         Get all account data.
         """
         return list(self.accounts.values())
 
-    def get_all_contracts(self):
+    def get_all_contracts(self) -> List[ContractData]:
         """
         Get all contract data.
         """
         return list(self.contracts.values())
 
-    def get_all_active_orders(self, vt_symbol: str = ""):
+    def get_all_active_orders(self, vt_symbol: str = "") -> List[OrderData]:
         """
         Get all active orders by vt_symbol.
 
@@ -632,13 +640,13 @@ class EmailEngine(BaseEngine):
         """"""
         super(EmailEngine, self).__init__(main_engine, event_engine, "email")
 
-        self.thread = Thread(target=self.run)
-        self.queue = Queue()
-        self.active = False
+        self.thread: Thread = Thread(target=self.run)
+        self.queue: Queue = Queue()
+        self.active: bool = False
 
         self.main_engine.send_email = self.send_email
 
-    def send_email(self, subject: str, content: str, receiver: str = ""):
+    def send_email(self, subject: str, content: str, receiver: str = "") -> None:
         """"""
         # Start email engine when sending first email.
         if not self.active:
@@ -650,13 +658,13 @@ class EmailEngine(BaseEngine):
 
         msg = EmailMessage()
         msg["From"] = SETTINGS["email.sender"]
-        msg["To"] = SETTINGS["email.receiver"]
+        msg["To"] = receiver
         msg["Subject"] = subject
         msg.set_content(content)
 
         self.queue.put(msg)
 
-    def run(self):
+    def run(self) -> None:
         """"""
         while self.active:
             try:
@@ -672,12 +680,12 @@ class EmailEngine(BaseEngine):
             except Empty:
                 pass
 
-    def start(self):
+    def start(self) -> None:
         """"""
         self.active = True
         self.thread.start()
 
-    def close(self):
+    def close(self) -> None:
         """"""
         if not self.active:
             return
