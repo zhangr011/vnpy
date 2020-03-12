@@ -6,6 +6,7 @@ import urllib
 import hashlib
 import hmac
 import time
+import json
 from copy import copy
 from datetime import datetime, timedelta
 from enum import Enum
@@ -16,6 +17,7 @@ from vnpy.api.rest import RestClient, Request
 from vnpy.api.websocket import WebsocketClient
 from vnpy.trader.constant import (
     Direction,
+    Offset,
     Exchange,
     Product,
     Status,
@@ -162,6 +164,8 @@ class BinancefGateway(BaseGateway):
         """"""
         self.rest_api.keep_user_stream()
 
+    def get_order(self, orderid: str):
+        return self.rest_api.get_order(orderid)
 
 class BinancefRestApi(RestClient):
     """
@@ -188,6 +192,8 @@ class BinancefRestApi(RestClient):
         self.order_count: int = 1_000_000
         self.order_count_lock: Lock = Lock()
         self.connect_time: int = 0
+
+        self.orders = {}
 
     def sign(self, request: Request) -> Request:
         """
@@ -273,6 +279,8 @@ class BinancefRestApi(RestClient):
         self.query_position()
         self.query_order()
         self.query_contract()
+        self.query_trade()
+
         self.start_user_stream()
 
     def query_time(self) -> Request:
@@ -334,11 +342,31 @@ class BinancefRestApi(RestClient):
             data=data
         )
 
+
+    def query_trade(self, vt_symbol: str = '') -> Request:
+        """"""
+        data = {"security": Security.SIGNED}
+        if vt_symbol:
+            if  '.' in vt_symbol:
+                vt_symbol = vt_symbol.split('.')[0]
+            data.update({'symbol': vt_symbol})
+
+        self.add_request(
+            method="GET",
+            path="/fapi/v1/userTrades",
+            callback=self.on_query_trade,
+            data=data
+        )
+
     def _new_order_id(self) -> int:
         """"""
         with self.order_count_lock:
             self.order_count += 1
             return self.order_count
+
+    def get_order(self, orderid: str):
+        """返回缓存的Order"""
+        return self.orders.get(orderid, None)
 
     def send_order(self, req: OrderRequest) -> str:
         """"""
@@ -347,6 +375,7 @@ class BinancefRestApi(RestClient):
             orderid,
             self.gateway_name
         )
+        self.orders.update({orderid: copy(order)})
         self.gateway.on_order(order)
 
         data = {
@@ -457,18 +486,68 @@ class BinancefRestApi(RestClient):
     def on_query_position(self, data: dict, request: Request) -> None:
         """"""
         for d in data:
-            position = PositionData(
-                symbol=d["symbol"],
-                exchange=Exchange.BINANCE,
-                direction=Direction.NET,
-                volume=int(float(d["positionAmt"])),
-                price=float(d["entryPrice"]),
-                pnl=float(d["unRealizedProfit"]),
-                gateway_name=self.gateway_name,
-            )
+            volume = float(d["positionAmt"])
 
-            if position.volume:
-                self.gateway.on_position(position)
+            if volume > 0:
+                long_position = PositionData(
+                    symbol=d["symbol"],
+                    exchange=Exchange.BINANCE,
+                    direction=Direction.LONG,
+                    volume=abs(volume),
+                    price=float(d["entryPrice"]),
+                    pnl=float(d["unRealizedProfit"]),
+                    gateway_name=self.gateway_name,
+                )
+                short_position = PositionData(
+                    symbol=d["symbol"],
+                    exchange=Exchange.BINANCE,
+                    direction=Direction.LONG,
+                    volume=0,
+                    price=0,
+                    pnl=0,
+                    gateway_name=self.gateway_name,
+                )
+            elif volume < 0:
+                long_position = PositionData(
+                    symbol=d["symbol"],
+                    exchange=Exchange.BINANCE,
+                    direction=Direction.LONG,
+                    volume=0,
+                    price=0,
+                    pnl=0,
+                    gateway_name=self.gateway_name,
+                )
+                short_position = PositionData(
+                    symbol=d["symbol"],
+                    exchange=Exchange.BINANCE,
+                    direction=Direction.SHORT,
+                    volume=abs(volume),
+                    price=float(d["entryPrice"]),
+                    pnl=float(d["unRealizedProfit"]),
+                    gateway_name=self.gateway_name,
+                )
+            else:
+                long_position = PositionData(
+                    symbol=d["symbol"],
+                    exchange=Exchange.BINANCE,
+                    direction=Direction.LONG,
+                    volume=0,
+                    price=0,
+                    pnl=0,
+                    gateway_name=self.gateway_name,
+                )
+                short_position = PositionData(
+                    symbol=d["symbol"],
+                    exchange=Exchange.BINANCE,
+                    direction=Direction.SHORT,
+                    volume=0,
+                    price=0,
+                    pnl=0,
+                    gateway_name=self.gateway_name,
+                )
+
+            self.gateway.on_position(long_position)
+            self.gateway.on_position(short_position)
 
         self.gateway.write_log("持仓信息查询成功")
 
@@ -491,7 +570,31 @@ class BinancefRestApi(RestClient):
                 time=time,
                 gateway_name=self.gateway_name,
             )
+            self.orders.update({order.orderid: copy(order)})
             self.gateway.on_order(order)
+
+        self.gateway.write_log("委托信息查询成功")
+
+
+    def on_query_trade(self, data: dict, request: Request) -> None:
+        """"""
+        for d in data:
+            dt = datetime.fromtimestamp(d["time"] / 1000)
+            time = dt.strftime("%Y-%m-%d %H:%M:%S")
+
+            trade = TradeData(
+                symbol=d['symbol'],
+                exchange=Exchange.BINANCE,
+                orderid=d['orderId'],
+                tradeid=d["id"],
+                direction=Direction.SHORT if d['side'] == 'SELL' else Direction.LONG,
+                offset=Offset.CLOSE if d['buyer'] else Offset.OPEN,
+                price=float(d["price"]),
+                volume=float(d['qty']),
+                time=time,
+                gateway_name=self.gateway_name,
+            )
+            self.gateway.on_trade(trade)
 
         self.gateway.write_log("委托信息查询成功")
 
@@ -528,7 +631,6 @@ class BinancefRestApi(RestClient):
                 gateway_name=self.gateway_name,
             )
             self.gateway.on_contract(contract)
-
             symbol_name_map[contract.symbol] = contract.name
 
         self.gateway.write_log("合约信息查询成功")
@@ -543,6 +645,7 @@ class BinancefRestApi(RestClient):
         """
         order = request.extra
         order.status = Status.REJECTED
+        self.orders.update({order.orderid: copy(order)})
         self.gateway.on_order(order)
 
         msg = f"委托失败，状态码：{status_code}，信息：{request.response.text}"
@@ -556,6 +659,7 @@ class BinancefRestApi(RestClient):
         """
         order = request.extra
         order.status = Status.REJECTED
+        self.orders.update({order.orderid: copy(order)})
         self.gateway.on_order(order)
 
         # Record exception if not ConnectionError
@@ -582,7 +686,7 @@ class BinancefRestApi(RestClient):
         """"""
         pass
 
-    def query_history(self, req: HistoryRequest) -> List[OrderData]:
+    def query_history(self, req: HistoryRequest) -> List[BarData]:
         """"""
         history = []
         limit = 1000
@@ -605,7 +709,7 @@ class BinancefRestApi(RestClient):
             # Get response from server
             resp = self.request(
                 "GET",
-                "/api/v1/klines",
+                "/fapi/v1/klines",
                 data={"security": Security.NONE},
                 params=params
             )
@@ -712,24 +816,36 @@ class BinancefTradeWebsocketApi(WebsocketClient):
 
     def on_order(self, packet: dict) -> None:
         """"""
+        self.gateway.write_log(json.dumps(packet, indent=2))
         dt = datetime.fromtimestamp(packet["E"] / 1000)
         time = dt.strftime("%Y-%m-%d %H:%M:%S")
 
         ord_data = packet["o"]
+        orderid = str(ord_data["c"])
 
-        order = OrderData(
-            symbol=ord_data["s"],
-            exchange=Exchange.BINANCE,
-            orderid=str(ord_data["c"]),
-            type=ORDERTYPE_BINANCEF2VT[ord_data["o"]],
-            direction=DIRECTION_BINANCEF2VT[ord_data["S"]],
-            price=float(ord_data["p"]),
-            volume=float(ord_data["q"]),
-            traded=float(ord_data["z"]),
-            status=STATUS_BINANCEF2VT[ord_data["X"]],
-            time=time,
-            gateway_name=self.gateway_name
-        )
+        order = self.gateway.get_order(orderid)
+        if order:
+            order.traded = float(ord_data["z"])
+            order.status = STATUS_BINANCEF2VT[ord_data["X"]]
+            if order.status in [Status.CANCELLED, Status.REJECTED]:
+                order.cancel_time = time
+            if len(order.sys_orderid) == 0:
+                order.sys_orderid = str(ord_data["i"])
+        else:
+            self.gateway.write_log(u'缓存中找不到Order,创建一个新的')
+            order = OrderData(
+                symbol=ord_data["s"],
+                exchange=Exchange.BINANCE,
+                orderid=str(ord_data["c"]),
+                type=ORDERTYPE_BINANCEF2VT[ord_data["o"]],
+                direction=DIRECTION_BINANCEF2VT[ord_data["S"]],
+                price=float(ord_data["p"]),
+                volume=float(ord_data["q"]),
+                traded=float(ord_data["z"]),
+                status=STATUS_BINANCEF2VT[ord_data["X"]],
+                time=time,
+                gateway_name=self.gateway_name
+            )
 
         self.gateway.on_order(order)
 
@@ -747,6 +863,7 @@ class BinancefTradeWebsocketApi(WebsocketClient):
             orderid=order.orderid,
             tradeid=ord_data["t"],
             direction=order.direction,
+            offset=order.offset,
             price=float(ord_data["L"]),
             volume=trade_volume,
             time=trade_time,
