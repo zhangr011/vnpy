@@ -189,6 +189,8 @@ class BinancefRestApi(RestClient):
         self.recv_window: int = 5000
         self.time_offset: int = 0
 
+        self.contracts = {}
+
         self.order_count: int = 1_000_000
         self.order_count_lock: Lock = Lock()
         self.connect_time: int = 0
@@ -481,6 +483,14 @@ class BinancefRestApi(RestClient):
             if account.balance:
                 self.gateway.on_account(account)
 
+        # 临时缓存合约的配置信息
+        for position in data["positions"]:
+            symbol = position.get('symbol')
+            if symbol:
+                if symbol not in self.contracts:
+                    self.gateway.write_log(json.dumps(position, indent=2))
+                self.contracts.update({symbol: position})
+
         self.gateway.write_log("账户资金查询成功")
 
     def on_query_position(self, data: dict, request: Request) -> None:
@@ -606,10 +616,11 @@ class BinancefRestApi(RestClient):
         self.gateway.write_log(f'速率限制:{rate_limits}')
 
         for d in data["symbols"]:
+            self.gateway.write_log(json.dumps(d, indent=2))
             base_currency = d["baseAsset"]
             quote_currency = d["quoteAsset"]
             name = f"{base_currency.upper()}/{quote_currency.upper()}"
-
+            symbol = d["symbol"]
             pricetick = 1
             min_volume = 1
 
@@ -619,12 +630,19 @@ class BinancefRestApi(RestClient):
                 elif f["filterType"] == "LOT_SIZE":
                     min_volume = float(f["stepSize"])
 
+            # 合约乘数
+            symbol_size = 20  # 缺省为20倍的杠杆
+            contract_info = self.contracts.get(symbol, {})
+            if contract_info:
+                symbol_size = int(contract_info.get('leverage', symbol_size))
+
             contract = ContractData(
-                symbol=d["symbol"],
+                symbol=symbol,
                 exchange=Exchange.BINANCE,
                 name=name,
                 pricetick=pricetick,
-                size=1,
+                size=symbol_size,
+                margin_rate= round(float(d['requiredMarginPercent'])/100, 5),
                 min_volume=min_volume,
                 product=Product.FUTURES,
                 history_data=True,

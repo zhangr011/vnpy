@@ -89,7 +89,7 @@ class BackTestingEngine(object):
         self.strategies = {}  # 回测策略实例, key = strategy_name, value= strategy
         self.symbol_strategy_map = defaultdict(list)  # vt_symbol: strategy list
 
-        self.test_name = 'portfolio_test_{}'.format(datetime.now().strftime('%M%S'))  # 回测策略组合的实例名字
+        self.test_name = 'crypto_test_{}'.format(datetime.now().strftime('%M%S'))  # 回测策略组合的实例名字
         self.daily_report_name = ''  # 策略的日净值报告文件名称
 
         self.test_start_date = ''  # 组合回测启动得日期
@@ -101,6 +101,7 @@ class BackTestingEngine(object):
         self.fix_commission = {}  # 每手固定手续费
         self.size = {}  # 合约大小，默认为1
         self.price_tick = {}  # 价格最小变动
+        self.volume_tick = {} # 合约委托单最小单位
         self.margin_rate = {}  # 回测合约的保证金比率
         self.price_dict = {}  # 登记vt_symbol对应的最新价
         self.contract_dict = {}  # 登记vt_symbol得对应合约信息
@@ -191,7 +192,7 @@ class BackTestingEngine(object):
         self.strategy_loggers = {}
         self.debug = False
 
-        self.is_7x24 = False
+        self.is_7x24 = True
         self.logs_path = None
         self.data_path = None
 
@@ -213,6 +214,8 @@ class BackTestingEngine(object):
         setting['para_active_yb'] = True
         setting['price_tick'] = 0.01
         setting['underlying_symbol'] = 'fund'
+        setting['is_7x24'] = self.is_7x24
+
         if use_renko:
             # 使用砖图，高度是资金的千分之一
             setting['height'] = self.init_capital * 0.001
@@ -287,7 +290,7 @@ class BackTestingEngine(object):
 
     @lru_cache()
     def get_margin_rate(self, vt_symbol: str):
-        return self.margin_rate.get(vt_symbol, 0.1)
+        return self.margin_rate.get(vt_symbol, 0.05)
 
     def set_slippage(self, vt_symbol: str, slippage: float):
         """设置滑点点数"""
@@ -334,8 +337,15 @@ class BackTestingEngine(object):
     def get_price_tick(self, vt_symbol: str):
         return self.price_tick.get(vt_symbol, 1)
 
+    def set_volume_tick(self, vt_symbol: str, volume_tick: float):
+        """设置委托单最小单位"""
+        self.volume_tick.update({vt_symbol: volume_tick})
+
+    def get_volume_tick(self, vt_symbol: str):
+        return self.volume_tick.get(vt_symbol, 1)
+
     def set_contract(self, symbol: str, exchange: Exchange, product: Product, name: str, size: int,
-                     price_tick: float, margin_rate: float = 0.1):
+                     price_tick: float, volume_tick: float = 1, margin_rate: float = 0.1):
         """设置合约信息"""
         vt_symbol = '.'.join([symbol, exchange.value])
         if vt_symbol not in self.contract_dict:
@@ -347,12 +357,14 @@ class BackTestingEngine(object):
                 product=product,
                 size=size,
                 pricetick=price_tick,
+                min_volume=volume_tick,
                 margin_rate=margin_rate
             )
             self.contract_dict.update({vt_symbol: c})
             self.set_size(vt_symbol, size)
             self.set_margin_rate(vt_symbol, margin_rate)
             self.set_price_tick(vt_symbol, price_tick)
+            self.set_volume_tick(vt_symbol, volume_tick)
             self.symbol_exchange_dict.update({symbol: exchange})
 
     @lru_cache()
@@ -369,21 +381,24 @@ class BackTestingEngine(object):
         k = f'{gateway_name}.{vt_symbol}'
         holding = self.holdings.get(k, None)
         if not holding:
-            symbol, exchange = extract_vt_symbol(vt_symbol)
-            if self.contract_type == 'future':
-                product = Product.FUTURES
-            elif self.contract_type == 'stock':
-                product = Product.EQUITY
-            else:
-                product = Product.SPOT
-            contract = ContractData(gateway_name=gateway_name,
-                                    name=vt_symbol,
-                                    product=product,
-                                    symbol=symbol,
-                                    exchange=exchange,
-                                    size=self.get_size(vt_symbol),
-                                    pricetick=self.get_price_tick(vt_symbol),
-                                    margin_rate=self.get_margin_rate(vt_symbol))
+            contract = self.get_contract(vt_symbol)
+            if not contract:
+                self.write_log(f'{vt_symbol}合约信息不存在，构造一个')
+                symbol, exchange = extract_vt_symbol(vt_symbol)
+                if self.contract_type == 'future':
+                    product = Product.FUTURES
+                elif self.contract_type == 'stock':
+                    product = Product.EQUITY
+                else:
+                    product = Product.SPOT
+                contract = ContractData(gateway_name=gateway_name,
+                                        name=vt_symbol,
+                                        product=product,
+                                        symbol=symbol,
+                                        exchange=exchange,
+                                        size=self.get_size(vt_symbol),
+                                        pricetick=self.get_price_tick(vt_symbol),
+                                        margin_rate=self.get_margin_rate(vt_symbol))
             holding = PositionHolding(contract)
             self.holdings[k] = holding
         return holding
@@ -513,9 +528,8 @@ class BackTestingEngine(object):
         for symbol, symbol_data in data_dict.items():
             self.write_log(u'配置{}数据:{}'.format(symbol, symbol_data))
             self.set_price_tick(symbol, symbol_data.get('price_tick', 1))
-
+            self.set_volume_tick(symbol, symbol_data.get('min_volume',1))
             self.set_slippage(symbol, symbol_data.get('slippage', 0))
-
             self.set_size(symbol, symbol_data.get('symbol_size', 10))
             margin_rate = symbol_data.get('margin_rate', 0.1)
             self.set_margin_rate(symbol, margin_rate)
@@ -529,6 +543,7 @@ class BackTestingEngine(object):
                 product=Product(symbol_data.get('product', "期货")),
                 size=symbol_data.get('symbol_size', 10),
                 price_tick=symbol_data.get('price_tick', 1),
+                volume_tick=symbol_data.get('min_volume', 1),
                 margin_rate=margin_rate
             )
 
@@ -604,7 +619,7 @@ class BackTestingEngine(object):
         # 加载 vnpy/app/cta_strategy_pro/strategies的所有策略
         path1 = Path(__file__).parent.joinpath("strategies")
         self.load_strategy_class_from_folder(
-            path1, "vnpy.app.cta_strategy_pro.strategies")
+            path1, "vnpy.app.cta_crypto.strategies")
 
     def load_strategy_class_from_folder(self, path: Path, module_name: str = ""):
         """
@@ -690,27 +705,6 @@ class BackTestingEngine(object):
             exchange = Exchange.LOCAL
             vt_symbol = '.'.join([symbol, exchange.value])
 
-        # 在期货组合回测，中需要把一般配置的主力合约，更换为指数合约
-        if '99' not in symbol and exchange != Exchange.SPD and self.contract_type == 'future':
-            underly_symbol = get_underlying_symbol(symbol).upper()
-            self.write_log(u'更新vt_symbol为指数合约:{}=>{}'.format(vt_symbol, underly_symbol + '99.' + exchange.value))
-            vt_symbol = underly_symbol.upper() + '99.' + exchange.value
-            strategy_setting.update({'vt_symbol': vt_symbol})
-
-        # 属于自定义套利合约
-        if exchange == Exchange.SPD:
-            symbol_pairs = symbol.split('-')
-            active_symbol = get_underlying_symbol(symbol_pairs[0])
-            passive_symbol = get_underlying_symbol(symbol_pairs[2])
-            new_vt_symbol = '-'.join([active_symbol.upper() + '99',
-                                      symbol_pairs[1],
-                                      passive_symbol.upper() + '99',
-                                      symbol_pairs[3],
-                                      symbol_pairs[4]]) + '.SPD'
-            self.write_log(u'更新vt_symbol为指数合约:{}=>{}'.format(vt_symbol, new_vt_symbol))
-            vt_symbol = new_vt_symbol
-            strategy_setting.update({'vt_symbol': vt_symbol})
-
         # 取消自动启动
         if 'auto_start' in strategy_setting:
             strategy_setting.update({'auto_start': False})
@@ -768,7 +762,6 @@ class BackTestingEngine(object):
                    price: float,
                    volume: float,
                    stop: bool,
-                   lock: bool,
                    order_type: OrderType = OrderType.LIMIT,
                    gateway_name: str = None):
         """发单"""
@@ -783,7 +776,6 @@ class BackTestingEngine(object):
                 offset=offset,
                 price=price,
                 volume=volume,
-                lock=lock,
                 gateway_name=gateway_name
             )
         else:
@@ -794,7 +786,6 @@ class BackTestingEngine(object):
                 offset=offset,
                 price=price,
                 volume=volume,
-                lock=lock,
                 gateway_name=gateway_name
             )
 
@@ -805,10 +796,11 @@ class BackTestingEngine(object):
                          offset: Offset,
                          price: float,
                          volume: float,
-                         lock: bool,
                          order_type: OrderType = OrderType.LIMIT,
                          gateway_name: str = None
                          ):
+
+        """ 发限价单"""
         self.limit_order_count += 1
         order_id = str(self.limit_order_count)
         symbol, exchange = extract_vt_symbol(vt_symbol)
@@ -845,10 +837,9 @@ class BackTestingEngine(object):
             offset: Offset,
             price: float,
             volume: float,
-            lock: bool,
             gateway_name: str = None):
 
-        """"""
+        """发出本地停止单"""
         self.stop_order_count += 1
 
         stop_order = StopOrder(
@@ -945,6 +936,7 @@ class BackTestingEngine(object):
                 if strategy:
                     strategy.on_order(order)
 
+        # 撤销本地停止单
         for stop_orderid in list(self.active_stop_orders.keys()):
             order = self.active_stop_orders.get(stop_orderid, None)
             order_strategy = self.order_strategy_dict.get(stop_orderid, None)
@@ -977,6 +969,7 @@ class BackTestingEngine(object):
 
     def cross_stop_order(self, bar: BarData = None, tick: TickData = None):
         """
+        本地停止单撮合
         Cross stop order with last bar/tick data.
         """
         vt_symbol = bar.vt_symbol if bar else tick.vt_symbol
@@ -1148,29 +1141,27 @@ class BackTestingEngine(object):
 
                 strategy.on_trade(trade)
 
-                for cov_trade in self.convert_spd_trade(trade):
-                    self.trade_dict[cov_trade.vt_tradeid] = cov_trade
-                    self.trades[cov_trade.vt_tradeid] = copy.copy(cov_trade)
-                    self.write_log(u'vt_trade_id:{0}'.format(cov_trade.vt_tradeid))
+                self.trade_dict[trade.vt_tradeid] = trade
+                self.trades[trade.vt_tradeid] = copy.copy(trade)
+                self.write_log(u'vt_trade_id:{0}'.format(trade.vt_tradeid))
 
-                    # 更新持仓缓存数据
-                    pos_buffer = self.pos_holding_dict.get(cov_trade.vt_symbol, None)
-                    if not pos_buffer:
-                        pos_buffer = PositionHolding(self.get_contract(vt_symbol))
-                        self.pos_holding_dict[cov_trade.vt_symbol] = pos_buffer
-                    pos_buffer.update_trade(cov_trade)
-                    self.write_log(u'{} : crossLimitOrder: TradeId:{},  posBuffer = {}'.format(cov_trade.strategy_name,
-                                                                                               cov_trade.tradeid,
-                                                                                               pos_buffer.to_str()))
+                # 更新持仓缓存数据
+                pos_buffer = self.pos_holding_dict.get(trade.vt_symbol, None)
+                if not pos_buffer:
+                    pos_buffer = PositionHolding(self.get_contract(vt_symbol))
+                    self.pos_holding_dict[trade.vt_symbol] = pos_buffer
+                pos_buffer.update_trade(trade)
+                self.write_log(u'{} : crossLimitOrder: TradeId:{},  posBuffer = {}'.format(trade.strategy_name,
+                                                                                           trade.tradeid,
+                                                                                           pos_buffer.to_str()))
 
-                    # 写入交易记录
-                    self.append_trade(cov_trade)
+                # 写入交易记录
+                self.append_trade(trade)
 
-                    # 更新资金曲线
-                    if 'SPD' not in cov_trade.vt_symbol:
-                        fund_kline = self.get_fund_kline(cov_trade.strategy_name)
-                        if fund_kline:
-                            fund_kline.update_trade(cov_trade)
+                # 更新资金曲线
+                fund_kline = self.get_fund_kline(trade.strategy_name)
+                if fund_kline:
+                    fund_kline.update_trade(trade)
 
                 # 推送委托数据
                 order.traded = order.volume
@@ -1183,66 +1174,6 @@ class BackTestingEngine(object):
 
         # 实时计算模式
         self.realtime_calculate()
-
-    def convert_spd_trade(self, trade):
-        """转换为品种对的交易记录"""
-        if trade.exchange != Exchange.SPD:
-            return [trade]
-
-        try:
-            active_symbol, active_rate, passive_symbol, passive_rate, spd_type = trade.symbol.split('-')
-            active_rate = int(active_rate)
-            passive_rate = int(passive_rate)
-            active_exchange = self.get_exchange(active_symbol)
-            active_vt_symbol = active_symbol + '.' + active_exchange.value
-            passive_exchange = self.get_exchange(passive_symbol)
-            # passive_vt_symbol = active_symbol + '.' + passive_exchange.value
-            # 主动腿成交记录
-            act_trade = TradeData(gateway_name=self.gateway_name,
-                                  symbol=active_symbol,
-                                  exchange=active_exchange,
-                                  orderid='spd_' + str(trade.orderid),
-                                  tradeid='spd_act_' + str(trade.tradeid),
-                                  direction=trade.direction,
-                                  offset=trade.offset,
-                                  strategy_name=trade.strategy_name,
-                                  price=self.get_price(active_vt_symbol),
-                                  volume=int(trade.volume * active_rate),
-                                  time=trade.time,
-                                  datetime=trade.datetime
-                                  )
-
-            # 被动腿成交记录
-            # 交易方向与spd合约方向相反
-            pas_trade = TradeData(gateway_name=self.gateway_name,
-                                  symbol=passive_symbol,
-                                  exchange=passive_exchange,
-                                  orderid='spd_' + str(trade.orderid),
-                                  tradeid='spd_pas_' + str(trade.tradeid),
-                                  direction=Direction.LONG if trade.direction == Direction.SHORT else Direction.SHORT,
-                                  offset=trade.offset,
-                                  strategy_name=trade.strategy_name,
-                                  time=trade.time,
-                                  datetime=trade.datetime
-                                  )
-
-            # 根据套利合约的类型+主合约的价格，反向推导出被动合约的价格
-
-            if spd_type == 'BJ':
-                pas_trade.price = (act_trade.price * active_rate * 100 / trade.price) / passive_rate
-            else:
-                pas_trade.price = (act_trade.price * active_rate - trade.price) / passive_rate
-
-            pas_trade.price = round_to(value=pas_trade.price, target=self.get_price_tick(pas_trade.vt_symbol))
-            pas_trade.volume = int(trade.volume * passive_rate)
-            pas_trade.time = trade.time
-
-            # 返回原交易记录，主动腿交易记录，被动腿交易记录
-            return [trade, act_trade, pas_trade]
-
-        except Exception as ex:
-            self.write_error(u'转换主动/被动腿异常:{}'.format(str(ex)))
-            return [trade]
 
     def update_pos_buffer(self):
         """更新持仓信息,把今仓=>昨仓"""
@@ -1377,13 +1308,13 @@ class BackTestingEngine(object):
 
             if trade.volume == 0:
                 continue
-            # buy trade
+            # buy trade 开多买入
             if trade.direction == Direction.LONG and trade.offset == Offset.OPEN:
                 self.write_log(f'{trade.vt_symbol} buy, price:{trade.price},volume:{trade.volume}')
                 # 放入多单仓位队列
                 self.long_position_list.append(trade)
 
-            # cover trade，
+            # cover trade 平空买入
             elif trade.direction == Direction.LONG and trade.offset == Offset.CLOSE:
                 g_id = trade.vt_tradeid  # 交易组（多个平仓数为一组）
                 g_result = None  # 组合的交易结果
@@ -1449,19 +1380,19 @@ class BackTestingEngine(object):
                         t['commission'] = result.commission
                         self.trade_pnl_list.append(t)
 
-                        # 非自定义套利对，才更新到策略盈亏
-                        if not open_trade.vt_symbol.endswith('SPD'):
-                            # 更新策略实例的累加盈亏
-                            self.pnl_strategy_dict.update(
-                                {open_trade.strategy_name: self.pnl_strategy_dict.get(open_trade.strategy_name,
-                                                                                      0) + result.pnl})
+                        # 更新到策略盈亏
+                        # 更新策略实例的累加盈亏
+                        self.pnl_strategy_dict.update(
+                            {open_trade.strategy_name: self.pnl_strategy_dict.get(open_trade.strategy_name,
+                                                                                  0) + result.pnl})
 
-                            msg = u'gid:{} {}[{}:开空tid={}:{}]-[{}.平空tid={},{},vol:{}],净盈亏pnl={},手续费:{}' \
-                                .format(g_id, open_trade.vt_symbol, open_trade.time, shortid, open_trade.price,
-                                        trade.time, vt_tradeid, trade.price,
-                                        open_trade.volume, result.pnl, result.commission)
+                        msg = u'gid:{} {}[{}:开空tid={}:{}]-[{}.平空tid={},{},vol:{}],净盈亏pnl={},手续费:{}' \
+                            .format(g_id, open_trade.vt_symbol, open_trade.time, shortid, open_trade.price,
+                                    trade.time, vt_tradeid, trade.price,
+                                    open_trade.volume, result.pnl, result.commission)
 
-                            self.write_log(msg)
+                        self.write_log(msg)
+
                         result_list.append(result)
 
                         if g_result is None:
@@ -1511,19 +1442,17 @@ class BackTestingEngine(object):
                         t['commission'] = result.commission
                         self.trade_pnl_list.append(t)
 
-                        # 非自定义套利对，才更新盈亏
-                        if not (open_trade.vt_symbol.endswith('SPD') or open_trade.vt_symbol.endswith('SPD99')):
-                            # 更新策略实例的累加盈亏
-                            self.pnl_strategy_dict.update(
-                                {open_trade.strategy_name: self.pnl_strategy_dict.get(open_trade.strategy_name,
-                                                                                      0) + result.pnl})
+                        # 更新策略实例的累加盈亏
+                        self.pnl_strategy_dict.update(
+                            {open_trade.strategy_name: self.pnl_strategy_dict.get(open_trade.strategy_name,
+                                                                                  0) + result.pnl})
 
-                            msg = u'gid:{} {}[{}:开空tid={}:{}]-[{}.平空tid={},{},vol:{}],净盈亏pnl={},手续费:{}' \
-                                .format(g_id, open_trade.vt_symbol, open_trade.time, shortid, open_trade.price,
-                                        trade.time, vt_tradeid, trade.price,
-                                        cover_volume, result.pnl, result.commission)
+                        msg = u'gid:{} {}[{}:开空tid={}:{}]-[{}.平空tid={},{},vol:{}],净盈亏pnl={},手续费:{}' \
+                            .format(g_id, open_trade.vt_symbol, open_trade.time, shortid, open_trade.price,
+                                    trade.time, vt_tradeid, trade.price,
+                                    cover_volume, result.pnl, result.commission)
 
-                            self.write_log(msg)
+                        self.write_log(msg)
 
                         # 更新（减少）开仓单的volume,重新推进开仓单列表中
                         open_trade.volume = remain_volume
@@ -1611,20 +1540,18 @@ class BackTestingEngine(object):
                         t['commission'] = result.commission
                         self.trade_pnl_list.append(t)
 
-                        # 非自定义套利对，才更新盈亏
-                        if not (open_trade.vt_symbol.endswith('SPD') or open_trade.vt_symbol.endswith('SPD99')):
-                            # 更新策略实例的累加盈亏
-                            self.pnl_strategy_dict.update(
-                                {open_trade.strategy_name: self.pnl_strategy_dict.get(open_trade.strategy_name,
-                                                                                      0) + result.pnl})
+                        # 更新策略实例的累加盈亏
+                        self.pnl_strategy_dict.update(
+                            {open_trade.strategy_name: self.pnl_strategy_dict.get(open_trade.strategy_name,
+                                                                                  0) + result.pnl})
 
-                            msg = u'gid:{} {}[{}:开多tid={}:{}]-[{}.平多tid={},{},vol:{}],净盈亏pnl={},手续费:{}' \
-                                .format(g_id, open_trade.vt_symbol,
-                                        open_trade.time, longid, open_trade.price,
-                                        trade.time, vt_tradeid, trade.price,
-                                        open_trade.volume, result.pnl, result.commission)
+                        msg = u'gid:{} {}[{}:开多tid={}:{}]-[{}.平多tid={},{},vol:{}],净盈亏pnl={},手续费:{}' \
+                            .format(g_id, open_trade.vt_symbol,
+                                    open_trade.time, longid, open_trade.price,
+                                    trade.time, vt_tradeid, trade.price,
+                                    open_trade.volume, result.pnl, result.commission)
 
-                            self.write_log(msg)
+                        self.write_log(msg)
                         result_list.append(result)
 
                         if g_result is None:
@@ -1671,19 +1598,17 @@ class BackTestingEngine(object):
                         t['commission'] = result.commission
                         self.trade_pnl_list.append(t)
 
-                        # 非自定义套利对，才更新盈亏
-                        if not (open_trade.vt_symbol.endswith('SPD') or open_trade.vt_symbol.endswith('SPD99')):
-                            # 更新策略实例的累加盈亏
-                            self.pnl_strategy_dict.update(
-                                {open_trade.strategy_name: self.pnl_strategy_dict.get(open_trade.strategy_name,
-                                                                                      0) + result.pnl})
+                        # 更新策略实例的累加盈亏
+                        self.pnl_strategy_dict.update(
+                            {open_trade.strategy_name: self.pnl_strategy_dict.get(open_trade.strategy_name,
+                                                                                  0) + result.pnl})
 
-                            msg = u'Gid:{} {}[{}:开多tid={}:{}]-[{}.平多tid={},{},vol:{}],净盈亏pnl={},手续费:{}' \
-                                .format(g_id, open_trade.vt_symbol, open_trade.time, longid, open_trade.price,
-                                        trade.time, vt_tradeid, trade.price, sell_volume, result.pnl,
-                                        result.commission)
+                        msg = u'Gid:{} {}[{}:开多tid={}:{}]-[{}.平多tid={},{},vol:{}],净盈亏pnl={},手续费:{}' \
+                            .format(g_id, open_trade.vt_symbol, open_trade.time, longid, open_trade.price,
+                                    trade.time, vt_tradeid, trade.price, sell_volume, result.pnl,
+                                    result.commission)
 
-                            self.write_log(msg)
+                        self.write_log(msg)
 
                         # 减少开多volume,重新推进多单持仓列表中
                         open_trade.volume = remain_volume
@@ -1713,16 +1638,9 @@ class BackTestingEngine(object):
         short_pos_dict = {}
         if len(self.long_position_list) > 0:
             for t in self.long_position_list:
-                # 不计算套利合约的持仓占用保证金
-                if t.vt_symbol.endswith('SPD') or t.vt_symbol.endswith('SPD99'):
-                    continue
                 # 当前持仓的保证金
-                if self.use_margin:
-                    cur_occupy_money = t.price * abs(t.volume) * self.get_size(t.vt_symbol) * self.get_margin_rate(
+                cur_occupy_money = min(self.get_price(t.vt_symbol), t.price) * abs(t.volume) * self.get_margin_rate(
                         t.vt_symbol)
-                else:
-                    cur_occupy_money = self.get_price(t.vt_symbol) * abs(t.volume) * self.get_size(
-                        t.vt_symbol) * self.get_margin_rate(t.vt_symbol)
 
                 # 更新该合约短号的累计保证金
                 underly_symbol = get_underlying_symbol(t.symbol)
@@ -1737,16 +1655,8 @@ class BackTestingEngine(object):
 
         if len(self.short_position_list) > 0:
             for t in self.short_position_list:
-                # 不计算套利合约的持仓占用保证金
-                if t.vt_symbol.endswith('SPD') or t.vt_symbol.endswith('SPD99'):
-                    continue
                 # 当前空单保证金
-                if self.use_margin:
-                    cur_occupy_money = max(self.get_price(t.vt_symbol), t.price) * abs(t.volume) * self.get_size(
-                        t.vt_symbol) * self.get_margin_rate(t.vt_symbol)
-                else:
-                    cur_occupy_money = self.get_price(t.vt_symbol) * abs(t.volume) * self.get_size(
-                        t.vt_symbol) * self.get_margin_rate(t.vt_symbol)
+                cur_occupy_money = max(self.get_price(t.vt_symbol), t.price) * abs(t.volume) * self.get_margin_rate(t.vt_symbol)
 
                 # 该合约短号的累计空单保证金
                 underly_symbol = get_underlying_symbol(t.symbol)
@@ -1761,8 +1671,7 @@ class BackTestingEngine(object):
 
         # 计算多空的保证金累加（对锁的取最大值)
         for underly_symbol in occupy_underly_symbol_set:
-            occupy_money += max(occupy_long_money_dict.get(underly_symbol, 0),
-                                occupy_short_money_dict.get(underly_symbol, 0))
+            occupy_money += occupy_long_money_dict.get(underly_symbol, 0) + occupy_short_money_dict.get(underly_symbol, 0)
 
         # 可用资金 = 当前净值 - 占用保证金
         self.avaliable = self.net_capital - occupy_money
@@ -1837,17 +1746,13 @@ class BackTestingEngine(object):
 
         positionMsg = ""
         for longpos in self.long_position_list:
-            # 不计算套利合约的持仓盈亏
-            if longpos.vt_symbol.endswith('SPD') or longpos.vt_symbol.endswith('SPD99'):
-                continue
             symbol = longpos.vt_symbol
             # 计算持仓浮盈浮亏/占用保证金
             holding_profit = 0
             last_price = self.get_price(symbol)
             if last_price is not None:
                 holding_profit = (last_price - longpos.price) * longpos.volume * self.get_size(symbol)
-                long_pos_occupy_money += last_price * abs(longpos.volume) * self.get_size(
-                    symbol) * self.get_margin_rate(symbol)
+                long_pos_occupy_money += last_price * abs(longpos.volume) * self.get_margin_rate(symbol)
 
             # 账号的持仓盈亏
             today_holding_profit += holding_profit
@@ -1858,17 +1763,14 @@ class BackTestingEngine(object):
             positionMsg += "{},long,p={},v={},m={};".format(symbol, longpos.price, longpos.volume, holding_profit)
 
         for shortpos in self.short_position_list:
-            # 不计算套利合约的持仓盈亏
-            if shortpos.vt_symbol.endswith('SPD') or shortpos.vt_symbol.endswith('SPD99'):
-                continue
+
             symbol = shortpos.vt_symbol
             # 计算持仓浮盈浮亏/占用保证金
             holding_profit = 0
             last_price = self.get_price(symbol)
             if last_price is not None:
                 holding_profit = (shortpos.price - last_price) * shortpos.volume * self.get_size(symbol)
-                short_pos_occupy_money += last_price * abs(shortpos.volume) * self.get_size(
-                    symbol) * self.get_margin_rate(symbol)
+                short_pos_occupy_money += last_price * abs(shortpos.volume) * self.get_margin_rate(symbol)
 
             # 账号的持仓盈亏
             today_holding_profit += holding_profit
@@ -1879,7 +1781,7 @@ class BackTestingEngine(object):
 
         data['net'] = c + today_holding_profit  # 当日净值（含持仓盈亏）
         data['rate'] = (c + today_holding_profit) / self.init_capital
-        data['occupy_money'] = max(long_pos_occupy_money, short_pos_occupy_money)
+        data['occupy_money'] = long_pos_occupy_money + short_pos_occupy_money
         data['occupy_rate'] = data['occupy_money'] / data['capital']
         data['commission'] = commission
 

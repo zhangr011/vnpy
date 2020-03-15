@@ -6,25 +6,29 @@
 # “当你想放弃时，想想你为什么开始。埃隆·马斯克”
 
 ###Fork版本主要改进如下
-1. 事件引擎，增加运行效率调试功能
-2. 增加rabbitMQ通信组件
-3. 增加tdx 免费数据源,包括
+1、 事件引擎，增加运行效率调试功能
+
+2、 增加rabbitMQ通信组件
+
+3、 增加tdx 免费数据源,包括
 
     
      - 提供主力合约/指数合约的信息获取
      - 提供期货/股票数据bar 和分笔成交数据下载
      - 提供每日增量更新期货数据=> csv文件，可配合NFS+Celery，实现分布式回测
      
-4. 增加App: tick_recorder, 直接异步写入csv文件
-5. 增加App: index_tick_publisher, 订阅通达信指数行情=》rabbit_mq 推送
-6. 增强ctp_gateway，包括:
+4、 增加App: tick_recorder, 直接异步写入csv文件
+
+5、 增加App: index_tick_publisher, 订阅通达信指数行情=》rabbit_mq 推送
+
+6、 增强ctp_gateway，包括:
 
     
     - 提供指数行情订阅
     - 使用RabbitMQ指数源，或tdx单一数据源    
     - 提供自定义合约功能，实时提供其合成后的tick行情
 
-7. 增加component组件，包括:
+7、 增加component组件，包括:
 
 
     - 提供cta_line_bar k线组件，支持国内文华/交易师/TB等分钟/小时的计算模式，支持任意秒/分钟/小时/天/周等周期，支持k线数据实时生成。
@@ -35,7 +39,7 @@
     - 提供cta_period 组件，支持策略中‘周期’的逻辑
     - 提供cta_grid_trade组件，支持网格交易、复杂的策略持仓逻辑、持久化 
 
-8. 增加App: cta_strategy_pro，包括：
+8、 增加App: cta_strategy_pro，包括：
 
   
     - 提供策略实例的单独日志记录文件
@@ -52,7 +56,7 @@
     - 增加CtaSpread模板，支持FAK正套/反套
     - 增加Spread组合引擎tick级别回测，支持多策略实例得套利共享账号回测。
     
-9、增强主引擎，包括：
+9、  增强主引擎，包括：
 
     - 支持同一类gateway，多个接入配置
     - 增加获取当前价格接口
@@ -71,6 +75,14 @@
     - 支持自定义套利合约得算法，及算法下单。
     - 可通过vnpy界面/cta_strategy_pro策略，直接发出套利单，由算法引擎执行
     
+12、 增加App: cta_crypto，包括：
+    
+    - 增加币安合约交易vnpy.gateway.binancef，支持每个合约独立杠杆比率
+    - 增肌币安合约数据接口 vnpy.data.binance.binance_future_data
+    - 独立的CTA引擎 cta_crypto，运行数字货币时，替代原版cta_strategy引擎。
+    - 支持bar方式回测/组合回测
+    - 增强期货交易模板
+  
 大佳
 QQ/Wechat：28888502
 

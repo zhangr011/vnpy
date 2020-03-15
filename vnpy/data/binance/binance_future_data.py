@@ -1,14 +1,18 @@
 # 币安合约数据
 
+import os
+import json
 from typing import Dict, List, Any
 from datetime import datetime, timedelta
 from vnpy.api.rest.rest_client import RestClient
 from vnpy.trader.object import (
     Interval,
     Exchange,
+    Product,
     BarData,
     HistoryRequest
 )
+from vnpy.trader.utility import save_json, load_json
 
 BINANCE_INTERVALS = ["1m", "3m", "5m", "15m", "30m", "1h", "2h", "4h", "6h", "8h", "12h", "1d", "3d", "1w", "1M"]
 
@@ -25,6 +29,7 @@ TIMEDELTA_MAP: Dict[Interval, timedelta] = {
 }
 
 REST_HOST: str = "https://fapi.binance.com"
+
 
 class BinanceFutureData(RestClient):
 
@@ -51,9 +56,9 @@ class BinanceFutureData(RestClient):
             return b_interval
 
     def get_bars(self,
-                req: HistoryRequest,
-                return_dict=True,
-                ) -> List[Any]:
+                 req: HistoryRequest,
+                 return_dict=True,
+                 ) -> List[Any]:
         """获取历史kline"""
         bars = []
         limit = 1000
@@ -108,10 +113,10 @@ class BinanceFutureData(RestClient):
                             "vt_symbol": f'{req.symbol}.{req.exchange.value}',
                             "interval": req.interval.value,
                             "volume": float(data[5]),
-                            "open_price": float(data[1]),
-                            "high_price": float(data[2]),
-                            "low_price": float(data[3]),
-                            "close_price": float(data[4]),
+                            "open": float(data[1]),
+                            "high": float(data[2]),
+                            "low": float(data[3]),
+                            "close": float(data[4]),
                             "gateway_name": "",
                             "open_interest": 0,
                             "trading_day": dt.strftime('%Y-%m-%d')
@@ -159,3 +164,66 @@ class BinanceFutureData(RestClient):
         df.index.name = 'datetime'
         df.to_csv(file_name, index=True)
         self.write_log('保存成功')
+
+    def get_contracts(self):
+
+        contracts = {}
+        # Get response from server
+        resp = self.request(
+            "GET",
+            "/fapi/v1/exchangeInfo",
+            data={}
+        )
+        if resp.status_code // 100 != 2:
+            msg = f"获取交易所失败，状态码：{resp.status_code}，信息：{resp.text}"
+            self.write_log(msg)
+        else:
+            data = resp.json()
+            for d in data["symbols"]:
+                self.write_log(json.dumps(d, indent=2))
+                base_currency = d["baseAsset"]
+                quote_currency = d["quoteAsset"]
+                name = f"{base_currency.upper()}/{quote_currency.upper()}"
+
+                pricetick = 1
+                min_volume = 1
+
+                for f in d["filters"]:
+                    if f["filterType"] == "PRICE_FILTER":
+                        pricetick = float(f["tickSize"])
+                    elif f["filterType"] == "LOT_SIZE":
+                        min_volume = float(f["stepSize"])
+
+                contract = {
+                    "symbol": d["symbol"],
+                    "exchange": Exchange.BINANCE.value,
+                    "vt_symbol": d["symbol"] + '.' + Exchange.BINANCE.value,
+                    "name": name,
+                    "price_tick": pricetick,
+                    "symbol_size": 20,
+                    "margin_rate" : round(float(d['requiredMarginPercent']) / 100,5),
+                    "min_volume": min_volume,
+                    "product": Product.FUTURES.value,
+                    "commission_rate": 0.005
+                }
+
+                contracts.update({contract.get('vt_symbol'): contract})
+
+        return contracts
+
+    @classmethod
+    def load_contracts(self):
+        """读取本地配置文件获取期货合约配置"""
+        f = os.path.abspath(os.path.join(os.path.dirname(__file__), 'future_contracts.json'))
+        contracts = load_json(f, auto_save=False)
+        return contracts
+
+
+    def save_contracts(self):
+        """保存合约配置"""
+        contracts = self.get_contracts()
+
+        if len(contracts) > 0:
+            f = os.path.abspath(os.path.join(os.path.dirname(__file__), 'future_contracts.json'))
+            save_json(f, contracts)
+            self.write_log(f'保存合约配置=>{f}')
