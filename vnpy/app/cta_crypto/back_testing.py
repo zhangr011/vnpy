@@ -2118,11 +2118,11 @@ class TradingResult(object):
         self.volume = volume  # 交易数量（+/-代表方向）
         self.group_id = group_id  # 主交易ID（针对多手平仓）
 
-        self.turnover = (self.open_price + self.exit_price) * size * abs(volume)  # 成交金额
+        self.turnover = (self.open_price + self.exit_price) * abs(volume)  # 成交金额
         if fix_commission > 0:
             self.commission = fix_commission * abs(self.volume)
         else:
             self.commission = abs(self.turnover * rate)  # 手续费成本
-        self.slippage = slippage * 2 * size * abs(volume)  # 滑点成本
+        self.slippage = slippage * 2 * abs(volume)  # 滑点成本
         self.pnl = ((self.exit_price - self.open_price) * volume * size
                     - self.commission - self.slippage)  # 净盈亏

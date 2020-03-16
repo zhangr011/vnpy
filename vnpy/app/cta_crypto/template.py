@@ -452,9 +452,10 @@ class CtaFutureTemplate(CtaTemplate):
         self.gt = None  # 网格交易组件
         self.klines = {}  # K线组件字典: kline_name: kline
 
-        self.cur_datetime = None  # 当前Tick时间
-        self.cur_tick = None  # 最新的合约tick( vt_symbol)
+        self.cur_datetime: datetime = None  # 当前Tick时间
+        self.cur_tick: TickData = None  # 最新的合约tick( vt_symbol)
         self.cur_price = None  # 当前价（主力合约 vt_symbol)
+        self.account_pos = None  # 当前账号vt_symbol持仓信息
 
         self.last_minute = None  # 最后的分钟,用于on_tick内每分钟处理的逻辑
 
@@ -570,6 +571,10 @@ class CtaFutureTemplate(CtaTemplate):
             self.write_error(f'获取klines切片数据失败:{str(ex)}')
             return {}
 
+    def init_policy(self):
+        self.write_log(u'init_policy(),初始化执行逻辑')
+        self.policy.load()
+
     def init_position(self):
         """
         初始化Positin
@@ -660,31 +665,599 @@ class CtaFutureTemplate(CtaTemplate):
             self.write_log(u'当前持仓:{}'.format(pos_list))
         return pos_list
 
-    def tns_cancel_logic(self, dt, force=False):
+    def on_trade(self, trade: TradeData):
+        """交易更新"""
+        self.write_log(u'{},交易更新:{},当前持仓：{} '
+                       .format(self.cur_datetime,
+                               trade.__dict__,
+                               self.position.pos))
+
+        dist_record = dict()
+        if self.backtesting:
+            dist_record['datetime'] = trade.time
+        else:
+            dist_record['datetime'] = ' '.join([self.cur_datetime.strftime('%Y-%m-%d'), trade.time])
+        dist_record['volume'] = trade.volume
+        dist_record['price'] = trade.price
+        dist_record['symbol'] = trade.vt_symbol
+
+        if trade.direction == Direction.LONG and trade.offset == Offset.OPEN:
+            dist_record['operation'] = 'buy'
+            self.position.open_pos(trade.direction, volume=trade.volume)
+            dist_record['long_pos'] = self.position.long_pos
+            dist_record['short_pos'] = self.position.short_pos
+
+        if trade.direction == Direction.SHORT and trade.offset == Offset.OPEN:
+            dist_record['operation'] = 'short'
+            self.position.open_pos(trade.direction, volume=trade.volume)
+            dist_record['long_pos'] = self.position.long_pos
+            dist_record['short_pos'] = self.position.short_pos
+
+        if trade.direction == Direction.LONG and trade.offset != Offset.OPEN:
+            dist_record['operation'] = 'cover'
+            self.position.close_pos(trade.direction, volume=trade.volume)
+            dist_record['long_pos'] = self.position.long_pos
+            dist_record['short_pos'] = self.position.short_pos
+
+        if trade.direction == Direction.SHORT and trade.offset != Offset.OPEN:
+            dist_record['operation'] = 'sell'
+            self.position.close_pos(trade.direction, volume=trade.volume)
+            dist_record['long_pos'] = self.position.long_pos
+            dist_record['short_pos'] = self.position.short_pos
+
+        self.save_dist(dist_record)
+        self.pos = self.position.pos
+
+    def on_order(self, order: OrderData):
+        """报单更新"""
+        # 未执行的订单中，存在是异常，删除
+        self.write_log(u'{}报单更新，{}'.format(self.cur_datetime, order.__dict__))
+
+
+        if order.vt_orderid in self.active_orders:
+
+            if order.volume == order.traded and order.status in [Status.ALLTRADED]:
+                self.on_order_all_traded(order)
+
+            elif order.offset == Offset.OPEN and order.status in [Status.CANCELLED]:
+                # 开仓委托单被撤销
+                self.on_order_open_canceled(order)
+
+            elif order.offset != Offset.OPEN and order.status in [Status.CANCELLED]:
+                # 平仓委托单被撤销
+                self.on_order_close_canceled(order)
+
+            elif order.status == Status.REJECTED:
+                if order.offset == Offset.OPEN:
+                    self.write_error(u'{}委托单开{}被拒，price:{},total:{},traded:{}，status:{}'
+                                     .format(order.vt_symbol, order.direction, order.price, order.volume,
+                                             order.traded, order.status))
+                    self.on_order_open_canceled(order)
+                else:
+                    self.write_error(u'OnOrder({})委托单平{}被拒，price:{},total:{},traded:{}，status:{}'
+                                     .format(order.vt_symbol, order.direction, order.price, order.volume,
+                                             order.traded, order.status))
+                    self.on_order_close_canceled(order)
+            else:
+                self.write_log(u'委托单未完成,total:{},traded:{},tradeStatus:{}'
+                               .format(order.volume, order.traded, order.status))
+        else:
+            self.write_error(u'委托单{}不在策略的未完成订单列表中:{}'.format(order.vt_orderid, self.active_orders))
+
+    def on_order_all_traded(self, order: OrderData):
+        """
+        订单全部成交
+        :param order:
+        :return:
+        """
+        self.write_log(u'{},委托单:{}全部完成'.format(order.time, order.vt_orderid))
+        order_info = self.active_orders[order.vt_orderid]
+
+        # 通过vt_orderid，找到对应的网格
+        grid = order_info.get('grid', None)
+        if grid is not None:
+            # 移除当前委托单
+            if order.vt_orderid in grid.order_ids:
+                grid.order_ids.remove(order.vt_orderid)
+
+            # 网格的所有委托单已经执行完毕
+            if len(grid.order_ids) == 0:
+                grid.order_status = False
+                grid.traded_volume = 0
+
+                # 平仓完毕（cover， sell）
+                if order.offset != Offset.OPEN:
+                    grid.open_status = False
+                    grid.close_status = True
+
+                    self.write_log(f'{grid.direction.value}单已平仓完毕,order_price:{order.price}'
+                                   + f',volume:{order.volume}')
+
+                    self.write_log(f'移除网格:{grid.to_json()}')
+                    self.gt.remove_grids_by_ids(direction=grid.direction, ids=[grid.id])
+
+                # 开仓完毕( buy, short)
+                else:
+                    grid.open_status = True
+                    self.write_log(f'{grid.direction.value}单已开仓完毕,order_price:{order.price}'
+                                   + f',volume:{order.volume}')
+
+                # 网格的所有委托单部分执行完毕
+            else:
+                old_traded_volume = grid.traded_volume
+                grid.traded_volume += order.volume
+
+                self.write_log(f'{grid.direction.value}单部分{order.offset}仓，'
+                               + f'网格volume:{grid.volume}, traded_volume:{old_traded_volume}=>{grid.traded_volume}')
+
+                self.write_log(f'剩余委托单号:{grid.order_ids}')
+
+        # 在策略得活动订单中，移除
+        self.active_orders.pop(order.vt_orderid, None)
+
+    def on_order_open_canceled(self, order: OrderData):
+        """
+        委托开仓单撤销
+        如果是FAK模式，重新修改价格，再提交
+        FAK用于实盘，需要增加涨跌停判断
+        :param order:
+        :return:
+        """
+        self.write_log(u'委托开仓单撤销:{}'.format(order.__dict__))
+
+        if not self.trading:
+            if not self.backtesting:
+                self.write_error(u'当前不允许交易')
+            return
+
+        if order.vt_orderid not in self.active_orders:
+            self.write_error(u'{}不在未完成的委托单中{}。'.format(order.vt_orderid, self.active_orders))
+            return
+
+        # 直接更新“未完成委托单”，更新volume,retry次数
+        old_order = self.active_orders[order.vt_orderid]
+        self.write_log(u'{} 委托信息:{}'.format(order.vt_orderid, old_order))
+        old_order['traded'] = order.traded
+        order_vt_symbol = copy(old_order['vt_symbol'])
+        order_volume = old_order['volume'] - old_order['traded']
+        if order_volume <= 0:
+            msg = u'{} {}{}需重新开仓数量为{}，不再开仓' \
+                .format(self.strategy_name,
+                        order.vt_orderid,
+                        order_vt_symbol,
+                        order_volume)
+            self.write_error(msg)
+
+            self.write_log(u'移除:{}'.format(order.vt_orderid))
+            self.active_orders.pop(order.vt_orderid, None)
+            return
+
+        order_price = old_order['price']
+        order_type = old_order.get('order_type', OrderType.LIMIT)
+        order_retry = old_order.get('retry', 0)
+        grid = old_order.get('grid', None)
+        if order_retry > 20:
+            # 这里超过20次尝试失败后，不再尝试,发出告警信息
+            msg = u'{}  {}/{}手， 重试开仓次数{}>20' \
+                .format(self.strategy_name,
+                        order_vt_symbol,
+                        order_volume,
+                        order_retry)
+            self.write_error(msg)
+            self.send_wechat(msg)
+
+            if grid:
+                if order.vt_orderid in grid.order_ids:
+                    grid.order_ids.remove(order.vt_orderid)
+
+                # 网格的所有委托单已经执行完毕
+                if len(grid.order_ids) == 0:
+                    grid.order_status = False
+
+                self.gt.save()
+                self.write_log(u'网格信息更新:{}'.format(grid.__dict__))
+
+            self.write_log(u'移除:{}'.format(order.vt_orderid))
+            self.active_orders.pop(order.vt_orderid, None)
+            return
+
+        order_retry += 1
+
+        pre_status = old_order.get('status', Status.NOTTRADED)
+        old_order.update({'status': Status.CANCELLED})
+        self.write_log(u'委托单状态:{}=>{}'.format(pre_status, old_order.get('status')))
+        if grid:
+            if order.vt_orderid in grid.order_ids:
+                grid.order_ids.remove(order.vt_orderid)
+
+            if not grid.order_ids:
+                grid.order_status = False
+
+            self.gt.save()
+        self.active_orders.update({order.vt_orderid: old_order})
+
+        self.display_grids()
+
+    def on_order_close_canceled(self, order: OrderData):
+        """委托平仓单撤销"""
+        self.write_log(u'委托平仓单撤销:{}'.format(order.__dict__))
+
+        if order.vt_orderid not in self.active_orders:
+            self.write_error(u'{}不在未完成的委托单中:{}。'.format(order.vt_orderid, self.active_orders))
+            return
+
+        if not self.trading:
+            self.write_error(u'当前不允许交易')
+            return
+
+        # 直接更新“未完成委托单”，更新volume,Retry次数
+        old_order = self.active_orders[order.vt_orderid]
+        self.write_log(u'{} 订单信息:{}'.format(order.vt_orderid, old_order))
+        old_order['traded'] = order.traded
+        # order_time = old_order['order_time']
+        order_symbol = copy(old_order['symbol'])
+        order_volume = old_order['volume'] - old_order['traded']
+        if order_volume <= 0:
+            msg = u'{} {}{}重新平仓数量为{}，不再平仓' \
+                .format(self.strategy_name, order.vt_orderid, order_symbol, order_volume)
+            self.write_error(msg)
+            self.send_wechat(msg)
+            self.write_log(u'活动订单移除:{}'.format(order.vt_orderid))
+            self.active_orders.pop(order.vt_orderid, None)
+            return
+
+        order_price = old_order['price']
+        order_type = old_order.get('order_type', OrderType.LIMIT)
+        order_retry = old_order['retry']
+        grid = old_order.get('grid', None)
+        if order_retry > 20:
+            msg = u'{} 平仓撤单 {}/{}手， 重试平仓次数{}>20' \
+                .format(self.strategy_name, order_symbol, order_volume, order_retry)
+            self.write_error(msg)
+            self.send_wechat(msg)
+            if grid:
+                if order.vt_orderid in grid.order_ids:
+                    grid.order_ids.remove(order.vt_orderid)
+                if not grid.order_ids:
+                    grid.order_status = False
+                self.gt.save()
+                self.write_log(u'更新网格=>{}'.format(grid.__dict__))
+
+            self.write_log(u'移除活动订单:{}'.format(order.vt_orderid))
+            self.active_orders.pop(order.vt_orderid, None)
+            return
+
+        order_retry += 1
+
+        pre_status = old_order.get('status', Status.NOTTRADED)
+        old_order.update({'status': Status.CANCELLED})
+        self.write_log(u'委托单状态:{}=>{}'.format(pre_status, old_order.get('status')))
+        if grid:
+            if order.vt_orderid in grid.order_ids:
+                grid.order_ids.remove(order.vt_orderid)
+            if len(grid.order_ids) == 0:
+                grid.order_status = False
+            self.gt.save()
+        self.active_orders.update({order.vt_orderid: old_order})
+
+        self.display_grids()
+
+    def on_stop_order(self, stop_order: StopOrder):
+        self.write_log(f'停止单触发:{stop_order.__dict__}')
+
+
+    def grid_check_stop(self):
+        """
+        网格逐一止损/止盈检查 (根据指数价格进行止损止盈）
+        :return:
+        """
+        if self.entrust != 0:
+            return
+
+        if not self.trading and not self.inited:
+            self.write_error(u'当前不允许交易')
+            return
+
+        # 多单网格逐一止损/止盈检查：
+        long_grids = self.gt.get_opened_grids(direction=Direction.LONG)
+        for g in long_grids:
+            if g.stop_price > 0 and g.stop_price > self.cur_price and g.open_status and not g.order_status:
+                # 调用平仓模块
+                self.write_log(u'{} {}当前价:{} 触发多单止损线{},开仓价:{},v：{}'.
+                                 format(self.cur_datetime,
+                                        self.vt_symbol,
+                                        self.cur_price,
+                                        g.stop_price,
+                                        g.open_price,
+                                        g.volume))
+                if self.grid_sell(g):
+                    self.write_log(u'多单止盈/止损委托成功')
+                else:
+                    self.write_error(u'多单止损委托失败')
+
+        # 空单网格止损检查
+        short_grids = self.gt.get_opened_grids(direction=Direction.SHORT)
+        for g in short_grids:
+            if g.stop_price > 0 and g.stop_price < self.cur_price and g.open_status and not g.order_status:
+                # 网格止损
+                self.write_log(u'{} {}当前价:{} 触发空单止损线:{}, 开仓价:{},v：{}'.
+                                 format(self.cur_datetime, self.vt_symbol, self.cur_price, g.stop_price,
+                                        g.open_price, g.volume))
+                if self.grid_cover(g):
+                    self.write_log(u'空单止盈/止损委托成功')
+                else:
+                    self.write_error(u'委托空单平仓失败')
+
+    def grid_buy(self, grid):
+        """
+        事务开多仓
+        :return:
+        """
+
+        vt_orderids = self.buy(price=self.cur_price, volume=grid.volume, grid=grid)
+        if len(vt_orderids) > 0:
+            self.write_log(u'创建{}事务多单,开仓价：{}，数量：{}，止盈价:{},止损价:{}'
+                             .format(grid.type, grid.open_price, grid.volume, grid.close_price, grid.stop_price))
+            self.gt.dn_grids.append(grid)
+            self.gt.save()
+            return True
+        else:
+            self.write_error(u'创建{}事务多单,委托失败，开仓价：{}，数量：{}，止盈价:{}'
+                                  .format(grid.type, grid.open_price, grid.volume, grid.close_price))
+            return False
+
+
+    def grid_short(self, grid):
+        """
+        事务开空仓
+        :return:
+        """
+
+        vt_orderids = self.short(price=self.cur_price, volume=grid.volume, grid=grid)
+        if len(vt_orderids) > 0:
+            self.write_log(u'创建{}事务空单,指数开空价：{}，主力开仓价:{},数量：{}，止盈价:{},止损价:{}'
+                             .format(grid.type, grid.open_price, self.cur_price, grid.volume, grid.close_price,
+                                     grid.stop_price))
+            self.gt.up_grids.append(grid)
+            self.gt.save()
+            return True
+        else:
+            self.write_error(u'创建{}事务空单,委托失败,开仓价：{}，数量：{}，止盈价:{}'
+                                  .format(grid.type, grid.open_price, grid.volume, grid.close_price))
+            return False
+
+    def grid_sell(self, grid):
+        """
+        事务平多单仓位
+        1.来源自止损止盈平仓
+        :param 平仓网格
+        :return:
+        """
+        self.write_log(u'执行事务平多仓位:{}'.format(grid.to_json()))
+
+        if self.account_pos is None:
+            self.write_error(u'无法获取{}得持仓信息'.format(self.vt_symbol))
+            return False
+
+        # 发出委托卖出单
+        if self.backtesting:
+            sell_price = self.cur_price - self.price_tick
+        else:
+            sell_price = self.cur_tick.bid_price_1
+
+        # 发出平多委托
+        if grid.traded_volume > 0:
+            grid.volume -= grid.traded_volume
+            grid.traded_volume = 0
+
+        if self.account_pos.long_pos < grid.volume:
+            self.write_error(u'当前{}的多单持仓:{}，不满足平仓目标:{}'
+                             .format(self.vt_symbol,
+                                     self.account_pos.long_pos,
+                                     grid.volume))
+
+        vt_orderids = self.sell(price=sell_price, volume=grid.volume, order_time=self.cur_datetime, grid=grid)
+        if len(vt_orderids) == 0:
+            if self.backtesting:
+                self.write_error(u'多单平仓委托失败')
+            else:
+                self.write_error(u'多单平仓委托失败')
+            return False
+        else:
+            self.write_log(u'多单平仓委托成功，编号:{}'.format(vt_orderids))
+
+            return True
+
+    def grid_cover(self, grid):
+        """
+        事务平空单仓位
+        1.来源自止损止盈平仓
+        :param 平仓网格
+        :return:
+        """
+        self.write_log(u'执行事务平空仓位:{}'.format(grid.to_json()))
+
+        if self.account_pos is None:
+            self.write_error(u'无法获取{}得持仓信息'.format(self.vt_symbol))
+            return False
+
+        # 发出委托单
+        if self.backtesting:
+            cover_price = self.cur_price + self.price_tick
+        else:
+            cover_price = self.cur_tick.ask_price_1
+
+        # 发出cover委托
+        if grid.traded_volume > 0:
+            grid.volume -= grid.traded_volume
+            grid.traded_volume = 0
+
+        vt_orderids = self.cover(price=cover_price,
+                         volume=grid.volume,
+                         order_time=self.cur_datetime,
+                         grid=grid)
+        if len(vt_orderids) == 0:
+            if self.backtesting:
+                self.write_error(u'空单平仓委托失败')
+            else:
+                self.write_error(u'空单平仓委托失败')
+            return False
+        else:
+            self.write_log(u'空单平仓委托成功，编号:{}'.format(vt_orderids))
+            return True
+
+    def cancel_all_orders(self):
+        """
+        重载撤销所有正在进行得委托
+        :return:
+        """
+        self.write_log(u'撤销所有正在进行得委托')
+        self.tns_cancel_logic(dt=datetime.now(), force=True, reopen=False)
+
+    def tns_cancel_logic(self, dt, force=False, reopen=False):
         "撤单逻辑"""
         if len(self.active_orders) < 1:
             self.entrust = 0
             return
 
+        canceled_ids = []
+
         for vt_orderid in list(self.active_orders.keys()):
-            order_info = self.active_orders.get(vt_orderid)
-            if order_info.get('status', None) in [Status.CANCELLED, Status.REJECTED]:
-                self.active_orders.pop(vt_orderid, None)
+            order_info = self.active_orders[vt_orderid]
+            order_vt_symbol = order_info.get('vt_symbol', self.vt_symbol)
+            order_time = order_info['order_time']
+            order_volume = order_info['volume'] - order_info['traded']
+            # order_price = order_info['price']
+            # order_direction = order_info['direction']
+            # order_offset = order_info['offset']
+            order_grid = order_info['grid']
+            order_status = order_info.get('status', Status.NOTTRADED)
+            order_type = order_info.get('order_type', OrderType.LIMIT)
+            over_seconds = (dt - order_time).total_seconds()
+
+            # 只处理未成交的限价委托单
+            if order_status in [Status.NOTTRADED] and order_type == OrderType.LIMIT:
+                if over_seconds > self.cancel_seconds or force:  # 超过设置的时间还未成交
+                    self.write_log(u'超时{}秒未成交，取消委托单：vt_orderid:{},order:{}'
+                                   .format(over_seconds, vt_orderid, order_info))
+                    order_info.update({'status': Status.CANCELING})
+                    self.active_orders.update({vt_orderid: order_info})
+                    ret = self.cancel_order(str(vt_orderid))
+                    if not ret:
+                        self.write_log(u'撤单失败,更新状态为撤单成功')
+                        order_info.update({'status': Status.CANCELLED})
+                        self.active_orders.update({vt_orderid: order_info})
+
                 continue
 
-            order_time = order_info.get('order_time')
-            over_ms = (dt - order_time).total_seconds()
-            if (over_ms > self.cancel_seconds) \
-                    or force:  # 超过设置的时间还未成交
-                self.write_log(f'{dt}, 超时{over_ms}秒未成交，取消委托单：{order_info}')
+            # 处理状态为‘撤销’的委托单
+            elif order_status == Status.CANCELLED:
+                self.write_log(u'委托单{}已成功撤单，删除{}'.format(vt_orderid, order_info))
+                canceled_ids.append(vt_orderid)
 
-                if self.cancel_order(vt_orderid):
-                    order_info.update({'status': Status.CANCELLING})
+                if reopen:
+                    # 撤销的委托单，属于开仓类，需要重新委托
+                    if order_info['offset'] == Offset.OPEN:
+                        self.write_log(u'超时撤单后，重新开仓')
+                        # 开空委托单
+                        if order_info['direction'] == Direction.SHORT:
+                            if self.backtesting:
+                                short_price = self.cur_price - self.price_tick
+                            else:
+                                short_price = self.cur_tick.bid_price_1
+                            if order_grid.volume != order_volume and order_volume > 0:
+                                self.write_log(
+                                    u'网格volume:{},order_volume:{}不一致，修正'.format(order_grid.volume, order_volume))
+                                order_grid.volume = order_volume
+
+                            self.write_log(u'重新提交{}开空委托,开空价{}，v:{}'.format(order_vt_symbol, short_price, order_volume))
+                            vt_orderids = self.short(price=short_price,
+                                                     volume=order_volume,
+                                                     vt_symbol=order_vt_symbol,
+                                                     order_type=order_type,
+                                                     order_time=self.cur_datetime,
+                                                     grid=order_grid)
+
+                            if len(vt_orderids) > 0:
+                                self.write_log(u'委托成功，orderid:{}'.format(vt_orderids))
+                                order_grid.snapshot.update({'open_price': short_price})
+                            else:
+                                self.write_error(u'撤单后，重新委托开空仓失败')
+                        else:
+                            if self.backtesting:
+                                buy_price = self.cur_price + self.price_tick
+                            else:
+                                buy_price = self.cur_tick.ask_price_1
+                            if order_grid.volume != order_volume and order_volume > 0:
+                                self.write_log(
+                                    u'网格volume:{},order_volume:{}不一致，修正'.format(order_grid.volume, order_volume))
+                                order_grid.volume = order_volume
+
+                            self.write_log(u'重新提交{}开多委托,开多价{}，v:{}'.format(order_vt_symbol, buy_price, order_volume))
+                            vt_orderids = self.buy(price=buy_price,
+                                                   volume=order_volume,
+                                                   vt_symbol=order_vt_symbol,
+                                                   order_type=order_type,
+                                                   order_time=self.cur_datetime,
+                                                   grid=order_grid)
+
+                            if len(vt_orderids) > 0:
+                                self.write_log(u'委托成功，orderids:{}'.format(vt_orderids))
+                                order_grid.snapshot.update({'open_price': buy_price})
+                            else:
+                                self.write_error(u'撤单后，重新委托开多仓失败')
+                    else:
+                        # 属于平多委托单
+                        if order_info['direction'] == Direction.SHORT:
+                            if self.backtesting:
+                                sell_price = self.cur_price - self.price_tick
+                            else:
+                                sell_price = self.cur_tick.bid_price_1
+                            self.write_log(u'重新提交{}平多委托,{}，v:{}'.format(order_vt_symbol, sell_price, order_volume))
+                            vt_orderids = self.sell(price=sell_price,
+                                                    volume=order_volume,
+                                                    vt_symbol=order_vt_symbol,
+                                                    order_type=order_type,
+                                                    order_time=self.cur_datetime,
+                                                    grid=order_grid)
+                            if len(vt_orderids) > 0:
+                                self.write_log(u'委托成功，orderids:{}'.format(vt_orderids))
+                            else:
+                                self.write_error(u'撤单后，重新委托平多仓失败')
+                        # 属于平空委托单
+                        else:
+                            if self.backtesting:
+                                cover_price = self.cur_price + self.price_tick
+                            else:
+                                cover_price = self.cur_tick.ask_price_1
+                            self.write_log(u'重新提交{}平空委托,委托价{}，v:{}'.format(order_vt_symbol, cover_price, order_volume))
+                            vt_orderids = self.cover(price=cover_price,
+                                                     volume=order_volume,
+                                                     vt_symbol=order_vt_symbol,
+                                                     order_type=order_type,
+                                                     order_time=self.cur_datetime,
+                                                     grid=order_grid)
+                            if len(vt_orderids) > 0:
+                                self.write_log(u'委托成功，orderids:{}'.format(vt_orderids))
+                            else:
+                                self.write_error(u'撤单后，重新委托平空仓失败')
                 else:
-                    order_info.update({'status': Status.CANCELLED})
+                    if order_info['offset'] == Offset.OPEN \
+                            and order_grid \
+                            and len(order_grid.order_ids) == 0 \
+                            and order_grid.traded_volume == 0:
+                        self.write_log(u'移除委托网格{}'.format(order_grid.__dict__))
+                        order_info['grid'] = None
+                        self.gt.remove_grids_by_ids(direction=order_grid.direction, ids=[order_grid.id])
 
-        if len(self.active_orders) < 1:
+        # 删除撤单的订单
+        for vt_orderid in canceled_ids:
+            self.write_log(u'删除orderID:{0}'.format(vt_orderid))
+            self.active_orders.pop(vt_orderid, None)
+
+        if len(self.active_orders) == 0:
             self.entrust = 0
+
 
     def display_grids(self):
         """更新网格显示信息"""
