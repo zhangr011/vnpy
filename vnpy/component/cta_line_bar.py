@@ -30,6 +30,25 @@ from vnpy.trader.object import BarData, TickData
 from vnpy.trader.constant import Interval, Color
 from vnpy.trader.utility import round_to, get_trading_date, get_underlying_symbol
 
+def get_cta_bar_type(bar_name: str):
+    """根据名称，返回K线类型和K线周期"""
+
+    if bar_name.startswith('S'):
+        return CtaLineBar, int(bar_name.replace('S', ''))
+
+    if bar_name.startswith('M'):
+        return CtaMinuteBar, int(bar_name.replace('M', ''))
+
+    if bar_name.startswith('H'):
+        return CtaHourBar, int(bar_name.replace('H', ''))
+
+    if bar_name.startswith('D'):
+        interval = bar_name.replace('D', '')
+        if len(interval) == 0:
+            return CtaDayBar, 1
+        else:
+            return CtaDayBar, int(interval)
+    raise Exception(u'{}参数错误'.format(bar_name))
 
 def get_cta_bar_class(bar_type: str):
     """根据类型名获取对象"""
@@ -2627,9 +2646,9 @@ class CtaLineBar(object):
         if self.para_macd_fast_len <= 0 or self.para_macd_slow_len <= 0 or self.para_macd_signal_len <= 0:
             return
 
-        maxLen = max(self.para_macd_fast_len, self.para_macd_slow_len) + self.para_macd_signal_len + 1
+        maxLen = max(self.para_macd_fast_len, self.para_macd_slow_len) + self.para_macd_signal_len
 
-        # maxLen = maxLen * 3             # 注：数据长度需要足够，才能准确。测试过，3倍长度才可以与国内的文华等软件一致
+        maxLen = maxLen * 3             # 注：数据长度需要足够，才能准确。测试过，3倍长度才可以与国内的文华等软件一致
 
         if self.bar_len < maxLen:
             self.write_log(u'数据未充分,当前Bar数据数量：{0}，计算MACD需要：{1}'.format(len(self.line_bar), maxLen))
@@ -3733,10 +3752,8 @@ class CtaLineBar(object):
                            format(len(self.line_bar)))
             return
         # 3、获取前InputN周期(包含当前周期）的K线
-        list_mid3 = [x.mid3 for x in self.line_bar[-ema_len * 4:-1]]
         last_bar_mid3 = (self.line_bar[-1].close_price + self.line_bar[-1].high_price + self.line_bar[-1].low_price) / 3
-        list_mid3.append(last_bar_mid3)
-        bar_mid3_ema10 = ta.EMA(np.array(list_mid3, dtype=float), ema_len)[-1]
+        bar_mid3_ema10 = ta.EMA(np.append(self.mid3_array[-ema_len*3:], [last_bar_mid3]), ema_len)[-1]
         self._rt_yb = round(float(bar_mid3_ema10), self.round_n)
 
     @property
