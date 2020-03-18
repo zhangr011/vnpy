@@ -896,7 +896,7 @@ class CtaFutureTemplate(CtaTemplate):
         self.write_log(u'{} 订单信息:{}'.format(order.vt_orderid, old_order))
         old_order['traded'] = order.traded
         # order_time = old_order['order_time']
-        order_symbol = copy(old_order['symbol'])
+        order_symbol = copy(old_order['vt_symbol'])
         order_volume = old_order['volume'] - old_order['traded']
         if order_volume <= 0:
             msg = u'{} {}{}重新平仓数量为{}，不再平仓' \
@@ -909,7 +909,7 @@ class CtaFutureTemplate(CtaTemplate):
 
         order_price = old_order['price']
         order_type = old_order.get('order_type', OrderType.LIMIT)
-        order_retry = old_order['retry']
+        order_retry = old_order.get('retry', 1)
         grid = old_order.get('grid', None)
         if order_retry > 20:
             msg = u'{} 平仓撤单 {}/{}手， 重试平仓次数{}>20' \
@@ -995,7 +995,11 @@ class CtaFutureTemplate(CtaTemplate):
         :return:
         """
 
-        vt_orderids = self.buy(price=self.cur_price, volume=grid.volume, grid=grid)
+        vt_orderids = self.buy(vt_symbol=self.vt_symbol,
+                               price=self.cur_price,
+                               volume=grid.volume,
+                               order_time=self.cur_datetime,
+                               grid=grid)
         if len(vt_orderids) > 0:
             self.write_log(u'创建{}事务多单,开仓价：{}，数量：{}，止盈价:{},止损价:{}'
                              .format(grid.type, grid.open_price, grid.volume, grid.close_price, grid.stop_price))
@@ -1014,7 +1018,11 @@ class CtaFutureTemplate(CtaTemplate):
         :return:
         """
 
-        vt_orderids = self.short(price=self.cur_price, volume=grid.volume, grid=grid)
+        vt_orderids = self.short(vt_symbol=self.vt_symbol,
+                                 price=self.cur_price,
+                                 volume=grid.volume,
+                                 order_time=self.cur_datetime,
+                                 grid=grid)
         if len(vt_orderids) > 0:
             self.write_log(u'创建{}事务空单,指数开空价：{}，主力开仓价:{},数量：{}，止盈价:{},止损价:{}'
                              .format(grid.type, grid.open_price, self.cur_price, grid.volume, grid.close_price,
@@ -1144,11 +1152,11 @@ class CtaFutureTemplate(CtaTemplate):
             over_seconds = (dt - order_time).total_seconds()
 
             # 只处理未成交的限价委托单
-            if order_status in [Status.NOTTRADED] and order_type == OrderType.LIMIT:
+            if order_status in [Status.SUBMITTING, Status.NOTTRADED] and order_type == OrderType.LIMIT:
                 if over_seconds > self.cancel_seconds or force:  # 超过设置的时间还未成交
                     self.write_log(u'超时{}秒未成交，取消委托单：vt_orderid:{},order:{}'
                                    .format(over_seconds, vt_orderid, order_info))
-                    order_info.update({'status': Status.CANCELING})
+                    order_info.update({'status': Status.CANCELLING})
                     self.active_orders.update({vt_orderid: order_info})
                     ret = self.cancel_order(str(vt_orderid))
                     if not ret:
