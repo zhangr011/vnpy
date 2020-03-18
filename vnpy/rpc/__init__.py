@@ -73,8 +73,8 @@ class RpcServer:
         return self.__active
 
     def start(
-        self, 
-        rep_address: str, 
+        self,
+        rep_address: str,
         pub_address: str,
         server_secretkey_path: str = ""
     ) -> None:
@@ -89,12 +89,12 @@ class RpcServer:
             self.__authenticator = ThreadAuthenticator(self.__context)
             self.__authenticator.start()
             self.__authenticator.configure_curve(
-                domain="*", 
+                domain="*",
                 location=zmq.auth.CURVE_ALLOW_ANY
             )
 
             publickey, secretkey = zmq.auth.load_certificate(server_secretkey_path)
-            
+
             self.__socket_pub.curve_secretkey = secretkey
             self.__socket_pub.curve_publickey = publickey
             self.__socket_pub.curve_server = True
@@ -236,8 +236,8 @@ class RpcClient:
         return dorpc
 
     def start(
-        self, 
-        req_address: str, 
+        self,
+        req_address: str,
         sub_address: str,
         client_secretkey_path: str = "",
         server_publickey_path: str = ""
@@ -253,13 +253,13 @@ class RpcClient:
             self.__authenticator = ThreadAuthenticator(self.__context)
             self.__authenticator.start()
             self.__authenticator.configure_curve(
-                domain="*", 
+                domain="*",
                 location=zmq.auth.CURVE_ALLOW_ANY
             )
 
             publickey, secretkey = zmq.auth.load_certificate(client_secretkey_path)
             serverkey, _ = zmq.auth.load_certificate(server_publickey_path)
-            
+
             self.__socket_sub.curve_secretkey = secretkey
             self.__socket_sub.curve_publickey = publickey
             self.__socket_sub.curve_serverkey = serverkey
@@ -296,6 +296,11 @@ class RpcClient:
         if self.__thread and self.__thread.is_alive():
             self.__thread.join()
         self.__thread = None
+
+    def close(self):
+        """close receiver, exit"""
+        self.stop()
+        self.join()
 
     def run(self) -> None:
         """

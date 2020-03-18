@@ -162,6 +162,29 @@ class CtaEngine(BaseEngine):
         :return:
         """
         self.main_engine.get_strategy_status = self.get_strategy_status
+        self.main_engine.get_strategy_pos = self.get_strategy_pos
+        self.main_engine.add_strategy = self.add_strategy
+        self.main_engine.init_strategy = self.init_strategy
+        self.main_engine.start_strategy = self.start_strategy
+        self.main_engine.stop_strategy = self.stop_strategy
+        self.main_engine.remove_strategy = self.remove_strategy
+        self.main_engine.reload_strategy = self.reload_strategy
+        self.main_engine.save_strategy_data = self.save_strategy_data
+        self.main_engine.save_strategy_snapshot = self.save_strategy_snapshot
+
+        # 注册到远程服务调用
+        rpc_service = self.main_engine.apps.get('RpcService')
+        if rpc_service:
+            rpc_service.register(self.main_engine.get_strategy_status)
+            rpc_service.register(self.main_engine.get_strategy_pos)
+            rpc_service.register(self.main_engine.add_strategy)
+            rpc_service.register(self.main_engine.init_strategy)
+            rpc_service.register(self.main_engine.start_strategy)
+            rpc_service.register(self.main_engine.stop_strategy)
+            rpc_service.register(self.main_engine.remove_strategy)
+            rpc_service.register(self.main_engine.reload_strategy)
+            rpc_service.register(self.main_engine.save_strategy_data)
+            rpc_service.register(self.main_engine.save_strategy_snapshot)
 
     def process_timer_event(self, event: Event):
         """ 处理定时器事件"""
@@ -1211,21 +1234,14 @@ class CtaEngine(BaseEngine):
         """
         return list(self.classes.keys())
 
-    def get_strategy_status(self, strategy_name):
+    def get_strategy_status(self):
         """
-        return strategy inited/trading status
-        :param strategy_name:
+        return strategy name list with inited/trading status
+        :param :
         :return:
         """
-        inited = False
-        trading = False
+        return [{k: {'inited': v.inited, 'trading': v.trading}} for k, v in self.strategies.items()]
 
-        strategy = self.strategies.get(strategy_name, None)
-        if strategy:
-            inited = strategy.inited
-            trading = strategy.trading
-
-        return inited, trading
 
     def get_strategy_pos(self, name, strategy=None):
         """
@@ -1355,6 +1371,9 @@ class CtaEngine(BaseEngine):
             d['date'] = dt.strftime('%Y%m%d')
             d['hour'] = dt.hour
             d['datetime'] = datetime.now()
+            strategy = self.strategies.get(strategy_name)
+            d['inited'] = strategy.inited
+            d['trading'] = strategy.trading
             try:
                 d['pos'] = self.get_strategy_pos(name=strategy_name)
             except Exception as ex:

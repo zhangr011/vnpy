@@ -1,5 +1,5 @@
 """"""
-
+import sys
 import traceback
 from typing import Optional, Callable
 
@@ -35,6 +35,7 @@ class RpcEngine(BaseEngine):
         """"""
         self.server = RpcServer()
 
+        self.server.register(self.main_engine.get_all_gateway_status)
         self.server.register(self.main_engine.subscribe)
         self.server.register(self.main_engine.send_order)
         self.server.register(self.main_engine.send_orders)
@@ -43,6 +44,7 @@ class RpcEngine(BaseEngine):
         self.server.register(self.main_engine.query_history)
 
         self.server.register(self.main_engine.get_tick)
+        self.server.register(self.main_engine.get_price)
         self.server.register(self.main_engine.get_order)
         self.server.register(self.main_engine.get_trade)
         self.server.register(self.main_engine.get_position)
@@ -55,6 +57,7 @@ class RpcEngine(BaseEngine):
         self.server.register(self.main_engine.get_all_accounts)
         self.server.register(self.main_engine.get_all_contracts)
         self.server.register(self.main_engine.get_all_active_orders)
+        self.server.register(self.main_engine.get_all_custom_contracts)
 
     def register(self, func: Callable):
         """ 扩展注册接口"""
@@ -75,25 +78,27 @@ class RpcEngine(BaseEngine):
         }
         save_json(self.setting_filename, setting)
 
-    def start(self, rep_address: str, pub_address: str):
+    def start(self, rep_address: str = None, pub_address: str = None):
         """"""
         if self.server.is_active():
             self.write_log("RPC服务运行中")
-            return False
-
-        self.rep_address = rep_address
-        self.pub_address = pub_address
+            return False, "RPC服务运行中"
+        if rep_address:
+            self.rep_address = rep_address
+        if pub_address:
+            self.pub_address = pub_address
 
         try:
-            self.server.start(rep_address, pub_address)
+            self.server.start(self.rep_address, self.pub_address)
         except:  # noqa
             msg = traceback.format_exc()
+            print(msg, file=sys.stderr)
             self.write_log(f"RPC服务启动失败：{msg}")
-            return False
+            return False, msg
 
         self.save_setting()
         self.write_log("RPC服务启动成功")
-        return True
+        return True,"RPC服务启动成功"
 
     def stop(self):
         """"""

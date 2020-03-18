@@ -164,6 +164,29 @@ class CtaEngine(BaseEngine):
         :return:
         """
         self.main_engine.get_strategy_status = self.get_strategy_status
+        self.main_engine.get_strategy_pos = self.get_strategy_pos
+        self.main_engine.add_strategy = self.add_strategy
+        self.main_engine.init_strategy = self.init_strategy
+        self.main_engine.start_strategy = self.start_strategy
+        self.main_engine.stop_strategy = self.stop_strategy
+        self.main_engine.remove_strategy = self.remove_strategy
+        self.main_engine.reload_strategy = self.reload_strategy
+        self.main_engine.save_strategy_data = self.save_strategy_data
+        self.main_engine.save_strategy_snapshot = self.save_strategy_snapshot
+
+        # 注册到远程服务调用
+        rpc_service = self.main_engine.apps.get('RpcService')
+        if rpc_service:
+            rpc_service.register(self.main_engine.get_strategy_status)
+            rpc_service.register(self.main_engine.get_strategy_pos)
+            rpc_service.register(self.main_engine.add_strategy)
+            rpc_service.register(self.main_engine.init_strategy)
+            rpc_service.register(self.main_engine.start_strategy)
+            rpc_service.register(self.main_engine.stop_strategy)
+            rpc_service.register(self.main_engine.remove_strategy)
+            rpc_service.register(self.main_engine.reload_strategy)
+            rpc_service.register(self.main_engine.save_strategy_data)
+            rpc_service.register(self.main_engine.save_strategy_snapshot)
 
     def process_timer_event(self, event: Event):
         """ 处理定时器事件"""
@@ -430,7 +453,6 @@ class CtaEngine(BaseEngine):
         # 如果没有指定网关，则使用合约信息内的网关
         if contract.gateway_name and not gateway_name:
             gateway_name = contract.gateway_name
-
 
         # Send Orders
         vt_orderids = []
@@ -805,7 +827,6 @@ class CtaEngine(BaseEngine):
         vt_position_id = f"{gateway_name}.{vt_symbol}.{direction.value}"
         return self.main_engine.get_position(vt_position_id)
 
-
     def get_position_holding(self, vt_symbol: str, gateway_name: str = ''):
         """ 查询合约在账号的持仓（包含多空）"""
         k = f'{gateway_name}.{vt_symbol}'
@@ -818,7 +839,6 @@ class CtaEngine(BaseEngine):
             holding = PositionHolding(contract)
             self.holdings[k] = holding
         return holding
-
 
     def get_engine_type(self):
         """"""
@@ -835,11 +855,11 @@ class CtaEngine(BaseEngine):
         return log_path
 
     def load_bar(
-        self,
-        vt_symbol: str,
-        days: int,
-        interval: Interval,
-        callback: Callable[[BarData], None]
+            self,
+            vt_symbol: str,
+            days: int,
+            interval: Interval,
+            callback: Callable[[BarData], None]
     ):
         """"""
         symbol, exchange = extract_vt_symbol(vt_symbol)
@@ -867,10 +887,10 @@ class CtaEngine(BaseEngine):
             callback(bar)
 
     def load_tick(
-        self,
-        vt_symbol: str,
-        days: int,
-        callback: Callable[[TickData], None]
+            self,
+            vt_symbol: str,
+            days: int,
+            callback: Callable[[TickData], None]
     ):
         """"""
         symbol, exchange = extract_vt_symbol(vt_symbol)
@@ -886,7 +906,6 @@ class CtaEngine(BaseEngine):
 
         for tick in ticks:
             callback(tick)
-
 
     def call_strategy_func(
             self, strategy: CtaTemplate, func: Callable, params: Any = None
@@ -1304,15 +1323,7 @@ class CtaEngine(BaseEngine):
         :param strategy_name:
         :return:
         """
-        inited = False
-        trading = False
-
-        strategy = self.strategies.get(strategy_name, None)
-        if strategy:
-            inited = strategy.inited
-            trading = strategy.trading
-
-        return inited, trading
+        return [{k: {'inited': v.inited, 'trading': v.trading}} for k, v in self.strategies.items()]
 
     def get_strategy_pos(self, name, strategy=None):
         """

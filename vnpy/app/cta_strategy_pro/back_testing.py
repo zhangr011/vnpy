@@ -552,7 +552,7 @@ class BackTestingEngine(object):
             # 更新策略的资金K线
             fund_kline = self.fund_kline_dict.get(strategy.strategy_name, None)
             if fund_kline:
-                hold_pnl = fund_kline.get_hold_pnl()
+                hold_pnl, _ = fund_kline.get_hold_pnl()
                 if hold_pnl != 0:
                     fund_kline.update_strategy(dt=self.last_dt, hold_pnl=hold_pnl)
 
@@ -583,7 +583,7 @@ class BackTestingEngine(object):
             # 更新策略的资金K线
             fund_kline = self.fund_kline_dict.get(strategy.strategy_name, None)
             if fund_kline:
-                hold_pnl = fund_kline.get_hold_pnl()
+                hold_pnl, _ = fund_kline.get_hold_pnl()
                 if hold_pnl != 0:
                     fund_kline.update_strategy(dt=self.last_dt, hold_pnl=hold_pnl)
 

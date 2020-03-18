@@ -32,6 +32,8 @@ class CtaPosition(CtaComponent):
             self.write_log(f'净:{self.pos}->{self.pos + volume}')
             self.long_pos += volume
             self.pos += volume
+            self.long_pos = round(self.long_pos, 7)
+            self.pos = round(self.pos, 7)
 
         if direction == Direction.SHORT:  # 加空仓
             if (min(self.pos, self.short_pos) - volume) < (0 - self.maxPos):
@@ -41,7 +43,8 @@ class CtaPosition(CtaComponent):
             self.write_log(f'净:{self.pos}->{self.pos - volume}')
             self.short_pos -= volume
             self.pos -= volume
-
+            self.short_pos = round(self.short_pos, 7)
+            self.pos = round(self.pos, 7)
         return True
 
     def close_pos(self, direction: Direction, volume: float):
@@ -56,6 +59,8 @@ class CtaPosition(CtaComponent):
             self.write_log(f'净:{self.pos}->{self.pos + volume}')
             self.short_pos += volume
             self.pos += volume
+            self.short_pos = round(self.short_pos, 7)
+            self.pos = round(self.pos, 7)
 
             # 更新上层策略的pos。该方法不推荐使用
             self.strategy.pos = self.pos
@@ -69,6 +74,8 @@ class CtaPosition(CtaComponent):
 
             self.long_pos -= volume
             self.pos -= volume
+            self.long_pos = round(self.long_pos, 7)
+            self.pos = round(self.pos, 7)
 
         return True
 

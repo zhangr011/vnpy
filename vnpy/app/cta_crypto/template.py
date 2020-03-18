@@ -441,7 +441,7 @@ class CtaFutureTemplate(CtaTemplate):
     backtesting = False
 
     # 逻辑过程日志
-    dist_fieldnames = ['datetime', 'symbol', 'volume', 'price',
+    dist_fieldnames = ['datetime', 'symbol', 'volume', 'price','margin',
                        'operation', 'signal', 'stop_price', 'target_price',
                        'long_pos', 'short_pos']
 
@@ -679,6 +679,7 @@ class CtaFutureTemplate(CtaTemplate):
             dist_record['datetime'] = ' '.join([self.cur_datetime.strftime('%Y-%m-%d'), trade.time])
         dist_record['volume'] = trade.volume
         dist_record['price'] = trade.price
+        dist_record['margin'] = trade.price * trade.volume * self.cta_engine.get_margin_rate(trade.vt_symbol)
         dist_record['symbol'] = trade.vt_symbol
 
         if trade.direction == Direction.LONG and trade.offset == Offset.OPEN:
@@ -1056,7 +1057,12 @@ class CtaFutureTemplate(CtaTemplate):
                                      self.account_pos.long_pos,
                                      grid.volume))
 
-        vt_orderids = self.sell(price=sell_price, volume=grid.volume, order_time=self.cur_datetime, grid=grid)
+        vt_orderids = self.sell(
+            vt_symbol=self.vt_symbol,
+            price=sell_price,
+            volume=grid.volume,
+            order_time=self.cur_datetime,
+            grid=grid)
         if len(vt_orderids) == 0:
             if self.backtesting:
                 self.write_error(u'多单平仓委托失败')
@@ -1092,10 +1098,12 @@ class CtaFutureTemplate(CtaTemplate):
             grid.volume -= grid.traded_volume
             grid.traded_volume = 0
 
-        vt_orderids = self.cover(price=cover_price,
-                         volume=grid.volume,
-                         order_time=self.cur_datetime,
-                         grid=grid)
+        vt_orderids = self.cover(
+            price=cover_price,
+            vt_symbol=self.vt_symbol,
+            volume=grid.volume,
+            order_time=self.cur_datetime,
+            grid=grid)
         if len(vt_orderids) == 0:
             if self.backtesting:
                 self.write_error(u'空单平仓委托失败')
@@ -1295,6 +1303,8 @@ class CtaFutureTemplate(CtaTemplate):
         else:
             save_path = self.cta_engine.get_data_path()
         try:
+            if 'margin' not in dist_data:
+                dist_data.update({'margin': dist_data.get('price', 0) * dist_data.get('volume', 0) * self.cta_engine.get_margin_rate(dist_data.get('symbol', self.vt_symbol))})
             if self.position and 'long_pos' not in dist_data:
                 dist_data.update({'long_pos': self.position.long_pos})
             if self.position and 'short_pos' not in dist_data:

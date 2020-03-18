@@ -567,7 +567,7 @@ class BackTestingEngine(object):
             # 更新策略的资金K线
             fund_kline = self.fund_kline_dict.get(strategy.strategy_name, None)
             if fund_kline:
-                hold_pnl = fund_kline.get_hold_pnl()
+                hold_pnl, _ = fund_kline.get_hold_pnl()
                 if hold_pnl != 0:
                     fund_kline.update_strategy(dt=self.last_dt, hold_pnl=hold_pnl)
 
@@ -598,7 +598,7 @@ class BackTestingEngine(object):
             # 更新策略的资金K线
             fund_kline = self.fund_kline_dict.get(strategy.strategy_name, None)
             if fund_kline:
-                hold_pnl = fund_kline.get_hold_pnl()
+                hold_pnl, _ = fund_kline.get_hold_pnl()
                 if hold_pnl != 0:
                     fund_kline.update_strategy(dt=self.last_dt, hold_pnl=hold_pnl)
 
@@ -1349,6 +1349,7 @@ class BackTestingEngine(object):
                     if cover_volume >= open_trade.volume:
                         self.write_log(f'cover volume:{cover_volume}, 满足:{open_trade.volume}')
                         cover_volume = cover_volume - open_trade.volume
+                        cover_volume = round(cover_volume, 7)
                         if cover_volume > 0:
                             self.write_log(u'剩余待平数量:{}'.format(cover_volume))
 
@@ -1364,6 +1365,7 @@ class BackTestingEngine(object):
                                                slippage=self.get_slippage(trade.vt_symbol),
                                                size=self.get_size(trade.vt_symbol),
                                                group_id=g_id,
+                                               margin_rate=self.get_margin_rate(trade.vt_symbol),
                                                fix_commission=self.get_fix_commission(trade.vt_symbol))
 
                         t = OrderedDict()
@@ -1415,6 +1417,7 @@ class BackTestingEngine(object):
                     # 开空volume,大于平仓volume，需要更新减少tradeDict的数量。
                     else:
                         remain_volume = open_trade.volume - cover_volume
+                        remain_volume = round(remain_volume, 7)
                         self.write_log(f'{open_trade.vt_symbol} short pos: {open_trade.volume} => {remain_volume}')
 
                         result = TradingResult(open_price=open_trade.price,
@@ -1426,6 +1429,7 @@ class BackTestingEngine(object):
                                                slippage=self.get_slippage(trade.vt_symbol),
                                                size=self.get_size(trade.vt_symbol),
                                                group_id=g_id,
+                                               margin_rate=self.get_margin_rate(trade.vt_symbol),
                                                fix_commission=self.get_fix_commission(trade.vt_symbol))
 
                         t = OrderedDict()
@@ -1512,7 +1516,7 @@ class BackTestingEngine(object):
                     if sell_volume >= open_trade.volume:
                         self.write_log(f'{open_trade.vt_symbol},Sell Volume:{sell_volume} 满足:{open_trade.volume}')
                         sell_volume = sell_volume - open_trade.volume
-
+                        sell_volume = round(sell_volume, 7)
                         self.write_log(f'{open_trade.vt_symbol},sell, price:{trade.price},volume:{open_trade.volume}')
 
                         result = TradingResult(open_price=open_trade.price,
@@ -1524,6 +1528,7 @@ class BackTestingEngine(object):
                                                slippage=self.get_slippage(trade.vt_symbol),
                                                size=self.get_size(trade.vt_symbol),
                                                group_id=g_id,
+                                               margin_rate=self.get_margin_rate(trade.vt_symbol),
                                                fix_commission=self.get_fix_commission(trade.vt_symbol))
 
                         t = OrderedDict()
@@ -1571,6 +1576,7 @@ class BackTestingEngine(object):
                     # 开多volume,大于平仓volume，需要更新减少tradeDict的数量。
                     else:
                         remain_volume = open_trade.volume - sell_volume
+                        remain_volume = round(remain_volume, 7)
                         self.write_log(f'{open_trade.vt_symbol} short pos: {open_trade.volume} => {remain_volume}')
 
                         result = TradingResult(open_price=open_trade.price,
@@ -1582,6 +1588,7 @@ class BackTestingEngine(object):
                                                slippage=self.get_slippage(trade.vt_symbol),
                                                size=self.get_size(trade.vt_symbol),
                                                group_id=g_id,
+                                               margin_rate=self.get_margin_rate(trade.vt_symbol),
                                                fix_commission=self.get_fix_commission(trade.vt_symbol))
 
                         t = OrderedDict()
@@ -2107,7 +2114,7 @@ class TradingResult(object):
     """每笔交易的结果"""
 
     def __init__(self, open_price, open_datetime, exit_price, close_datetime, volume, rate, slippage, size, group_id,
-                 fix_commission=0.0):
+                 margin_rate, fix_commission=0.0):
         """Constructor"""
         self.open_price = open_price  # 开仓价格
         self.exit_price = exit_price  # 平仓价格
@@ -2118,11 +2125,11 @@ class TradingResult(object):
         self.volume = volume  # 交易数量（+/-代表方向）
         self.group_id = group_id  # 主交易ID（针对多手平仓）
 
-        self.turnover = (self.open_price + self.exit_price) * abs(volume)  # 成交金额
+        self.turnover = (self.open_price + self.exit_price) * abs(volume) * margin_rate  # 成交金额(实际保证金金额）
         if fix_commission > 0:
             self.commission = fix_commission * abs(self.volume)
         else:
             self.commission = abs(self.turnover * rate)  # 手续费成本
-        self.slippage = slippage * 2 * abs(volume)  # 滑点成本
-        self.pnl = ((self.exit_price - self.open_price) * volume * size
+        self.slippage = slippage * 2 * abs(self.turnover)  # 滑点成本
+        self.pnl = ((self.exit_price - self.open_price) * volume
                     - self.commission - self.slippage)  # 净盈亏

@@ -261,6 +261,10 @@ class CtpGateway(BaseGateway):
 
     def check_status(self):
         """检查状态"""
+
+        if self.td_api.connect_status and self.md_api.connect_status:
+            self.status.update({'con': True})
+
         if self.tdx_api:
             self.tdx_api.check_status()
         if self.tdx_api is None or self.md_api is None:
@@ -449,6 +453,7 @@ class CtpMdApi(MdApi):
         """
         self.gateway.write_log("行情服务器连接成功")
         self.login()
+        self.gateway.status.update({'md_con': True, 'md_con_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S')})
 
     def onFrontDisconnected(self, reason: int):
         """
@@ -456,6 +461,7 @@ class CtpMdApi(MdApi):
         """
         self.login_status = False
         self.gateway.write_log(f"行情服务器连接断开，原因{reason}")
+        self.gateway.status.update({'md_con': False, 'md_dis_con_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S')})
 
     def onRspUserLogin(self, data: dict, error: dict, reqid: int, last: bool):
         """
@@ -642,11 +648,13 @@ class CtpTdApi(TdApi):
             self.authenticate()
         else:
             self.login()
+            self.gateway.status.update({'td_con': True, 'td_con_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S')})
 
     def onFrontDisconnected(self, reason: int):
         """"""
         self.login_status = False
         self.gateway.write_log(f"交易服务器连接断开，原因{reason}")
+        self.gateway.status.update({'td_con': True, 'td_dis_con_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S')})
 
     def onRspAuthenticate(self, data: dict, error: dict, reqid: int, last: bool):
         """"""
@@ -784,16 +792,16 @@ class CtpTdApi(TdApi):
 
         account = AccountData(
             accountid=data["AccountID"],
-            pre_balance=data['PreBalance'],
-            balance=data["Balance"],
-            frozen=data["FrozenMargin"] + data["FrozenCash"] + data["FrozenCommission"],
+            pre_balance=round(float(data['PreBalance']), 7),
+            balance=round(float(data["Balance"]), 7),
+            frozen=round(data["FrozenMargin"] + data["FrozenCash"] + data["FrozenCommission"], 7),
             gateway_name=self.gateway_name
         )
-        account.available = data["Available"]
-        account.commission = data['Commission']
-        account.margin = data['CurrMargin']
-        account.close_profit = data['CloseProfit']
-        account.holding_profit = data['PositionProfit']
+        account.available = round(float(data["Available"]), 7)
+        account.commission = round(float(data['Commission']), 7)
+        account.margin = round(float(data['CurrMargin']), 7)
+        account.close_profit = round(float(data['CloseProfit']), 7)
+        account.holding_profit = round(float(data['PositionProfit']),7)
         account.trading_day = str(data['TradingDay'])
         if '-' not in account.trading_day and len(account.trading_day) == 8:
             account.trading_day = '-'.join(
@@ -1257,7 +1265,7 @@ class TdxMdApi():
                 else:
                     self.gateway.write_log(u'创建tdx连接, IP: {}/{}'.format(self.best_ip['ip'], self.best_ip['port']))
                     self.connection_status = True
-
+                    self.gateway.status.update({'tdx_con': True, 'tdx_con_time': datetime.now().strftime('%Y-%m-%d %H:%M%S')})
                     self.thread = Thread(target=self.run)
                     self.thread.start()
 
@@ -1536,7 +1544,7 @@ class SubMdApi():
             self.thread = Thread(target=self.sub.start)
             self.thread.start()
             self.connect_status = True
-
+            self.gateway.status.update({'sub_con': True, 'sub_con_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S')})
         except Exception as ex:
             self.gateway.write_error(u'连接RabbitMQ {} 异常:{}'.format(self.setting, str(ex)))
             self.gateway.write_error(traceback.format_exc())

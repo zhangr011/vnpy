@@ -95,6 +95,7 @@ class BaseGateway(ABC):
 
         # 所有订阅on_bar的都会添加
         self.klines = {}
+        self.status = {'name': gateway_name, 'con': False}
 
     def create_logger(self):
         """
@@ -314,6 +315,12 @@ class BaseGateway(ABC):
         """
         return self.default_setting
 
+    def get_status(self) -> Dict[str, Any]:
+        """
+        return gateway status
+        :return:
+        """
+        return self.status
 
 class LocalOrderManager:
     """
@@ -343,7 +350,7 @@ class LocalOrderManager:
         self.cancel_request_buf: Dict[str, CancelRequest] = {}  # local_orderid: req
 
         # Hook cancel order function
-        self._cancel_order: Callable[CancelRequest] = gateway.cancel_order
+        self._cancel_order = gateway.cancel_order
         gateway.cancel_order = self.cancel_order
 
     def new_local_orderid(self) -> str:
