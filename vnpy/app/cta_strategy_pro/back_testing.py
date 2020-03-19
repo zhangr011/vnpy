@@ -366,6 +366,8 @@ class BackTestingEngine(object):
 
     def get_position_holding(self, vt_symbol: str, gateway_name: str = ''):
         """ 查询合约在账号的持仓（包含多空）"""
+        if gateway_name:
+            gateway_name = self.gateway_name
         k = f'{gateway_name}.{vt_symbol}'
         holding = self.holdings.get(k, None)
         if not holding:
@@ -1070,7 +1072,7 @@ class BackTestingEngine(object):
             strategy.on_stop_order(stop_order)
             strategy.on_order(order)
             self.append_trade(trade)
-            holding = self.get_position_holding(vt_symbol=trade.vt_symbol)
+            holding = self.get_position_holding(vt_symbol=trade.vt_symbol, gateway_name=self.gateway_name)
             holding.update_trade(trade)
             strategy.on_trade(trade)
 
@@ -1154,14 +1156,11 @@ class BackTestingEngine(object):
                     self.write_log(u'vt_trade_id:{0}'.format(cov_trade.vt_tradeid))
 
                     # 更新持仓缓存数据
-                    pos_buffer = self.pos_holding_dict.get(cov_trade.vt_symbol, None)
-                    if not pos_buffer:
-                        pos_buffer = PositionHolding(self.get_contract(vt_symbol))
-                        self.pos_holding_dict[cov_trade.vt_symbol] = pos_buffer
-                    pos_buffer.update_trade(cov_trade)
+                    holding = self.get_position_holding(cov_trade.vt_symbol, self.gateway_name)
+                    holding.update_trade(cov_trade)
                     self.write_log(u'{} : crossLimitOrder: TradeId:{},  posBuffer = {}'.format(cov_trade.strategy_name,
                                                                                                cov_trade.tradeid,
-                                                                                               pos_buffer.to_str()))
+                                                                                               holding.to_str()))
 
                     # 写入交易记录
                     self.append_trade(cov_trade)

@@ -66,6 +66,7 @@ class MainEngine:
 
         self.rm_engine = None
         self.algo_engine = None
+        self.rpc_service = None
 
         os.chdir(TRADER_DIR)  # Change working directory
         self.init_engines()  # Initialize function engines
@@ -111,6 +112,8 @@ class MainEngine:
             self.rm_engine = engine
         elif app.app_name == "AlgoTrading":
             self.algo_engine == engine
+        elif app.app_name == 'RpcService':
+            self.rpc_service = engine
 
         return engine
 
@@ -262,6 +265,9 @@ class MainEngine:
         Make sure every gateway and app is closed properly before
         programme exit.
         """
+        if hasattr(self, 'save_contracts'):
+            self.save_contracts()
+
         # Stop event engine first to prevent new timer event.
         self.event_engine.stop()
 
@@ -315,7 +321,7 @@ class BaseEngine(ABC):
                 msg = f'[{source}]{msg}'
             self.logger.log(level, msg)
         else:
-            log = LogData(msg=msg, level=level)
+            log = LogData(msg=msg, level=level, gateway_name='')
             event = Event(EVENT_LOG, log)
             self.event_engine.put(event)
 
@@ -414,6 +420,7 @@ class OmsEngine(BaseEngine):
         self.positions: Dict[str, PositionData] = {}
         self.accounts: Dict[str, AccountData] = {}
         self.contracts: Dict[str, ContractData] = {}
+        self.today_contracts: Dict[str, ContractData] = {}
         self.custom_contracts = {}
         self.prices = {}
 
@@ -421,6 +428,33 @@ class OmsEngine(BaseEngine):
 
         self.add_function()
         self.register_event()
+
+    def __del__(self):
+        """保存缓存"""
+        self.save_contracts()
+
+    def load_contracts(self) -> None:
+        """从本地缓存加载合约字典"""
+        import bz2
+        import pickle
+        contract_file_name = 'vn_contract.pkb2'
+        if not os.path.exists(contract_file_name):
+            return
+        with bz2.BZ2File(contract_file_name, 'rb') as f:
+            self.contracts = pickle.load(f)
+            self.write_log(f'加载缓存合约字典:{contract_file_name}')
+
+    def save_contracts(self) -> None:
+        """持久化合约对象到缓存文件"""
+        import bz2
+        import pickle
+        contract_file_name = 'vn_contract.pkb2'
+        with bz2.BZ2File(contract_file_name, 'wb') as f:
+            if len(self.today_contracts) > 0:
+                self.write_log(f'保存今日合约对象到缓存文件')
+                pickle.dump(self.today_contracts, f)
+            else:
+                pickle.dump(self.contracts, f)
 
     def add_function(self) -> None:
         """Add query function to main engine."""
@@ -439,6 +473,7 @@ class OmsEngine(BaseEngine):
         self.main_engine.get_all_contracts = self.get_all_contracts
         self.main_engine.get_all_active_orders = self.get_all_active_orders
         self.main_engine.get_all_custom_contracts = self.get_all_custom_contracts
+        self.main_engine.save_contracts = self.save_contracts
 
     def register_event(self) -> None:
         """"""
@@ -489,6 +524,8 @@ class OmsEngine(BaseEngine):
         contract = event.data
         self.contracts[contract.vt_symbol] = contract
         self.contracts[contract.symbol] = contract
+        self.today_contracts[contract.vt_symbol] = contract
+        self.today_contracts[contract.symbol] = contract
 
     def get_tick(self, vt_symbol: str) -> Optional[TickData]:
         """

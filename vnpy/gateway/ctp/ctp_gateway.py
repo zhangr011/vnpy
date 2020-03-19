@@ -801,7 +801,7 @@ class CtpTdApi(TdApi):
         account.commission = round(float(data['Commission']), 7)
         account.margin = round(float(data['CurrMargin']), 7)
         account.close_profit = round(float(data['CloseProfit']), 7)
-        account.holding_profit = round(float(data['PositionProfit']),7)
+        account.holding_profit = round(float(data['PositionProfit']), 7)
         account.trading_day = str(data['TradingDay'])
         if '-' not in account.trading_day and len(account.trading_day) == 8:
             account.trading_day = '-'.join(

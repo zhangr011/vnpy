@@ -141,6 +141,7 @@ class CtaEngine(BaseEngine):
         self.load_strategy_class()
         self.load_strategy_setting()
         self.register_event()
+        self.register_funcs()
         self.write_log("CTA策略引擎初始化成功")
 
     def close(self):
@@ -173,18 +174,17 @@ class CtaEngine(BaseEngine):
         self.main_engine.save_strategy_snapshot = self.save_strategy_snapshot
 
         # 注册到远程服务调用
-        rpc_service = self.main_engine.apps.get('RpcService')
-        if rpc_service:
-            rpc_service.register(self.main_engine.get_strategy_status)
-            rpc_service.register(self.main_engine.get_strategy_pos)
-            rpc_service.register(self.main_engine.add_strategy)
-            rpc_service.register(self.main_engine.init_strategy)
-            rpc_service.register(self.main_engine.start_strategy)
-            rpc_service.register(self.main_engine.stop_strategy)
-            rpc_service.register(self.main_engine.remove_strategy)
-            rpc_service.register(self.main_engine.reload_strategy)
-            rpc_service.register(self.main_engine.save_strategy_data)
-            rpc_service.register(self.main_engine.save_strategy_snapshot)
+        if self.main_engine.rpc_service:
+            self.main_engine.rpc_service.register(self.main_engine.get_strategy_status)
+            self.main_engine.rpc_service.register(self.main_engine.get_strategy_pos)
+            self.main_engine.rpc_service.register(self.main_engine.add_strategy)
+            self.main_engine.rpc_service.register(self.main_engine.init_strategy)
+            self.main_engine.rpc_service.register(self.main_engine.start_strategy)
+            self.main_engine.rpc_service.register(self.main_engine.stop_strategy)
+            self.main_engine.rpc_service.register(self.main_engine.remove_strategy)
+            self.main_engine.rpc_service.register(self.main_engine.reload_strategy)
+            self.main_engine.rpc_service.register(self.main_engine.save_strategy_data)
+            self.main_engine.rpc_service.register(self.main_engine.save_strategy_snapshot)
 
     def process_timer_event(self, event: Event):
         """ 处理定时器事件"""

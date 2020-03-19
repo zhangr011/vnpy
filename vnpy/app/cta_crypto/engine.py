@@ -1021,16 +1021,18 @@ class CtaEngine(BaseEngine):
         strategy = self.strategies[strategy_name]
         if not strategy.inited:
             self.write_error(f"策略{strategy.strategy_name}启动失败，请先初始化")
-            return
+            return False
 
         if strategy.trading:
             self.write_error(f"{strategy_name}已经启动，请勿重复操作")
-            return
+            return False
 
         self.call_strategy_func(strategy, strategy.on_start)
         strategy.trading = True
 
         self.put_strategy_event(strategy)
+
+        return True
 
     def stop_strategy(self, strategy_name: str):
         """
@@ -1039,7 +1041,7 @@ class CtaEngine(BaseEngine):
         strategy = self.strategies[strategy_name]
         if not strategy.trading:
             self.write_log(f'{strategy_name}策略实例已处于停止交易状态')
-            return
+            return False
 
         # Call on_stop function of the strategy
         self.write_log(f'调用{strategy_name}的on_stop,停止交易')
@@ -1058,6 +1060,8 @@ class CtaEngine(BaseEngine):
 
         # Update GUI
         self.put_strategy_event(strategy)
+
+        return True
 
     def edit_strategy(self, strategy_name: str, setting: dict):
         """
@@ -1080,7 +1084,7 @@ class CtaEngine(BaseEngine):
         strategy = self.strategies[strategy_name]
         if strategy.trading:
             self.write_error(f"策略{strategy.strategy_name}移除失败，请先停止")
-            return
+            return False
 
         # Remove setting
         self.remove_strategy_setting(strategy_name)
@@ -1325,7 +1329,7 @@ class CtaEngine(BaseEngine):
         :param strategy_name:
         :return:
         """
-        return [{k: {'inited': v.inited, 'trading': v.trading}} for k, v in self.strategies.items()]
+        return {k: {'inited': v.inited, 'trading': v.trading} for k, v in self.strategies.items()}
 
     def get_strategy_pos(self, name, strategy=None):
         """

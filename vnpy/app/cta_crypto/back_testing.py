@@ -1762,7 +1762,7 @@ class BackTestingEngine(object):
             holding_profit = 0
             last_price = self.get_price(symbol)
             if last_price is not None:
-                holding_profit = (last_price - longpos.price) * longpos.volume * self.get_size(symbol)
+                holding_profit = (last_price - longpos.price) * longpos.volume
                 long_pos_occupy_money += last_price * abs(longpos.volume) * self.get_margin_rate(symbol)
 
             # 账号的持仓盈亏
@@ -1780,7 +1780,7 @@ class BackTestingEngine(object):
             holding_profit = 0
             last_price = self.get_price(symbol)
             if last_price is not None:
-                holding_profit = (shortpos.price - last_price) * shortpos.volume * self.get_size(symbol)
+                holding_profit = (shortpos.price - last_price) * shortpos.volume
                 short_pos_occupy_money += last_price * abs(shortpos.volume) * self.get_margin_rate(symbol)
 
             # 账号的持仓盈亏

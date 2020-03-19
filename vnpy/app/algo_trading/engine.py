@@ -316,7 +316,7 @@ class AlgoEngine(BaseEngine):
         """查询合约的size"""
         contract = self.main_engine.get_contract(vt_symbol)
         if contract is None:
-            self.write_error(f'查询不到{vt_symbol}合约信息')
+            self.write_error(f'get_size 查询不到{vt_symbol}合约信息')
             return 10
         return contract.size
 
@@ -325,7 +325,7 @@ class AlgoEngine(BaseEngine):
         """查询保证金比率"""
         contract = self.main_engine.get_contract(vt_symbol)
         if contract is None:
-            self.write_error(f'查询不到{vt_symbol}合约信息')
+            self.write_error(f'get_margin_rate 查询不到{vt_symbol}合约信息')
             return 0.1
         if contract.margin_rate == 0:
             return 0.1
@@ -336,7 +336,7 @@ class AlgoEngine(BaseEngine):
         """查询价格最小跳动"""
         contract = self.main_engine.get_contract(vt_symbol)
         if contract is None:
-            self.write_error(f'查询不到{vt_symbol}合约信息')
+            self.write_error(f'get_price_tick 查询不到{vt_symbol}合约信息')
             return 0.1
 
         return contract.pricetick

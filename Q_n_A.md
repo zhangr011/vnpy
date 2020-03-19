@@ -36,6 +36,16 @@
     conda config --add channels https://mirrors.tuna.tsinghua.edu.cn/anaconda/pkgs/free/
     conda config --set show_channel_urls yes
     conda install -c quantopian ta-lib=0.4.9
+      
+    若出现libta_lib.so.0 cannot open shared object file no such file or directory
+    解决：
+    sudo find / -name libta_lib.so.0    
+    /home/ai/eco-ta/ta-lib/src/.libs/libta_lib.so.0    
+    /usr/local/lib/libta_lib.so.0    
+    vi /etc/profile    
+    添加    
+    export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/lib    
+    source /etc/profile
 
 9、数字货币的增量安装
 

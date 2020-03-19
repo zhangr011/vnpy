@@ -171,6 +171,9 @@ class PositionHolding:
                     if self.short_td < 0:
                         self.short_yd += self.short_td
                         self.short_td = 0
+            self.short_yd = round(self.short_yd, 7)
+            self.short_td = round(self.short_td, 7)
+
         else:
             if trade.offset == Offset.OPEN:
                 self.short_td += trade.volume
@@ -187,9 +190,11 @@ class PositionHolding:
                     if self.long_td < 0:
                         self.long_yd += self.long_td
                         self.long_td = 0
+            self.long_td = round(self.long_td, 7)
+            self.long_yd = round(self.long_yd, 7)
 
-        self.long_pos = self.long_td + self.long_yd
-        self.short_pos = self.short_td + self.short_yd
+        self.long_pos = round(self.long_td + self.long_yd, 7)
+        self.short_pos = round(self.short_td + self.short_yd, 7)
 
     def calculate_frozen(self) -> None:
         """"""

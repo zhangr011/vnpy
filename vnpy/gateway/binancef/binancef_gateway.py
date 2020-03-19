@@ -279,7 +279,7 @@ class BinancefRestApi(RestClient):
         self.start(session_number)
 
         self.gateway.write_log("REST API启动成功")
-        self.gateway.status.update({'md_con': True, 'md_con_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S')})
+        self.gateway.status.update({'td_con': True, 'td_con_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S')})
 
         self.query_time()
         self.query_account()
@@ -922,7 +922,7 @@ class BinancefDataWebsocketApi(WebsocketClient):
     def on_connected(self) -> None:
         """"""
         self.gateway.write_log("行情Websocket API连接刷新")
-        self.gateway.status.update({'mdws_con': True, 'mdws_con_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S')})
+        self.gateway.status.update({'md_con': True, 'md_con_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S')})
 
     def subscribe(self, req: SubscribeRequest) -> None:
         """"""
