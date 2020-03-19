@@ -714,7 +714,6 @@ class CtaFutureTemplate(CtaTemplate):
         # 未执行的订单中，存在是异常，删除
         self.write_log(u'{}报单更新，{}'.format(self.cur_datetime, order.__dict__))
 
-
         if order.vt_orderid in self.active_orders:
 
             if order.volume == order.traded and order.status in [Status.ALLTRADED]:
@@ -787,6 +786,7 @@ class CtaFutureTemplate(CtaTemplate):
             else:
                 old_traded_volume = grid.traded_volume
                 grid.traded_volume += order.volume
+                grid.traded_volume = round(grid.traded_volume, 7)
 
                 self.write_log(f'{grid.direction.value}单部分{order.offset}仓，'
                                + f'网格volume:{grid.volume}, traded_volume:{old_traded_volume}=>{grid.traded_volume}')
@@ -820,7 +820,7 @@ class CtaFutureTemplate(CtaTemplate):
         self.write_log(u'{} 委托信息:{}'.format(order.vt_orderid, old_order))
         old_order['traded'] = order.traded
         order_vt_symbol = copy(old_order['vt_symbol'])
-        order_volume = old_order['volume'] - old_order['traded']
+        order_volume = round(old_order['volume'] - old_order['traded'], 7)
         if order_volume <= 0:
             msg = u'{} {}{}需重新开仓数量为{}，不再开仓' \
                 .format(self.strategy_name,
@@ -1044,6 +1044,8 @@ class CtaFutureTemplate(CtaTemplate):
         """
         self.write_log(u'执行事务平多仓位:{}'.format(grid.to_json()))
 
+        self.account_pos = self.cta_engine.get_position_holding(self.vt_symbol)
+
         if self.account_pos is None:
             self.write_error(u'无法获取{}得持仓信息'.format(self.vt_symbol))
             return False
@@ -1057,13 +1059,16 @@ class CtaFutureTemplate(CtaTemplate):
         # 发出平多委托
         if grid.traded_volume > 0:
             grid.volume -= grid.traded_volume
+            grid.volume = round(grid.volume, 7)
             grid.traded_volume = 0
 
-        if self.account_pos.long_pos < grid.volume:
-            self.write_error(u'当前{}的多单持仓:{}，不满足平仓目标:{}'
+        if 0 < self.account_pos.long_pos < grid.volume:
+            self.write_error(u'当前{}的多单持仓:{}，不满足平仓目标:{},强制降低'
                              .format(self.vt_symbol,
                                      self.account_pos.long_pos,
                                      grid.volume))
+
+            grid.volume = self.account_pos.long_pos
 
         vt_orderids = self.sell(
             vt_symbol=self.vt_symbol,
@@ -1091,6 +1096,7 @@ class CtaFutureTemplate(CtaTemplate):
         """
         self.write_log(u'执行事务平空仓位:{}'.format(grid.to_json()))
 
+        self.account_pos = self.cta_engine.get_position_holding(self.vt_symbol)
         if self.account_pos is None:
             self.write_error(u'无法获取{}得持仓信息'.format(self.vt_symbol))
             return False
@@ -1104,7 +1110,16 @@ class CtaFutureTemplate(CtaTemplate):
         # 发出cover委托
         if grid.traded_volume > 0:
             grid.volume -= grid.traded_volume
+            grid.volume = round(grid.volume, 7)
             grid.traded_volume = 0
+
+        if 0 < abs(self.account_pos.short_pos) < grid.volume:
+            self.write_error(u'当前{}的空单持仓:{}，不满足平仓目标:{}, 强制降低'
+                             .format(self.vt_symbol,
+                                     self.account_pos.short_pos,
+                                     grid.volume))
+
+            grid.volume = abs(self.account_pos.short_pos)
 
         vt_orderids = self.cover(
             price=cover_price,

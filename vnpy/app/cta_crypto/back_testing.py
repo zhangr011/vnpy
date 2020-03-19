@@ -378,6 +378,8 @@ class BackTestingEngine(object):
 
     def get_position_holding(self, vt_symbol: str, gateway_name: str = ''):
         """ 查询合约在账号的持仓（包含多空）"""
+        if not gateway_name:
+            gateway_name = self.gateway_name
         k = f'{gateway_name}.{vt_symbol}'
         holding = self.holdings.get(k, None)
         if not holding:
@@ -1063,8 +1065,12 @@ class BackTestingEngine(object):
             strategy.on_stop_order(stop_order)
             strategy.on_order(order)
             self.append_trade(trade)
-            holding = self.get_position_holding(vt_symbol=trade.vt_symbol)
+
+            # 更新持仓缓存数据
+            k = '.'.join([self.gateway_name, trade.vt_symbol])
+            holding = self.get_position_holding(trade.vt_symbol, self.gateway_name)
             holding.update_trade(trade)
+
             strategy.on_trade(trade)
 
     def cross_limit_order(self, bar: BarData = None, tick: TickData = None):
@@ -1139,21 +1145,19 @@ class BackTestingEngine(object):
                 # 记录该合约来自哪个策略实例
                 trade.strategy_name = strategy.strategy_name
 
+                # 更新持仓缓存数据
+                k = '.'.join([self.gateway_name, trade.vt_symbol])
+                holding = self.get_position_holding(trade.vt_symbol, self.gateway_name)
+                holding.update_trade(trade)
                 strategy.on_trade(trade)
 
                 self.trade_dict[trade.vt_tradeid] = trade
                 self.trades[trade.vt_tradeid] = copy.copy(trade)
                 self.write_log(u'vt_trade_id:{0}'.format(trade.vt_tradeid))
 
-                # 更新持仓缓存数据
-                pos_buffer = self.pos_holding_dict.get(trade.vt_symbol, None)
-                if not pos_buffer:
-                    pos_buffer = PositionHolding(self.get_contract(vt_symbol))
-                    self.pos_holding_dict[trade.vt_symbol] = pos_buffer
-                pos_buffer.update_trade(trade)
                 self.write_log(u'{} : crossLimitOrder: TradeId:{},  posBuffer = {}'.format(trade.strategy_name,
                                                                                            trade.tradeid,
-                                                                                           pos_buffer.to_str()))
+                                                                                           holding.to_str()))
 
                 # 写入交易记录
                 self.append_trade(trade)

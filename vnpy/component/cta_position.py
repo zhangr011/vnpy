@@ -55,12 +55,14 @@ class CtaPosition(CtaComponent):
             if self.short_pos + volume > 0:
                 self.write_error(u'平仓异常，超出仓位。净:{0},空:{1},平仓:{2}'.format(self.pos, self.short_pos, volume))
 
-            self.write_log(f'空仓:{self.short_pos}->{self.short_pos + volume}')
-            self.write_log(f'净:{self.pos}->{self.pos + volume}')
+            pre_short_pos = self.short_pos
+            pre_pos = self.pos
             self.short_pos += volume
             self.pos += volume
             self.short_pos = round(self.short_pos, 7)
             self.pos = round(self.pos, 7)
+            self.write_log(f'空仓:{pre_short_pos}->{self.short_pos}')
+            self.write_log(f'净:{pre_pos}->{self.pos}')
 
             # 更新上层策略的pos。该方法不推荐使用
             self.strategy.pos = self.pos
@@ -68,14 +70,17 @@ class CtaPosition(CtaComponent):
         if direction == Direction.SHORT:  # 平多仓
             if self.long_pos - volume < 0:
                 self.write_error(u'平仓异常，超出仓位。净:{0},多:{1},平仓:{2}'.format(self.pos, self.long_pos, volume))
-
-            self.write_log(f'多仓:{self.long_pos}->{self.long_pos - volume}')
-            self.write_log(f'净:{self.pos}->{self.pos - volume}')
+            pre_long_pos = self.long_pos
+            pre_pos = self.pos
 
             self.long_pos -= volume
             self.pos -= volume
             self.long_pos = round(self.long_pos, 7)
             self.pos = round(self.pos, 7)
+
+            self.write_log(f'多仓:{pre_long_pos}->{self.long_pos}')
+            self.write_log(f'净:{pre_pos}->{self.pos}')
+
 
         return True
 
