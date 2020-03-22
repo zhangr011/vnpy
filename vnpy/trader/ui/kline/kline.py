@@ -1417,9 +1417,11 @@ class KLineWidget(KeyWraper):
 class GridKline(QtWidgets.QWidget):
     """多kline"""
 
-    def __init__(self, parent=None, kline_settings={}):
+    def __init__(self, parent=None, kline_settings={}, title=''):
         self.parent = parent
         super(GridKline, self).__init__(parent)
+        if title:
+            self.setWindowTitle(title)
 
         self.kline_settings = kline_settings
         self.kline_names = list(self.kline_settings.keys())
@@ -1479,11 +1481,14 @@ class GridKline(QtWidgets.QWidget):
                     continue
 
                 # 加载K线
-                data_file = kline_setting.get('data_file', None)
-                if not data_file:
-                    continue
-                df = pd.read_csv(data_file)
-                df = df.set_index(pd.DatetimeIndex(df['datetime']))
+                if 'data_frame' in kline_setting:
+                    df = kline_setting['data_frame']
+                else:
+                    data_file = kline_setting.get('data_file', None)
+                    if not data_file:
+                        continue
+                    df = pd.read_csv(data_file)
+                    df = df.set_index(pd.DatetimeIndex(df['datetime']))
                 canvas.loadData(df,
                                 main_indicators=kline_setting.get('main_indicators', []),
                                 sub_indicators=kline_setting.get('sub_indicators', [])

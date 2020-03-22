@@ -72,8 +72,7 @@ class CtaPolicy(CtaComponent):
         从持久化文件中获取
         :return:
         """
-        json_file = os.path.abspath(
-            os.path.join(get_folder_path('data'), u'{}_Policy.json'.format(self.strategy.strategy_name)))
+        json_file = str(get_folder_path('data').joinpath(u'{}_Policy.json'.format(self.strategy.strategy_name)))
 
         json_data = {}
         if os.path.exists(json_file):
@@ -93,8 +92,7 @@ class CtaPolicy(CtaComponent):
         保存至持久化文件
         :return:
         """
-        json_file = os.path.abspath(
-            os.path.join(get_folder_path('data'), u'{}_Policy.json'.format(self.strategy.strategy_name)))
+        json_file = str(get_folder_path('data').joinpath(u'{}_Policy.json'.format(self.strategy.strategy_name)))
 
         try:
             # 修改为：回测时不保存

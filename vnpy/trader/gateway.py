@@ -97,13 +97,15 @@ class BaseGateway(ABC):
         self.klines = {}
         self.status = {'name': gateway_name, 'con': False}
 
+        self.query_functions = []
+
     def create_logger(self):
         """
         创建engine独有的日志
         :return:
         """
         log_path = get_folder_path("log")
-        log_filename = os.path.abspath(os.path.join(log_path, self.gateway_name))
+        log_filename = str(log_path.joinpath(self.gateway_name))
         print(u'create logger:{}'.format(log_filename))
         from vnpy.trader.setting import SETTINGS
         self.logger = setup_logger(file_name=log_filename, name=self.gateway_name,

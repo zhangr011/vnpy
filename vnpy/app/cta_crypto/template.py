@@ -662,7 +662,7 @@ class CtaFutureTemplate(CtaTemplate):
                                  'price': g.open_price})
 
         if self.cur_datetime and (datetime.now() - self.cur_datetime).total_seconds() < 10:
-            self.write_log(u'当前持仓:{}'.format(pos_list))
+            self.write_log(u'{}当前持仓:{}'.format(self.strategy_name, pos_list))
         return pos_list
 
     def on_trade(self, trade: TradeData):

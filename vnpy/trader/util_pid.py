@@ -8,14 +8,13 @@ import os
 # 一般使用与运行服务，且唯一进程
 
 # 日志文件路径
-logs_path = os.path.abspath(os.path.join(os.getcwd(), 'logs'))
+logs_path = os.path.abspath(os.path.join(os.getcwd(), 'log'))
 if not os.path.isdir(logs_path):
     os.mkdir(logs_path)
 assert os.path.isdir(logs_path)
 
 # 记录pid得文件
 pid_file = os.path.abspath(os.path.join(logs_path, 'pid.txt'))
-
 
 def _check_pid(pid):
     """

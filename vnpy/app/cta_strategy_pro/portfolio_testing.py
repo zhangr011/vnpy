@@ -248,13 +248,13 @@ class PortfolioTestingEngine(BackTestingEngine):
                 bar.high_price = float(bar_data['high'])
                 bar.low_price = float(bar_data['low'])
                 bar.volume = int(bar_data['volume'])
-                bar.date = dt.strftime('%Y-%m-%d')
-                bar.time = dt.strftime('%H:%M:%S')
+                bar.date = bar_datetime.strftime('%Y-%m-%d')
+                bar.time = bar_datetime.strftime('%H:%M:%S')
                 str_td = str(bar_data.get('trading_day', ''))
                 if len(str_td) == 8:
                     bar.trading_day = str_td[0:4] + '-' + str_td[4:6] + '-' + str_td[6:8]
                 else:
-                    bar.trading_day = get_trading_date(dt)
+                    bar.trading_day = get_trading_date(bar_datetime)
 
                 if last_trading_day != bar.trading_day:
                     self.output(u'回测数据日期:{},资金:{}'.format(bar.trading_day, self.net_capital))

@@ -185,7 +185,7 @@ class CtaGridTrade(CtaComponent):
         self.min_dn_open_price = 0.0  # 下网格最小开仓价
 
         # 网格json文件的路径
-        self.json_file_path = os.path.join(get_folder_path('data'), f'{self.json_name}_Grids.json')
+        self.json_file_path = str(get_folder_path('data').joinpath(f'{self.json_name}_Grids.json'))
 
     def get_volume_rate(self, idx: int = 0):
         """获取网格索引对应的开仓数量比例"""
@@ -887,7 +887,7 @@ class CtaGridTrade(CtaComponent):
             self.json_name = self.strategy.strategy_name
 
         # 新版网格持久化文件
-        grid_json_file = os.path.join(grids_save_path, u'{}_Grids.json'.format(self.json_name))
+        grid_json_file = str(grids_save_path.joinpath(u'{}_Grids.json'.format(self.json_name)))
         self.json_file_path = grid_json_file
 
         data = {}
@@ -921,7 +921,7 @@ class CtaGridTrade(CtaComponent):
             self.json_name = self.strategy.strategy_name
 
         # 若json文件不存在，就保存一个；若存在，就优先使用数据文件
-        grid_json_file = os.path.join(grids_save_path, u'{}_Grids.json'.format(self.json_name))
+        grid_json_file = str(grids_save_path.joinpath(u'{}_Grids.json'.format(self.json_name)))
         if not os.path.exists(grid_json_file):
             data['up_grids'] = []
             data['dn_grids'] = []
@@ -981,7 +981,7 @@ class CtaGridTrade(CtaComponent):
 
         self.json_name = new_name
         # 旧文件
-        old_json_file = os.path.join(data_folder, u'{0}_Grids.json'.format(old_name))
+        old_json_file = str(data_folder.joinpath(u'{0}_Grids.json'.format(old_name)))
 
         if os.path.isfile(old_json_file):  # 新文件若存在，移除
             try:

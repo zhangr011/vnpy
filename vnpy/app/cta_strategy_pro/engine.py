@@ -1,13 +1,20 @@
-""""""
+"""
+CTA策略运行引擎增强版
+华富资产
+"""
 
 import importlib
 import os
 import sys
 import traceback
+import json
+import pickle
+import bz2
+
 from collections import defaultdict
 from pathlib import Path
 from typing import Any, Callable
-from datetime import datetime
+from datetime import datetime, timedelta
 from collections import OrderedDict
 from concurrent.futures import ThreadPoolExecutor
 from copy import copy
@@ -94,7 +101,11 @@ class CtaEngine(BaseEngine):
     engine_filename = "cta_strategy_pro_config.json"
 
     def __init__(self, main_engine: MainEngine, event_engine: EventEngine):
-        """"""
+        """
+        构造函数
+        :param main_engine: 主引擎
+        :param event_engine: 事件引擎
+        """
         super().__init__(main_engine, event_engine, APP_NAME)
 
         self.engine_config = {}
@@ -138,10 +149,12 @@ class CtaEngine(BaseEngine):
     def init_engine(self):
         """
         """
-        self.load_strategy_class()
-        self.load_strategy_setting()
         self.register_event()
         self.register_funcs()
+
+        self.load_strategy_class()
+        self.load_strategy_setting()
+
         self.write_log("CTA策略引擎初始化成功")
 
     def close(self):
@@ -164,6 +177,7 @@ class CtaEngine(BaseEngine):
         """
         self.main_engine.get_strategy_status = self.get_strategy_status
         self.main_engine.get_strategy_pos = self.get_strategy_pos
+        self.main_engine.compare_pos = self.compare_pos
         self.main_engine.add_strategy = self.add_strategy
         self.main_engine.init_strategy = self.init_strategy
         self.main_engine.start_strategy = self.start_strategy
@@ -177,6 +191,7 @@ class CtaEngine(BaseEngine):
         if self.main_engine.rpc_service:
             self.main_engine.rpc_service.register(self.main_engine.get_strategy_status)
             self.main_engine.rpc_service.register(self.main_engine.get_strategy_pos)
+            self.main_engine.rpc_service.register(self.main_engine.compare_pos)
             self.main_engine.rpc_service.register(self.main_engine.add_strategy)
             self.main_engine.rpc_service.register(self.main_engine.init_strategy)
             self.main_engine.rpc_service.register(self.main_engine.start_strategy)
@@ -310,8 +325,7 @@ class CtaEngine(BaseEngine):
                 trade_dict.update({'idx_price': trade_dict.get('price')})
 
             if strategy_name is not None:
-                trade_file = os.path.abspath(
-                    os.path.join(get_folder_path('data'), '{}_trade.csv'.format(strategy_name)))
+                trade_file = str(get_folder_path('data').joinpath('{}_trade.csv'.format(strategy_name)))
                 append_data(file_name=trade_file, dict_data=trade_dict)
         except Exception as ex:
             self.write_error(u'写入交易记录csv出错：{},{}'.format(str(ex), traceback.format_exc()))
@@ -856,15 +870,17 @@ class CtaEngine(BaseEngine):
         Add a new strategy.
         """
         if strategy_name in self.strategies:
-            self.write_log(msg=f"创建策略失败，存在重名{strategy_name}",
+            msg = f"创建策略失败，存在重名{strategy_name}"
+            self.write_log(msg=msg,
                            level=logging.CRITICAL)
-            return
+            return False, msg
 
         strategy_class = self.classes.get(class_name, None)
         if not strategy_class:
-            self.write_log(msg=f"创建策略失败，找不到策略类{class_name}",
+            msg = f"创建策略失败，找不到策略类{class_name}"
+            self.write_log(msg=msg,
                            level=logging.CRITICAL)
-            return
+            return False, msg
 
         self.write_log(f'开始添加策略类{class_name}，实例名:{strategy_name}')
         strategy = strategy_class(self, strategy_name, vt_symbol, setting)
@@ -885,6 +901,8 @@ class CtaEngine(BaseEngine):
         # 判断设置中是否由自动初始化和自动启动项目
         if auto_init:
             self.init_strategy(strategy_name, auto_start=auto_start)
+
+        return True, f'成功添加{strategy_name}'
 
     def init_strategy(self, strategy_name: str, auto_start: bool = False):
         """
@@ -935,17 +953,21 @@ class CtaEngine(BaseEngine):
         """
         strategy = self.strategies[strategy_name]
         if not strategy.inited:
-            self.write_error(f"策略{strategy.strategy_name}启动失败，请先初始化")
-            return
+            msg = f"策略{strategy.strategy_name}启动失败，请先初始化"
+            self.write_error(msg)
+            return False, msg
 
         if strategy.trading:
-            self.write_error(f"{strategy_name}已经启动，请勿重复操作")
-            return
+            msg = f"{strategy_name}已经启动，请勿重复操作"
+            self.write_error(msg)
+            return False, msg
 
         self.call_strategy_func(strategy, strategy.on_start)
         strategy.trading = True
 
         self.put_strategy_event(strategy)
+
+        return True, f'成功启动策略{strategy_name}'
 
     def stop_strategy(self, strategy_name: str):
         """
@@ -953,8 +975,9 @@ class CtaEngine(BaseEngine):
         """
         strategy = self.strategies[strategy_name]
         if not strategy.trading:
-            self.write_log(f'{strategy_name}策略实例已处于停止交易状态')
-            return
+            msg = f'{strategy_name}策略实例已处于停止交易状态'
+            self.write_log(msg)
+            return False, msg
 
         # Call on_stop function of the strategy
         self.write_log(f'调用{strategy_name}的on_stop,停止交易')
@@ -973,6 +996,7 @@ class CtaEngine(BaseEngine):
 
         # Update GUI
         self.put_strategy_event(strategy)
+        return True, f'成功停止策略{strategy_name}'
 
     def edit_strategy(self, strategy_name: str, setting: dict):
         """
@@ -994,8 +1018,9 @@ class CtaEngine(BaseEngine):
         """
         strategy = self.strategies[strategy_name]
         if strategy.trading:
-            self.write_error(f"策略{strategy.strategy_name}移除失败，请先停止")
-            return
+            err_msg = f"策略{strategy.strategy_name}移除失败，请先停止"
+            self.write_error(err_msg)
+            return False, err_msg
 
         # Remove setting
         self.remove_strategy_setting(strategy_name)
@@ -1020,7 +1045,7 @@ class CtaEngine(BaseEngine):
         self.write_log(f'移除{strategy_name}策略实例')
         self.strategies.pop(strategy_name)
 
-        return True
+        return True, f'成功移除{strategy_name}策略实例'
 
     def reload_strategy(self, strategy_name: str, vt_symbol: str = '', setting: dict = {}):
         """
@@ -1034,8 +1059,9 @@ class CtaEngine(BaseEngine):
 
         # 优先判断重启的策略，是否已经加载
         if strategy_name not in self.strategies or strategy_name not in self.strategy_setting:
-            self.write_error(f"{strategy_name}不在运行策略中，不能重启")
-            return False
+            err_msg = f"{strategy_name}不在运行策略中，不能重启"
+            self.write_error(err_msg)
+            return False, err_msg
 
         # 从本地配置文件中读取
         if len(setting) == 0:
@@ -1053,7 +1079,9 @@ class CtaEngine(BaseEngine):
         module_name = self.class_module_map[class_name]
         # 重新load class module
         if not self.load_strategy_class_from_module(module_name):
-            return False
+            err_msg = f'不能加载模块:{module_name}'
+            self.write_error(err_msg)
+            return False, err_msg
 
         # 停止当前策略实例的运行，撤单
         self.stop_strategy(strategy_name)
@@ -1069,8 +1097,9 @@ class CtaEngine(BaseEngine):
                           auto_init=old_strategy_config.get('auto_init', False),
                           auto_start=old_strategy_config.get('auto_start', False))
 
-        self.write_log(f'重新运行策略{strategy_name}执行完毕')
-        return True
+        msg = f'成功重载策略{strategy_name}'
+        self.write_log(msg)
+        return True, msg
 
     def save_strategy_data(self, select_name: str):
         """ save strategy data"""
@@ -1152,6 +1181,11 @@ class CtaEngine(BaseEngine):
                 return
 
             # 剩下工作：保存本地文件/数据库
+            snapshot_folder = get_folder_path(f'data/snapshots/{strategy_name}')
+            snapshot_file = snapshot_folder.joinpath('{}.pkb2'.format(datetime.now().strftime('%Y%m%d_%H%M%S')))
+            with bz2.BZ2File(str(snapshot_file), 'wb') as f:
+                pickle.dump(snapshot, f)
+                self.write_log(u'切片保存成功:{}'.format(str(snapshot_file)))
 
         except Exception as ex:
             self.write_error(u'获取策略{}切片数据异常:'.format(strategy_name, str(ex)))
@@ -1236,12 +1270,11 @@ class CtaEngine(BaseEngine):
 
     def get_strategy_status(self):
         """
-        return strategy name list with inited/trading status
-        :param :
+        return strategy inited/trading status
+        :param strategy_name:
         :return:
         """
-        return [{k: {'inited': v.inited, 'trading': v.trading}} for k, v in self.strategies.items()]
-
+        return {k: {'inited': v.inited, 'trading': v.trading} for k, v in self.strategies.items()}
 
     def get_strategy_pos(self, name, strategy=None):
         """
@@ -1408,6 +1441,146 @@ class CtaEngine(BaseEngine):
         d.update(strategy.get_parameters())
         return d
 
+    def compare_pos(self):
+        """
+        对比账号&策略的持仓,不同的话则发出微信提醒
+        :return:
+        """
+        # 当前没有接入网关
+        if len(self.main_engine.gateways) == 0:
+            return False, u'当前没有接入网关'
+
+        self.write_log(u'开始对比账号&策略的持仓')
+
+        # 获取当前策略得持仓
+        strategy_pos_list = self.get_all_strategy_pos()
+        self.write_log(u'策略持仓清单:{}'.format(strategy_pos_list))
+
+        # 需要进行对比得合约集合（来自策略持仓/账号持仓）
+        vt_symbols = set()
+
+        # 账号的持仓处理 => account_pos
+
+        compare_pos = dict()  # vt_symbol: {'账号多单': xx, '账号空单':xxx, '策略空单':[], '策略多单':[]}
+
+        for holding_key in list(self.offset_converter.holdings.keys()):
+            # gateway_name.symbol.exchange => symbol.exchange
+            vt_symbol = '.'.join(holding_key.split('.')[-2:])
+
+            vt_symbols.add(vt_symbol)
+            holding = self.offset_converter.holdings.get(holding_key, None)
+            if holding is None:
+                continue
+
+            compare_pos[vt_symbol] = OrderedDict(
+                {
+                    "账号空单": holding.short_pos,
+                    '账号多单': holding.long_pos,
+                    '策略空单': 0,
+                    '策略多单': 0,
+                    '空单策略': [],
+                    '多单策略': []
+                }
+            )
+
+        # 逐一根据策略仓位，与Account_pos进行处理比对
+        for strategy_pos in strategy_pos_list:
+            for pos in strategy_pos.get('pos', []):
+                vt_symbol = pos.get('vt_symbol')
+                if not vt_symbol:
+                    continue
+                vt_symbols.add(vt_symbol)
+                symbol_pos = compare_pos.get(vt_symbol, None)
+                if symbol_pos is None:
+                    self.write_log(u'账号持仓信息获取不到{}，创建一个'.format(vt_symbol))
+                    symbol_pos = OrderedDict(
+                        {
+                            "账号空单": 0,
+                            '账号多单': 0,
+                            '策略空单': 0,
+                            '策略多单': 0,
+                            '空单策略': [],
+                            '多单策略': []
+                        }
+                    )
+
+                if pos.get('direction') == 'short':
+                    symbol_pos.update({'策略空单': symbol_pos.get('策略空单', 0) + abs(pos.get('volume', 0))})
+                    symbol_pos['空单策略'].append(
+                        u'{}({})'.format(strategy_pos['strategy_name'], abs(pos.get('volume', 0))))
+                    self.write_log(u'更新{}策略持空仓=>{}'.format(vt_symbol, symbol_pos.get('策略空单', 0)))
+                if pos.get('direction') == 'long':
+                    symbol_pos.update({'策略多单': symbol_pos.get('策略多单', 0) + abs(pos.get('volume', 0))})
+                    symbol_pos['多单策略'].append(
+                        u'{}({})'.format(strategy_pos['strategy_name'], abs(pos.get('volume', 0))))
+                    self.write_log(u'更新{}策略持多仓=>{}'.format(vt_symbol, symbol_pos.get('策略多单', 0)))
+
+        pos_compare_result = ''
+        # 精简输出
+        compare_info = ''
+        for vt_symbol in sorted(vt_symbols):
+            # 发送不一致得结果
+            symbol_pos = compare_pos.pop(vt_symbol)
+            d_long = {
+                'account_id': self.engine_config.get('account_id', '-'),
+                'vt_symbol': vt_symbol,
+                'direction': Direction.LONG.value,
+                'strategy_list': symbol_pos.get('多单策略', [])}
+
+            d_short = {
+                'account_id': self.engine_config.get('account_id', '-'),
+                'vt_symbol': vt_symbol,
+                'direction': Direction.SHORT.value,
+                'strategy_list': symbol_pos.get('多单策略', [])}
+
+            # 多空都一致
+            if round(symbol_pos['账号空单'], 7) == round(symbol_pos['策略空单'], 7) and \
+                    round(symbol_pos['账号多单'], 7) == round(symbol_pos['策略多单'], 7):
+                msg = u'{}多空都一致.{}\n'.format(vt_symbol, json.dumps(symbol_pos, indent=2, ensure_ascii=False))
+                self.write_log(msg)
+                compare_info += msg
+            else:
+                pos_compare_result += '\n{}: '.format(vt_symbol)
+                # 多单不一致
+                if round(symbol_pos['策略多单'], 7) != round(symbol_pos['账号多单'], 7):
+                    msg = '{}多单[账号({}), 策略{},共({})], ' \
+                        .format(vt_symbol,
+                                symbol_pos['账号多单'],
+                                symbol_pos['多单策略'],
+                                symbol_pos['策略多单'])
+
+                    pos_compare_result += msg
+                    self.write_error(u'{}不一致:{}'.format(vt_symbol, msg))
+                    compare_info += u'{}不一致:{}\n'.format(vt_symbol, msg)
+                # 空单不一致
+                if round(symbol_pos['策略空单'], 7) != round(symbol_pos['账号空单'], 7):
+                    msg = '{}空单[账号({}), 策略{},共({})], ' \
+                        .format(vt_symbol,
+                                symbol_pos['账号空单'],
+                                symbol_pos['空单策略'],
+                                symbol_pos['策略空单'])
+                    pos_compare_result += msg
+                    self.write_error(u'{}不一致:{}'.format(vt_symbol, msg))
+                    compare_info += u'{}不一致:{}\n'.format(vt_symbol, msg)
+
+        # 不匹配，输入到stdErr通道
+        if pos_compare_result != '':
+            msg = u'账户{}持仓不匹配: {}' \
+                .format(self.engine_config.get('account_id', '-'),
+                        pos_compare_result)
+            try:
+                from vnpy.trader.util_wechat import send_wx_msg
+                send_wx_msg(content=msg)
+            except Exception as ex:
+                pass
+            ret_msg = u'持仓不匹配: {}' \
+                .format(pos_compare_result)
+            self.write_error(ret_msg)
+            return True, compare_info + ret_msg
+        else:
+            self.write_log(u'账户持仓与策略一致')
+            return True, compare_info
+
     def init_all_strategies(self):
         """
         """
@@ -1516,13 +1689,16 @@ class CtaEngine(BaseEngine):
             strategy_logger = self.strategy_loggers.get(strategy_name, None)
             if not strategy_logger:
                 log_path = get_folder_path('log')
-                log_filename = os.path.abspath(os.path.join(log_path, str(strategy_name)))
+                log_filename = str(log_path.joinpath(str(strategy_name)))
                 print(u'create logger:{}'.format(log_filename))
                 self.strategy_loggers[strategy_name] = setup_logger(file_name=log_filename,
                                                                     name=str(strategy_name))
                 strategy_logger = self.strategy_loggers.get(strategy_name)
             if strategy_logger:
                 strategy_logger.log(level, msg)
+        else:
+            if self.logger:
+                self.logger.log(level, msg)
 
         # 如果日志数据异常，错误和告警，输出至sys.stderr
         if level in [logging.CRITICAL, logging.ERROR, logging.WARNING]:

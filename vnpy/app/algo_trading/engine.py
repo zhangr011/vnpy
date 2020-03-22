@@ -382,7 +382,7 @@ class AlgoEngine(BaseEngine):
             algo_logger = self.algo_loggers.get(algo_name, None)
             if not algo_logger:
                 log_path = get_folder_path('log')
-                log_filename = os.path.abspath(os.path.join(log_path, str(algo_name)))
+                log_filename = str(log_path.joinpath(str(algo_name)))
                 print(u'create logger:{}'.format(log_filename))
                 self.algo_loggers[algo_name] = setup_logger(
                     file_name=log_filename,

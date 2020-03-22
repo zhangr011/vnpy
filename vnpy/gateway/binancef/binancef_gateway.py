@@ -110,6 +110,7 @@ class BinancefGateway(BaseGateway):
     def __init__(self, event_engine: EventEngine, gateway_name="BINANCEF"):
         """Constructor"""
         super().__init__(event_engine, gateway_name)
+        self.count = 0
 
         self.trade_ws_api = BinancefTradeWebsocketApi(self)
         self.market_ws_api = BinancefDataWebsocketApi(self)
@@ -168,8 +169,18 @@ class BinancefGateway(BaseGateway):
                 and self.status.get('mdws_con', False):
             self.status.update({'con': True})
 
+        self.count += 1
+        if self.count < 2:
+            return
+        self.count = 0
+
+        func = self.query_functions.pop(0)
+        func()
+        self.query_functions.append(func)
+
     def get_order(self, orderid: str):
         return self.rest_api.get_order(orderid)
+
 
 class BinancefRestApi(RestClient):
     """
@@ -200,6 +211,7 @@ class BinancefRestApi(RestClient):
         self.connect_time: int = 0
 
         self.orders = {}
+
 
     def sign(self, request: Request) -> Request:
         """
@@ -280,7 +292,8 @@ class BinancefRestApi(RestClient):
 
         self.gateway.write_log("REST API启动成功")
         self.gateway.status.update({'td_con': True, 'td_con_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S')})
-
+        if self.gateway.status.get('md_con', False):
+            self.gateway.status.update({'con': True})
         self.query_time()
         self.query_account()
         self.query_position()
@@ -289,6 +302,10 @@ class BinancefRestApi(RestClient):
         self.query_trade()
 
         self.start_user_stream()
+
+        # 添加到定时查询队列中
+        self.gateway.query_functions = [self.query_account, self.query_position]
+
 
     def query_time(self) -> Request:
         """"""
@@ -516,7 +533,7 @@ class BinancefRestApi(RestClient):
                 short_position = PositionData(
                     symbol=d["symbol"],
                     exchange=Exchange.BINANCE,
-                    direction=Direction.LONG,
+                    direction=Direction.SHORT,
                     volume=0,
                     price=0,
                     pnl=0,
@@ -805,6 +822,8 @@ class BinancefTradeWebsocketApi(WebsocketClient):
         """"""
         self.gateway.write_log("交易Websocket API连接成功")
         self.gateway.status.update({'tdws_con': True, 'tdws_con_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S')})
+        if self.gateway.status.get('td_con', False):
+            self.gateway.status.update({'con': True})
 
     def on_packet(self, packet: dict) -> None:  # type: (dict)->None
         """"""
@@ -923,6 +942,8 @@ class BinancefDataWebsocketApi(WebsocketClient):
         """"""
         self.gateway.write_log("行情Websocket API连接刷新")
         self.gateway.status.update({'md_con': True, 'md_con_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S')})
+        if self.gateway.status.get('td_con', False):
+            self.gateway.status.update({'con': True})
 
     def subscribe(self, req: SubscribeRequest) -> None:
         """"""

@@ -295,6 +295,7 @@ class BaseEngine(ABC):
         self.engine_name = engine_name
 
         self.logger = None
+        self.create_logger(engine_name)
 
     def create_logger(self, logger_name: str = 'base_engine'):
         """
@@ -303,7 +304,7 @@ class BaseEngine(ABC):
         :return:
         """
         log_path = get_folder_path("log")
-        log_filename = os.path.abspath(os.path.join(log_path, logger_name))
+        log_filename = str(log_path.joinpath(logger_name))
         print(u'create logger:{}'.format(log_filename))
         self.logger = setup_logger(file_name=log_filename, name=logger_name,
                                    log_level=SETTINGS.get('log.level', logging.DEBUG))
