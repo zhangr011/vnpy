@@ -35,7 +35,13 @@
     
     conda config --add channels https://mirrors.tuna.tsinghua.edu.cn/anaconda/pkgs/free/
     conda config --set show_channel_urls yes
-    conda install -c quantopian ta-lib=0.4.9
+   
+    wget http://prdownloads.sourceforge.net/ta-lib/ta-lib-0.4.0-src.tar.gz
+    tar -xf ta-lib-0.4.0-src.tar.gz
+    cd ta-lib
+    ./configure --prefix=/usr
+    make -j
+    sudo make install
       
     若出现libta_lib.so.0 cannot open shared object file no such file or directory
     解决：
@@ -117,3 +123,13 @@
     ../configure --prefix=/usr --disable-profile --enable-add-ons --with-headers=/usr/include --with-binutils=/usr/bin
     make –j4
     make install
+
+12. pip 增加国内源
+
+
+    创建/home/trade/.pip目录
+    创建pip.conf文件，内容：
+    [global]
+    index-url=http://pypi.douban.com/simple
+    [install]
+    trusted-host=pypi.douban.com

@@ -9,6 +9,7 @@ from .template import (
     Direction,
     Offset,
     Status,
+    Color,
     TickData,
     BarData,
     TradeData,

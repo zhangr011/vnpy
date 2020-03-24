@@ -7,7 +7,7 @@ websocket-client
 peewee
 mongoengine
 numpy
-pandas>=0.24.2
+pandas
 matplotlib
 seaborn
 futu-api

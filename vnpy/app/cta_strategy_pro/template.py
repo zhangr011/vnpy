@@ -11,7 +11,7 @@ from copy import copy
 from typing import Any, Callable
 from logging import INFO, ERROR
 from datetime import datetime
-from vnpy.trader.constant import Interval, Direction, Offset, Status, OrderType
+from vnpy.trader.constant import Interval, Direction, Offset, Status, OrderType, Color
 from vnpy.trader.object import BarData, TickData, OrderData, TradeData
 from vnpy.trader.utility import virtual, append_data, extract_vt_symbol, get_underlying_symbol
 
@@ -1421,11 +1421,11 @@ class CtaProFutureTemplate(CtaProTemplate):
         self.write_log(u'{} 订单信息:{}'.format(order.vt_orderid, old_order))
         old_order['traded'] = order.traded
         # order_time = old_order['order_time']
-        order_symbol = copy(old_order['symbol'])
+        order_vt_symbol = copy(old_order['vt_symbol'])
         order_volume = old_order['volume'] - old_order['traded']
         if order_volume <= 0:
             msg = u'{} {}{}重新平仓数量为{}，不再平仓' \
-                .format(self.strategy_name, order.vt_orderid, order_symbol, order_volume)
+                .format(self.strategy_name, order.vt_orderid, order_vt_symbol, order_volume)
             self.write_error(msg)
             self.send_wechat(msg)
             self.write_log(u'活动订单移除:{}'.format(order.vt_orderid))
@@ -1434,11 +1434,11 @@ class CtaProFutureTemplate(CtaProTemplate):
 
         order_price = old_order['price']
         order_type = old_order.get('order_type', OrderType.LIMIT)
-        order_retry = old_order['retry']
+        order_retry = old_order.get('retry', 0)
         grid = old_order.get('grid', None)
         if order_retry > 20:
             msg = u'{} 平仓撤单 {}/{}手， 重试平仓次数{}>20' \
-                .format(self.strategy_name, order_symbol, order_volume, order_retry)
+                .format(self.strategy_name, order_vt_symbol, order_volume, order_retry)
             self.write_error(msg)
             self.send_wechat(msg)
             if grid:
@@ -1458,25 +1458,25 @@ class CtaProFutureTemplate(CtaProTemplate):
         if old_order['direction'] == Direction.LONG and order_type == OrderType.FAK:
             self.write_log(u'FAK模式，需要重新发送cover委托.grid:{}'.format(grid.__dict__))
             # 更新委托平仓价
-            cover_tick = self.tick_dict.get(order_symbol, self.cur_mi_tick)
+            cover_tick = self.tick_dict.get(order_vt_symbol, self.cur_mi_tick)
             cover_price = max(cover_tick.ask_price_1, cover_tick.last_price, order_price) + self.price_tick
             # 不能超过涨停价
             if cover_tick.limit_up > 0 and cover_price > cover_tick.limit_up:
                 cover_price = cover_tick.limit_up
 
-            if self.is_upper_limit(order_symbol):
-                self.write_log(u'{}涨停，不做cover'.format(order_symbol))
+            if self.is_upper_limit(order_vt_symbol):
+                self.write_log(u'{}涨停，不做cover'.format(order_vt_symbol))
                 return
 
             # 发送委托
             vt_orderids = self.cover(price=cover_price,
                                      volume=order_volume,
-                                     vt_symbol=order_symbol,
+                                     vt_symbol=order_vt_symbol,
                                      order_type=OrderType.FAK,
                                      order_time=self.cur_datetime,
                                      grid=grid)
             if not vt_orderids:
-                self.write_error(u'重新提交{} {}手平空单{}失败'.format(order_symbol, order_volume, cover_price))
+                self.write_error(u'重新提交{} {}手平空单{}失败'.format(order_vt_symbol, order_volume, cover_price))
                 return
 
             for vt_orderid in vt_orderids:
@@ -1485,31 +1485,31 @@ class CtaProFutureTemplate(CtaProTemplate):
 
             self.gt.save()
             self.write_log(u'移除活动订单:{}'.format(order.vt_orderid))
-            self.active_orders.pop(order.vt_orderi, None)
+            self.active_orders.pop(order.vt_orderid, None)
 
         elif old_order['direction'] == Direction.SHORT and order_type == OrderType.FAK:
             self.write_log(u'FAK模式，需要重新发送sell委托.grid:{}'.format(grid.__dict__))
-            sell_tick = self.tick_dict.get(order_symbol, self.cur_mi_tick)
+            sell_tick = self.tick_dict.get(order_vt_symbol, self.cur_mi_tick)
             sell_price = min(sell_tick.bid_price_1, sell_tick.last_price, order_price) - self.price_tick
 
             # 不能超过跌停价
             if sell_tick.limit_down > 0 and sell_price < sell_tick.limit_down:
                 sell_price = sell_tick.limit_down
 
-            if self.is_lower_limit(order_symbol):
-                self.write_log(u'{}涨停，不做sell'.format(order_symbol))
+            if self.is_lower_limit(order_vt_symbol):
+                self.write_log(u'{}涨停，不做sell'.format(order_vt_symbol))
                 return
 
             # 发送委托
             vt_orderids = self.sell(price=sell_price,
                                     volume=order_volume,
-                                    vt_symbol=order_symbol,
+                                    vt_symbol=order_vt_symbol,
                                     order_type=OrderType.FAK,
                                     order_time=self.cur_datetime,
                                     grid=grid)
 
             if not vt_orderids:
-                self.write_error(u'重新提交{} {}手平多单{}失败'.format(order_symbol, order_volume, sell_price))
+                self.write_error(u'重新提交{} {}手平多单{}失败'.format(order_vt_symbol, order_volume, sell_price))
                 return
 
             for vt_orderid in vt_orderids:
@@ -1568,11 +1568,11 @@ class CtaProFutureTemplate(CtaProTemplate):
             over_seconds = (dt - order_time).total_seconds()
 
             # 只处理未成交的限价委托单
-            if order_status in [Status.NOTTRADED] and (order_type == OrderType.LIMIT or '.SPD' in order_vt_symbol):
+            if order_status in [Status.NOTTRADED,Status.SUBMITTING] and (order_type == OrderType.LIMIT or '.SPD' in order_vt_symbol):
                 if over_seconds > self.cancel_seconds or force:  # 超过设置的时间还未成交
                     self.write_log(u'超时{}秒未成交，取消委托单：vt_orderid:{},order:{}'
                                    .format(over_seconds, vt_orderid, order_info))
-                    order_info.update({'status': Status.CANCELING})
+                    order_info.update({'status': Status.CANCELLING})
                     self.active_orders.update({vt_orderid: order_info})
                     ret = self.cancel_order(str(vt_orderid))
                     if not ret:

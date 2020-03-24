@@ -21,6 +21,7 @@ function install-ta-lib()
     make install
     popd
 }
+
 function ta-lib-exists()
 {
     ta-lib-config --libs > /dev/null

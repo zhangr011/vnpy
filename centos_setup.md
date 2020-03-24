@@ -9,9 +9,8 @@ conda create -name py37=python3.7
 
     wget http://prdownloads.sourceforge.net/ta-lib/ta-lib-0.4.0-src.tar.gz
     tar xvf ta-lib-0.4.0-src.tar.gz
-    cd ta-lib
-    ./autogen.sh
-    ./configure
+    cd ta-lib    
+    ./configure --prefix=/usr  
     make
     
     下面指令用用root权限运行，会把编译结果放在/usr/local/lib下
@@ -19,26 +18,28 @@ conda create -name py37=python3.7
     
     pip install ta-lib
 
-    错误：
-    
+    错误：    
     ImportError: libta_lib.so.0: cannot open shared object file: No such file or directory
     
-    解决：
-    
-    sudo find / -name libta_lib.so.0
-    
-    /home/ai/eco-ta/ta-lib/src/.libs/libta_lib.so.0
-    
-    /usr/local/lib/libta_lib.so.0
-    
-    vi /etc/profile
-    
-    添加
-    
-    export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/lib
-    
+    解决：    
+    sudo find / -name libta_lib.so.0    
+    /home/ai/eco-ta/ta-lib/src/.libs/libta_lib.so.0    
+    /usr/local/lib/libta_lib.so.0    
+    vi /etc/profile    
+    添加    
+    export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/lib    
     source /etc/profile
-
+    
+    错误：
+    autogen.sh:行3: aclocal: 未找到命令
+    解决：
+    sudo yum -y install automake
+    
+    错误：
+    configure.in:13: error: possibly undefined macro: AC_PROG_LIBTOOL
+    解决：
+    sudo yum install libtool
+    
 单独编译ctp接口
 
     一般直接使用提供的vnctptd.so 和 vnctpmd.so 就可以了。

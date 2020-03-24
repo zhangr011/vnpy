@@ -2014,15 +2014,15 @@ class CtaLineBar(object):
 
                 upper = round(upper_list[-1], self.round_n)
                 self.line_boll_upper.append(upper)  # 上轨
-                self.cur_upper = upper - upper % self.price_tick  # 上轨取整
+                self.cur_upper = upper  # 上轨
 
                 middle = round(middle_list[-1], self.round_n)
                 self.line_boll_middle.append(middle)  # 中轨
-                self.cur_middle = middle - middle % self.price_tick  # 中轨取整
+                self.cur_middle = middle   # 中轨
 
                 lower = round(lower_list[-1], self.round_n)
                 self.line_boll_lower.append(lower)  # 下轨
-                self.cur_lower = lower - lower % self.price_tick  # 下轨取整
+                self.cur_lower = lower  # 下轨
 
                 # 计算斜率
                 if len(self.line_boll_upper) > 2 and self.line_boll_upper[-2] != 0:
@@ -2072,15 +2072,15 @@ class CtaLineBar(object):
 
                 upper = round(upper_list[-1], self.round_n)
                 self.line_boll2_upper.append(upper)  # 上轨
-                self.cur_upper2 = upper - upper % self.price_tick  # 上轨取整
+                self.cur_upper2 = upper   # 上轨
 
                 middle = round(middle_list[-1], self.round_n)
                 self.line_boll2_middle.append(middle)  # 中轨
-                self.cur_middle2 = middle - middle % self.price_tick  # 中轨取整
+                self.cur_middle2 = middle  # 中轨
 
                 lower = round(lower_list[-1], self.round_n)
                 self.line_boll2_lower.append(lower)  # 下轨
-                self.cur_lower2 = lower - lower % self.price_tick  # 下轨取整
+                self.cur_lower2 = lower  # 下轨
 
                 # 计算斜率
                 if len(self.line_boll2_upper) > 2 and self.line_boll2_upper[-2] != 0:
