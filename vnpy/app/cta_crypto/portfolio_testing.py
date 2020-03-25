@@ -112,9 +112,9 @@ class PortfolioTestingEngine(BackTestingEngine):
         self.bar_df = pd.concat(self.bar_df_dict, axis=0).swaplevel(0, 1).sort_index()
         self.bar_df_dict.clear()
 
-    def prepare_env(self, test_settings):
+    def prepare_env(self, test_setting):
         self.output('portfolio prepare_env')
-        super().prepare_env(test_settings)
+        super().prepare_env(test_setting)
 
     def prepare_data(self, data_dict):
         """
@@ -148,7 +148,7 @@ class PortfolioTestingEngine(BackTestingEngine):
 
             self.bar_csv_file.update({symbol: bar_file})
 
-    def run_portfolio_test(self, strategy_settings: dict = {}):
+    def run_portfolio_test(self, strategy_setting: dict = {}):
         """
         运行组合回测
         """
@@ -156,7 +156,7 @@ class PortfolioTestingEngine(BackTestingEngine):
             self.write_error(u'回测开始日期未设置。')
             return
 
-        if len(strategy_settings) == 0:
+        if len(strategy_setting) == 0:
             self.write_error('未提供有效配置策略实例')
             return
 
@@ -164,9 +164,12 @@ class PortfolioTestingEngine(BackTestingEngine):
         if not self.data_end_date:
             self.data_end_date = datetime.today()
 
+        # 保存回测设置/策略设置/任务ID至数据库
+        self.save_setting_to_mongo()
+
         self.write_log(u'开始组合回测')
 
-        for strategy_name, strategy_setting in strategy_settings.items():
+        for strategy_name, strategy_setting in strategy_setting.items():
             self.load_strategy(strategy_name, strategy_setting)
 
         self.write_log(u'策略初始化完成')
@@ -324,6 +327,7 @@ def single_test(test_setting: dict, strategy_setting: dict):
     except Exception as ex:
         print('组合回测异常{}'.format(str(ex)))
         traceback.print_exc()
+        engine.save_fail_to_mongo(f'回测异常{str(ex)}')
         return False
 
     print('测试结束')

@@ -62,9 +62,9 @@ class SpreadTestingEngine(BackTestingEngine):
         self.strategy_start_date_dict = {}
         self.strategy_end_date_dict = {}
 
-    def prepare_env(self, test_settings):
+    def prepare_env(self, test_setting):
         self.output('portfolio prepare_env')
-        super().prepare_env(test_settings)
+        super().prepare_env(test_setting)
 
     def load_strategy(self, strategy_name: str, strategy_setting: dict = None):
         """
@@ -413,6 +413,7 @@ def single_test(test_setting: dict, strategy_setting: dict):
 
     except Exception as ex:
         print('组合回测异常{}'.format(str(ex)))
+        engine.save_fail_to_mongo(f'回测异常{str(ex)}')
         traceback.print_exc()
         return False
 
