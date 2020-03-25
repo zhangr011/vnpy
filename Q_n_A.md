@@ -50,7 +50,7 @@
     /usr/local/lib/libta_lib.so.0    
     vi /etc/profile    
     添加    
-    export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/lib    
+    export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/lib
     source /etc/profile
 
 9、数字货币的增量安装

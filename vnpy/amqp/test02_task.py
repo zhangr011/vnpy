@@ -15,7 +15,7 @@ if __name__ == '__main__':
         mission.update({'id': str(uuid1())})
         mission.update({'templateName': u'TWAP 时间加权平均'})
         mission.update({'direction': Direction.LONG})
-        mission.update({'vtSymbol': '518880'})
+        mission.update({'vt_symbol': '518880'})
         mission.update({'is_stock': True})
         mission.update({'totalVolume': 300})
         mission.update({'target_price': 3.20})

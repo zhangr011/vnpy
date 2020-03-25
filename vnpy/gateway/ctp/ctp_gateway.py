@@ -1158,7 +1158,7 @@ class TdxMdApi():
 
         self.symbol_exchange_dict = {}  # tdx合约与vn交易所的字典
         self.symbol_market_dict = {}  # tdx合约与tdx市场的字典
-        self.symbol_vn_dict = {}  # tdx合约与vtSymbol的对应
+        self.symbol_vn_dict = {}  # tdx合约与vt_symbol的对应
         self.symbol_tick_dict = {}  # tdx合约与最后一个Tick得字典
 
         self.registered_symbol_set = set()
@@ -1691,22 +1691,22 @@ class TickCombiner(object):
         if (self.last_leg1_tick.ask_price_1 == 0 or self.last_leg1_tick.bid_price_1 == self.last_leg1_tick.limit_up) \
                 and self.last_leg1_tick.ask_volume_1 == 0:
             self.gateway.write_log(
-                u'leg1:{0}涨停{1}，不合成价差Tick'.format(self.last_leg1_tick.vtSymbol, self.last_leg1_tick.bid_price_1))
+                u'leg1:{0}涨停{1}，不合成价差Tick'.format(self.last_leg1_tick.vt_symbol, self.last_leg1_tick.bid_price_1))
             return
         if (self.last_leg1_tick.bid_price_1 == 0 or self.last_leg1_tick.ask_price_1 == self.last_leg1_tick.limit_down) \
                 and self.last_leg1_tick.bid_volume_1 == 0:
             self.gateway.write_log(
-                u'leg1:{0}跌停{1}，不合成价差Tick'.format(self.last_leg1_tick.vtSymbol, self.last_leg1_tick.ask_price_1))
+                u'leg1:{0}跌停{1}，不合成价差Tick'.format(self.last_leg1_tick.vt_symbol, self.last_leg1_tick.ask_price_1))
             return
         if (self.last_leg2_tick.ask_price_1 == 0 or self.last_leg2_tick.bid_price_1 == self.last_leg2_tick.limit_up) \
                 and self.last_leg2_tick.ask_volume_1 == 0:
             self.gateway.write_log(
-                u'leg2:{0}涨停{1}，不合成价差Tick'.format(self.last_leg2_tick.vtSymbol, self.last_leg2_tick.bid_price_1))
+                u'leg2:{0}涨停{1}，不合成价差Tick'.format(self.last_leg2_tick.vt_symbol, self.last_leg2_tick.bid_price_1))
             return
         if (self.last_leg2_tick.bid_price_1 == 0 or self.last_leg2_tick.ask_price_1 == self.last_leg2_tick.limit_down) \
                 and self.last_leg2_tick.bid_volume_1 == 0:
             self.gateway.write_log(
-                u'leg2:{0}跌停{1}，不合成价差Tick'.format(self.last_leg2_tick.vtSymbol, self.last_leg2_tick.ask_price_1))
+                u'leg2:{0}跌停{1}，不合成价差Tick'.format(self.last_leg2_tick.vt_symbol, self.last_leg2_tick.ask_price_1))
             return
 
         if self.trading_day != tick.trading_day:
