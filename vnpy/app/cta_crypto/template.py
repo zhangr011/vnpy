@@ -638,6 +638,16 @@ class CtaFutureTemplate(CtaTemplate):
         self.gt.save()
         self.display_grids()
 
+    def sync_data(self):
+        """同步更新数据"""
+        if not self.backtesting:
+            self.write_log(u'保存k线缓存数据')
+            self.save_klines_to_cache()
+
+        if self.inited and self.trading:
+            self.write_log(u'保存policy数据')
+            self.policy.save()
+
     def get_positions(self):
         """
         获取策略当前持仓(重构，使用主力合约）
@@ -781,7 +791,7 @@ class CtaFutureTemplate(CtaTemplate):
                     grid.open_status = True
                     self.write_log(f'{grid.direction.value}单已开仓完毕,order_price:{order.price}'
                                    + f',volume:{order.volume}')
-
+                self.gt.save()
                 # 网格的所有委托单部分执行完毕
             else:
                 old_traded_volume = grid.traded_volume
@@ -794,6 +804,7 @@ class CtaFutureTemplate(CtaTemplate):
                 self.write_log(f'剩余委托单号:{grid.order_ids}')
 
         # 在策略得活动订单中，移除
+        self.write_log(f'移除活动订单:{order.vt_orderid}')
         self.active_orders.pop(order.vt_orderid, None)
 
     def on_order_open_canceled(self, order: OrderData):
@@ -1059,8 +1070,9 @@ class CtaFutureTemplate(CtaTemplate):
         # 发出平多委托
         if grid.traded_volume > 0:
             grid.volume -= grid.traded_volume
-            grid.volume = round(grid.volume, 7)
             grid.traded_volume = 0
+
+        grid.volume = round(grid.volume, 7)
 
         if 0 < self.account_pos.long_pos < grid.volume:
             self.write_error(u'当前{}的多单持仓:{}，不满足平仓目标:{},强制降低'
@@ -1110,8 +1122,9 @@ class CtaFutureTemplate(CtaTemplate):
         # 发出cover委托
         if grid.traded_volume > 0:
             grid.volume -= grid.traded_volume
-            grid.volume = round(grid.volume, 7)
             grid.traded_volume = 0
+
+        grid.volume = round(grid.volume, 7)
 
         if 0 < abs(self.account_pos.short_pos) < grid.volume:
             self.write_error(u'当前{}的空单持仓:{}，不满足平仓目标:{}, 强制降低'

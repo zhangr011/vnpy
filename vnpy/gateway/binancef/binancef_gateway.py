@@ -412,7 +412,7 @@ class BinancefRestApi(RestClient):
             "side": DIRECTION_VT2BINANCEF[req.direction],
             "type": ORDERTYPE_VT2BINANCEF[req.type],
             "price": float(req.price),
-            "quantity": int(req.volume),
+            "quantity": round(req.volume, 7),
             "newClientOrderId": orderid,
             "newOrderRespType": "ACK"
         }
@@ -513,7 +513,7 @@ class BinancefRestApi(RestClient):
                     self.gateway.write_log(json.dumps(position, indent=2))
                 self.contracts.update({symbol: position})
 
-        self.gateway.write_log("账户资金查询成功")
+        # self.gateway.write_log("账户资金查询成功")
 
     def on_query_position(self, data: dict, request: Request) -> None:
         """"""
@@ -581,7 +581,7 @@ class BinancefRestApi(RestClient):
             self.gateway.on_position(long_position)
             self.gateway.on_position(short_position)
 
-        self.gateway.write_log("持仓信息查询成功")
+       # self.gateway.write_log("持仓信息查询成功")
 
     def on_query_order(self, data: dict, request: Request) -> None:
         """"""
@@ -850,7 +850,7 @@ class BinancefTradeWebsocketApi(WebsocketClient):
                 symbol=pos_data["s"],
                 exchange=Exchange.BINANCE,
                 direction=Direction.NET,
-                volume=int(float(pos_data["pa"])),
+                volume=round(float(pos_data["pa"]), 7),
                 price=float(pos_data["ep"]),
                 pnl=float(pos_data["cr"]),
                 gateway_name=self.gateway_name,
