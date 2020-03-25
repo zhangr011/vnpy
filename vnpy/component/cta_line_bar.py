@@ -2548,7 +2548,7 @@ class CtaLineBar(object):
         if hhv == llv:
             rsv = 50
         else:
-            rsv = (self.close_array - llv) / (hhv - llv) * 100
+            rsv = (self.close_array[-1] - llv) / (hhv - llv) * 100
 
         self.line_rsv.append(rsv)
 
@@ -2622,7 +2622,7 @@ class CtaLineBar(object):
                 # 发生金叉
                 self.cur_kd_count = 1
                 self.cur_kd_cross = round((self.line_k[-1] + self.line_k[-2]) / 2, 2)
-                self.cur_kd_cross_price = self.line_bar[-1].close
+                self.cur_kd_cross_price = self.cur_price
 
         # K值小于D值
         else:
@@ -2633,7 +2633,7 @@ class CtaLineBar(object):
                 # 发生死叉
                 self.cur_kd_count = -1
                 self.cur_kd_cross = round((self.line_k[-1] + self.line_k[-2]) / 2, 2)
-                self.cur_kd_cross_price = self.line_bar[-1].close
+                self.cur_kd_cross_price = self.cur_price
 
     def __count_macd(self):
         """

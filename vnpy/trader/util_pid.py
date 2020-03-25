@@ -14,7 +14,7 @@ if not os.path.isdir(logs_path):
 assert os.path.isdir(logs_path)
 
 # 记录pid得文件
-pid_file = os.path.abspath(os.path.join(logs_path, 'pid.txt'))
+pid_file = os.path.abspath(os.path.join(logs_path, 'gpid.txt'))
 
 def _check_pid(pid):
     """
