@@ -30,6 +30,7 @@ from vnpy.trader.object import BarData, TickData
 from vnpy.trader.constant import Interval, Color
 from vnpy.trader.utility import round_to, get_trading_date, get_underlying_symbol
 
+
 def get_cta_bar_type(bar_name: str):
     """根据名称，返回K线类型和K线周期"""
 
@@ -49,6 +50,7 @@ def get_cta_bar_type(bar_name: str):
         else:
             return CtaDayBar, int(interval)
     raise Exception(u'{}参数错误'.format(bar_name))
+
 
 def get_cta_bar_class(bar_type: str):
     """根据类型名获取对象"""
@@ -553,6 +555,8 @@ class CtaLineBar(object):
 
         # K 线的CCI计算数据
         self.line_cci = []
+        self.cur_cci = None
+        self._rt_cci = None
 
         # 卡尔曼过滤器
         self.kf = None
@@ -2018,7 +2022,7 @@ class CtaLineBar(object):
 
                 middle = round(middle_list[-1], self.round_n)
                 self.line_boll_middle.append(middle)  # 中轨
-                self.cur_middle = middle   # 中轨
+                self.cur_middle = middle  # 中轨
 
                 lower = round(lower_list[-1], self.round_n)
                 self.line_boll_lower.append(lower)  # 下轨
@@ -2072,7 +2076,7 @@ class CtaLineBar(object):
 
                 upper = round(upper_list[-1], self.round_n)
                 self.line_boll2_upper.append(upper)  # 上轨
-                self.cur_upper2 = upper   # 上轨
+                self.cur_upper2 = upper  # 上轨
 
                 middle = round(middle_list[-1], self.round_n)
                 self.line_boll2_middle.append(middle)  # 中轨
@@ -2648,7 +2652,7 @@ class CtaLineBar(object):
 
         maxLen = max(self.para_macd_fast_len, self.para_macd_slow_len) + self.para_macd_signal_len
 
-        maxLen = maxLen * 3             # 注：数据长度需要足够，才能准确。测试过，3倍长度才可以与国内的文华等软件一致
+        maxLen = maxLen * 3  # 注：数据长度需要足够，才能准确。测试过，3倍长度才可以与国内的文华等软件一致
 
         if self.bar_len < maxLen:
             self.write_log(u'数据未充分,当前Bar数据数量：{0}，计算MACD需要：{1}'.format(len(self.line_bar), maxLen))
@@ -2961,11 +2965,35 @@ class CtaLineBar(object):
         cur_cci = ta.CCI(high=self.high_array[-2 * self.para_cci_len:], low=self.low_array[-2 * self.para_cci_len:],
                          close=self.close_array[-2 * self.para_cci_len:], timeperiod=self.para_cci_len)[-1]
 
-        cur_cci = round(float(cur_cci), 3)
+        self.cur_cci = round(float(cur_cci), 3)
 
         if len(self.line_cci) > self.max_hold_bars:
             del self.line_cci[0]
-        self.line_cci.append(cur_cci)
+        self.line_cci.append(self.cur_cci)
+
+    def rt_count_cci(self):
+        """实时计算CCI值"""
+        if self.para_cci_len <= 0:
+            return
+
+        # 1、lineBar满足长度才执行计算
+        if len(self.line_bar) < self.para_cci_len + 2:
+            self.write_log(u'数据未充分,当前Bar数据数量：{0}，计算CCI需要：{1}'.
+                           format(len(self.line_bar), self.para_cci_len + 2))
+            return
+
+        self._rt_cci = ta.CCI(high=np.append(self.high_array[-2 * self.para_cci_len:], [self.line_bar[-1].high_price]),
+                              low=np.append(self.low_array[-2 * self.para_cci_len:], [self.line_bar[-1].low_price]),
+                              close=np.append(self.close_array[-2 * self.para_cci_len:],
+                                              [self.line_bar[-1].close_price]),
+                              timeperiod=self.para_cci_len)[-1]
+
+    @property
+    def rt_cci(self):
+        self.check_rt_funcs(self.rt_count_cci)
+        if self._rt_cci is None:
+            return self.cur_cci
+        return self._rt_cci
 
     def __count_kf(self):
         """计算卡尔曼过滤器均线"""
@@ -3514,12 +3542,10 @@ class CtaLineBar(object):
             return
 
         # 收盘价 = 结算bar + 最后一个未结束得close
-        close_list = self.close_array[-data_len:]
-        close_list.append(self.line_bar[-1].close_price)
-        # close_list = [x.close_price for x in self.lineBar[-data_len:]]
+        close_array = np.append(self.close_array[-data_len:], [self.line_bar[-1].close_price])
 
         # 计算最后得动态RSI值
-        last_rsi = ta.RSI(self.close_array[-2 * self.para_skd_fast_len:], self.para_skd_fast_len)[-1]
+        last_rsi = ta.RSI(close_array[-2 * self.para_skd_fast_len:], self.para_skd_fast_len)[-1]
 
         # 所有RSI值长度不足计算标准
         if len(self.line_skd_rsi) < self.para_skd_slow_len:
@@ -3753,7 +3779,7 @@ class CtaLineBar(object):
             return
         # 3、获取前InputN周期(包含当前周期）的K线
         last_bar_mid3 = (self.line_bar[-1].close_price + self.line_bar[-1].high_price + self.line_bar[-1].low_price) / 3
-        bar_mid3_ema10 = ta.EMA(np.append(self.mid3_array[-ema_len*3:], [last_bar_mid3]), ema_len)[-1]
+        bar_mid3_ema10 = ta.EMA(np.append(self.mid3_array[-ema_len * 3:], [last_bar_mid3]), ema_len)[-1]
         self._rt_yb = round(float(bar_mid3_ema10), self.round_n)
 
     @property
