@@ -311,7 +311,7 @@ class RestClient(object):
             not_finished_executors = [i for i in self._executors if not i.done()]
             self._executors = not_finished_executors
 
-    def _clean_finished_tasks(self, result = None):
+    def _clean_finished_tasks(self, result=None):
         with self._tasks_lock:
             not_finished_tasks = [i for i in self._tasks if not i.ready()]
             self._tasks = not_finished_tasks

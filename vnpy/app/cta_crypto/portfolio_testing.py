@@ -13,9 +13,6 @@ import gc
 import pandas as pd
 import traceback
 import random
-import bz2
-import pickle
-
 from datetime import datetime, timedelta
 from time import sleep
 
@@ -196,7 +193,6 @@ class PortfolioTestingEngine(BackTestingEngine):
             symbol, exchange = extract_vt_symbol(vt_symbol)
             self.load_bar_csv_to_df(vt_symbol, self.bar_csv_file.get(symbol))
 
-
         # 合并数据
         self.comine_bar_df()
 
@@ -308,6 +304,7 @@ class PortfolioTestingEngine(BackTestingEngine):
             print(str(ex), file=sys.stderr)
             traceback.print_exc()
             return
+
 
 def single_test(test_setting: dict, strategy_setting: dict):
     """

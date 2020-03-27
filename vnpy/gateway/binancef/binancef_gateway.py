@@ -212,7 +212,6 @@ class BinancefRestApi(RestClient):
 
         self.orders = {}
 
-
     def sign(self, request: Request) -> Request:
         """
         Generate BINANCE signature.
@@ -262,13 +261,13 @@ class BinancefRestApi(RestClient):
         return request
 
     def connect(
-        self,
-        key: str,
-        secret: str,
-        session_number: int,
-        server: str,
-        proxy_host: str,
-        proxy_port: int
+            self,
+            key: str,
+            secret: str,
+            session_number: int,
+            server: str,
+            proxy_host: str,
+            proxy_port: int
     ) -> None:
         """
         Initialize connection to REST server.
@@ -280,7 +279,7 @@ class BinancefRestApi(RestClient):
         self.server = server
 
         self.connect_time = (
-            int(datetime.now().strftime("%y%m%d%H%M%S")) * self.order_count
+                int(datetime.now().strftime("%y%m%d%H%M%S")) * self.order_count
         )
 
         if self.server == "REAL":
@@ -305,7 +304,6 @@ class BinancefRestApi(RestClient):
 
         # 添加到定时查询队列中
         self.gateway.query_functions = [self.query_account, self.query_position]
-
 
     def query_time(self) -> Request:
         """"""
@@ -366,12 +364,11 @@ class BinancefRestApi(RestClient):
             data=data
         )
 
-
     def query_trade(self, vt_symbol: str = '') -> Request:
         """"""
         data = {"security": Security.SIGNED}
         if vt_symbol:
-            if  '.' in vt_symbol:
+            if '.' in vt_symbol:
                 vt_symbol = vt_symbol.split('.')[0]
             data.update({'symbol': vt_symbol})
 
@@ -607,7 +604,6 @@ class BinancefRestApi(RestClient):
 
         self.gateway.write_log("委托信息查询成功")
 
-
     def on_query_trade(self, data: dict, request: Request) -> None:
         """"""
         for d in data:
@@ -624,6 +620,7 @@ class BinancefRestApi(RestClient):
                 price=float(d["price"]),
                 volume=float(d['qty']),
                 time=time,
+                datetime=dt,
                 gateway_name=self.gateway_name,
             )
             self.gateway.on_trade(trade)
@@ -664,7 +661,7 @@ class BinancefRestApi(RestClient):
                 name=name,
                 pricetick=pricetick,
                 size=symbol_size,
-                margin_rate= round(float(d['requiredMarginPercent'])/100, 5),
+                margin_rate=round(float(d['requiredMarginPercent']) / 100, 5),
                 min_volume=min_volume,
                 product=Product.FUTURES,
                 history_data=True,
@@ -692,7 +689,7 @@ class BinancefRestApi(RestClient):
         self.gateway.write_log(msg)
 
     def on_send_order_error(
-        self, exception_type: type, exception_value: Exception, tb, request: Request
+            self, exception_type: type, exception_value: Exception, tb, request: Request
     ) -> None:
         """
         Callback when sending order caused exception.
@@ -738,13 +735,13 @@ class BinancefRestApi(RestClient):
                 "symbol": req.symbol,
                 "interval": INTERVAL_VT2BINANCEF[req.interval],
                 "limit": limit,
-                "startTime": start_time * 1000,         # convert to millisecond
+                "startTime": start_time * 1000,  # convert to millisecond
             }
 
             # Add end time if specified
             if req.end:
                 end_time = int(datetime.timestamp(req.end))
-                params["endTime"] = end_time * 1000     # convert to millisecond
+                params["endTime"] = end_time * 1000  # convert to millisecond
 
             # Get response from server
             resp = self.request(
@@ -769,7 +766,7 @@ class BinancefRestApi(RestClient):
                 buf = []
 
                 for l in data:
-                    dt = datetime.fromtimestamp(l[0] / 1000)    # convert to second
+                    dt = datetime.fromtimestamp(l[0] / 1000)  # convert to second
 
                     bar = BarData(
                         symbol=req.symbol,
@@ -910,6 +907,7 @@ class BinancefTradeWebsocketApi(WebsocketClient):
             price=float(ord_data["L"]),
             volume=trade_volume,
             time=trade_time,
+            datetime=trade_time,
             gateway_name=self.gateway_name,
         )
         self.gateway.on_trade(trade)
@@ -928,10 +926,10 @@ class BinancefDataWebsocketApi(WebsocketClient):
         self.ticks: Dict[str, TickData] = {}
 
     def connect(
-        self,
-        proxy_host: str,
-        proxy_port: int,
-        server: str
+            self,
+            proxy_host: str,
+            proxy_port: int,
+            server: str
     ) -> None:
         """"""
         self.proxy_host = proxy_host

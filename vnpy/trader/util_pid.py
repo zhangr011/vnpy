@@ -16,6 +16,7 @@ assert os.path.isdir(logs_path)
 # 记录pid得文件
 pid_file = os.path.abspath(os.path.join(logs_path, 'gpid.txt'))
 
+
 def _check_pid(pid):
     """
     检查pid是否与当前进程pid一致
@@ -70,6 +71,7 @@ def update_pid():
 # 执行检查
 if _check_status():
     import sys
+
     print(u'another service is already running...', file=sys.stderr)
     exit(0)
 

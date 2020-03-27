@@ -1,7 +1,6 @@
 """
 
 """
-import os
 import sys
 from abc import ABC, abstractmethod
 from typing import Any, Sequence, Dict, List, Optional, Callable
@@ -323,6 +322,7 @@ class BaseGateway(ABC):
         :return:
         """
         return self.status
+
 
 class LocalOrderManager:
     """

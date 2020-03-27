@@ -14,7 +14,11 @@ from .template import (
     BarData,
     TradeData,
     OrderData,
-    CtaTemplate, CtaSignal, TargetPosTemplate, CtaProTemplate, CtaProFutureTemplate)  # noqa
+    CtaTemplate,
+    CtaSignal,
+    TargetPosTemplate,
+    CtaProTemplate,
+    CtaProFutureTemplate)  # noqa
 from vnpy.trader.utility import BarGenerator, ArrayManager  # noqa
 
 from .template_spread import CtaSpreadTemplate

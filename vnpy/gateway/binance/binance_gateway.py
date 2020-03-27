@@ -37,7 +37,6 @@ from vnpy.trader.object import (
 from vnpy.trader.event import EVENT_TIMER
 from vnpy.event import Event
 
-
 REST_HOST = "https://www.binance.com"
 WEBSOCKET_TRADE_HOST = "wss://stream.binance.com:9443/ws/"
 WEBSOCKET_DATA_HOST = "wss://stream.binance.com:9443/stream?streams="
@@ -159,6 +158,7 @@ class BinanceGateway(BaseGateway):
                 and self.status.get('mdws_con', False):
             self.status.update({'con': True})
 
+
 class BinanceRestApi(RestClient):
     """
     BINANCE REST API
@@ -234,12 +234,12 @@ class BinanceRestApi(RestClient):
         return request
 
     def connect(
-        self,
-        key: str,
-        secret: str,
-        session_number: int,
-        proxy_host: str,
-        proxy_port: int
+            self,
+            key: str,
+            secret: str,
+            session_number: int,
+            proxy_host: str,
+            proxy_port: int
     ):
         """
         Initialize connection to REST server.
@@ -250,7 +250,7 @@ class BinanceRestApi(RestClient):
         self.proxy_host = proxy_host
 
         self.connect_time = (
-            int(datetime.now().strftime("%y%m%d%H%M%S")) * self.order_count
+                int(datetime.now().strftime("%y%m%d%H%M%S")) * self.order_count
         )
 
         self.init(REST_HOST, proxy_host, proxy_port)
@@ -504,7 +504,7 @@ class BinanceRestApi(RestClient):
         self.gateway.write_log(msg)
 
     def on_send_order_error(
-        self, exception_type: type, exception_value: Exception, tb, request: Request
+            self, exception_type: type, exception_value: Exception, tb, request: Request
     ):
         """
         Callback when sending order caused exception.
@@ -545,13 +545,13 @@ class BinanceRestApi(RestClient):
                 "symbol": req.symbol,
                 "interval": INTERVAL_VT2BINANCE[req.interval],
                 "limit": limit,
-                "startTime": start_time * 1000,         # convert to millisecond
+                "startTime": start_time * 1000,  # convert to millisecond
             }
 
             # Add end time if specified
             if req.end:
                 end_time = int(datetime.timestamp(req.end))
-                params["endTime"] = end_time * 1000     # convert to millisecond
+                params["endTime"] = end_time * 1000  # convert to millisecond
 
             # Get response from server
             resp = self.request(
@@ -576,7 +576,7 @@ class BinanceRestApi(RestClient):
                 buf = []
 
                 for l in data:
-                    dt = datetime.fromtimestamp(l[0] / 1000)    # convert to second
+                    dt = datetime.fromtimestamp(l[0] / 1000)  # convert to second
 
                     bar = BarData(
                         symbol=req.symbol,

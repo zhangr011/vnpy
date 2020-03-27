@@ -234,7 +234,7 @@ def get_folder_path(folder_name: str) -> Path:
     folder_path = TEMP_DIR.joinpath(folder_name)
     if not folder_path.exists():
         os.makedirs(str(folder_path))
-        #folder_path.mkdir()
+        # folder_path.mkdir()
     return folder_path
 
 

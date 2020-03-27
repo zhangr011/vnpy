@@ -48,6 +48,8 @@ class BaseCell(QtWidgets.QTableWidgetItem):
         Set text content.
         """
         self.setText(str(content))
+        if isinstance(data, float):
+            data = round(data, 7)
         self._data = data
 
     def get_data(self) -> Any:
@@ -737,36 +739,36 @@ class TradingWidget(QtWidgets.QWidget):
         if not self.checkFixed.isChecked():
             self.price_line.setText(str(tick.last_price))
 
-        self.lp_label.setText(str(tick.last_price))
-        self.bp1_label.setText(str(tick.bid_price_1))
-        self.bv1_label.setText(str(tick.bid_volume_1))
-        self.ap1_label.setText(str(tick.ask_price_1))
-        self.av1_label.setText(str(tick.ask_volume_1))
+        self.lp_label.setText(str(round(tick.last_price, 7)))
+        self.bp1_label.setText(str(round(tick.bid_price_1, 7)))
+        self.bv1_label.setText(str(round(tick.bid_volume_1, 7)))
+        self.ap1_label.setText(str(round(tick.ask_price_1, 7)))
+        self.av1_label.setText(str(round(tick.ask_volume_1, 7)))
 
         if tick.pre_close:
             r = (tick.last_price / tick.pre_close - 1) * 100
             self.return_label.setText(f"{r:.2f}%")
 
         if tick.bid_price_2:
-            self.bp2_label.setText(str(tick.bid_price_2))
-            self.bv2_label.setText(str(tick.bid_volume_2))
-            self.ap2_label.setText(str(tick.ask_price_2))
-            self.av2_label.setText(str(tick.ask_volume_2))
+            self.bp2_label.setText(str(round(tick.bid_price_2), 7))
+            self.bv2_label.setText(str(round(tick.bid_volume_2, 7)))
+            self.ap2_label.setText(str(round(tick.ask_price_2, 7)))
+            self.av2_label.setText(str(round(tick.ask_volume_2, 7)))
 
-            self.bp3_label.setText(str(tick.bid_price_3))
-            self.bv3_label.setText(str(tick.bid_volume_3))
-            self.ap3_label.setText(str(tick.ask_price_3))
-            self.av3_label.setText(str(tick.ask_volume_3))
+            self.bp3_label.setText(str(round(tick.bid_price_3, 7)))
+            self.bv3_label.setText(str(round(tick.bid_volume_3, 7)))
+            self.ap3_label.setText(str(round(tick.ask_price_3, 7)))
+            self.av3_label.setText(str(round(tick.ask_volume_3, 7)))
 
-            self.bp4_label.setText(str(tick.bid_price_4))
-            self.bv4_label.setText(str(tick.bid_volume_4))
-            self.ap4_label.setText(str(tick.ask_price_4))
-            self.av4_label.setText(str(tick.ask_volume_4))
+            self.bp4_label.setText(str(round(tick.bid_price_4, 7)))
+            self.bv4_label.setText(str(round(tick.bid_volume_4, 7)))
+            self.ap4_label.setText(str(round(tick.ask_price_4, 7)))
+            self.av4_label.setText(str(round(tick.ask_volume_4, 7)))
 
-            self.bp5_label.setText(str(tick.bid_price_5))
-            self.bv5_label.setText(str(tick.bid_volume_5))
-            self.ap5_label.setText(str(tick.ask_price_5))
-            self.av5_label.setText(str(tick.ask_volume_5))
+            self.bp5_label.setText(str(round(tick.bid_price_5, 7)))
+            self.bv5_label.setText(str(round(tick.bid_volume_5, 7)))
+            self.ap5_label.setText(str(round(tick.ask_price_5, 7)))
+            self.av5_label.setText(str(round(tick.ask_volume_5, 7)))
 
     def set_vt_symbol(self) -> None:
         """

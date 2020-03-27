@@ -344,7 +344,6 @@ class CtaEngine(BaseEngine):
         holding = self.get_position_holding(position.vt_symbol, position.gateway_name)
         holding.update_position(position)
 
-
     def check_unsubscribed_symbols(self):
         """检查未订阅合约"""
 
@@ -1179,7 +1178,7 @@ class CtaEngine(BaseEngine):
         self.write_log(msg)
         return True, msg
 
-    def save_strategy_data(self, select_name: str):
+    def save_strategy_data(self, select_name: str = 'ALL'):
         """ save strategy data"""
         has_executed = False
         msg = ""
@@ -1215,7 +1214,7 @@ class CtaEngine(BaseEngine):
             self.write_error(u'保存策略{}数据异常:'.format(strategy_name, str(ex)))
             self.write_error(traceback.format_exc())
 
-    def save_strategy_snapshot(self, select_name: str):
+    def save_strategy_snapshot(self, select_name: str = 'ALL'):
         """
         保存策略K线切片数据
         :param select_name:
@@ -1607,7 +1606,7 @@ class CtaEngine(BaseEngine):
             try:
                 from vnpy.trader.util_wechat import send_wx_msg
                 send_wx_msg(content=msg)
-            except Exception as ex:
+            except Exception:  # noqa
                 pass
             ret_msg = u'持仓不匹配: {}' \
                 .format(pos_compare_result)

@@ -81,7 +81,6 @@ class CtaPosition(CtaComponent):
             self.write_log(f'多仓:{pre_long_pos}->{self.long_pos}')
             self.write_log(f'净:{pre_pos}->{self.pos}')
 
-
         return True
 
     def clear(self):

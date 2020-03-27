@@ -65,6 +65,7 @@ from vnpy.trader.util_logger import setup_logger
 from vnpy.data.mongo.mongo_data import MongoData
 from uuid import uuid1
 
+
 class BackTestingEngine(object):
     """
     CTA回测引擎
@@ -106,7 +107,7 @@ class BackTestingEngine(object):
         self.fix_commission = {}  # 每手固定手续费
         self.size = {}  # 合约大小，默认为1
         self.price_tick = {}  # 价格最小变动
-        self.volume_tick = {} # 合约委托单最小单位
+        self.volume_tick = {}  # 合约委托单最小单位
         self.margin_rate = {}  # 回测合约的保证金比率
         self.price_dict = {}  # 登记vt_symbol对应的最新价
         self.contract_dict = {}  # 登记vt_symbol得对应合约信息
@@ -207,7 +208,7 @@ class BackTestingEngine(object):
         # 回测任务/回测结果，保存在数据库中
         self.mongo_api = None
         self.task_id = None
-        self.test_setting = None    # 回测设置
+        self.test_setting = None  # 回测设置
         self.strategy_setting = None  # 所有回测策略得设置
 
     def create_fund_kline(self, name, use_renko=False):
@@ -543,7 +544,7 @@ class BackTestingEngine(object):
         for symbol, symbol_data in data_dict.items():
             self.write_log(u'配置{}数据:{}'.format(symbol, symbol_data))
             self.set_price_tick(symbol, symbol_data.get('price_tick', 1))
-            self.set_volume_tick(symbol, symbol_data.get('min_volume',1))
+            self.set_volume_tick(symbol, symbol_data.get('min_volume', 1))
             self.set_slippage(symbol, symbol_data.get('slippage', 0))
             self.set_size(symbol, symbol_data.get('symbol_size', 10))
             margin_rate = symbol_data.get('margin_rate', 0.1)
@@ -1664,7 +1665,7 @@ class BackTestingEngine(object):
             for t in self.long_position_list:
                 # 当前持仓的保证金
                 cur_occupy_money = min(self.get_price(t.vt_symbol), t.price) * abs(t.volume) * self.get_margin_rate(
-                        t.vt_symbol)
+                    t.vt_symbol)
 
                 # 更新该合约短号的累计保证金
                 underly_symbol = get_underlying_symbol(t.symbol)
@@ -1680,7 +1681,8 @@ class BackTestingEngine(object):
         if len(self.short_position_list) > 0:
             for t in self.short_position_list:
                 # 当前空单保证金
-                cur_occupy_money = max(self.get_price(t.vt_symbol), t.price) * abs(t.volume) * self.get_margin_rate(t.vt_symbol)
+                cur_occupy_money = max(self.get_price(t.vt_symbol), t.price) * abs(t.volume) * self.get_margin_rate(
+                    t.vt_symbol)
 
                 # 该合约短号的累计空单保证金
                 underly_symbol = get_underlying_symbol(t.symbol)
@@ -1695,7 +1697,8 @@ class BackTestingEngine(object):
 
         # 计算多空的保证金累加（对锁的取最大值)
         for underly_symbol in occupy_underly_symbol_set:
-            occupy_money += occupy_long_money_dict.get(underly_symbol, 0) + occupy_short_money_dict.get(underly_symbol, 0)
+            occupy_money += occupy_long_money_dict.get(underly_symbol, 0) + occupy_short_money_dict.get(underly_symbol,
+                                                                                                        0)
 
         # 可用资金 = 当前净值 - 占用保证金
         self.avaliable = self.net_capital - occupy_money
@@ -2070,12 +2073,12 @@ class BackTestingEngine(object):
             self.mongo_api = MongoData(host=save_mongo.get('host', 'localhost'), port=save_mongo.get('port', 27017))
 
         d = {
-            'task_id': self.task_id,    # 单实例回测任务id
-            'name': self.test_name,     # 回测实例名称， 策略名+参数+时间
+            'task_id': self.task_id,  # 单实例回测任务id
+            'name': self.test_name,  # 回测实例名称， 策略名+参数+时间
             'group_id': self.test_setting.get('group_id', datetime.now().strftime('%y-%m-%d')),  # 回测组合id
             'status': 'start',
-            'task_start_time': datetime.now(),   # 任务开始执行时间
-            'run_host': socket.gethostname(),    # 任务运行得host主机
+            'task_start_time': datetime.now(),  # 任务开始执行时间
+            'run_host': socket.gethostname(),  # 任务运行得host主机
             'test_setting': self.test_setting,  # 回测参数
             'strategy_setting': self.strategy_setting,  # 策略参数
         }
@@ -2135,11 +2138,11 @@ class BackTestingEngine(object):
             flt=flt)
 
         if d:
-            d.update({'status': 'finish'})                                   # 更新状态未完成
-            d.update(result_info)                                            # 补充回测结果
-            d.update({'task_finish_time': datetime.now()})                    # 更新回测完成时间
-            d.update({'trade_list': binary.Binary(zlib.compress(pickle.dumps(self.trade_pnl_list)))})      # 更新交易记录
-            d.update({'daily_list': binary.Binary(zlib.compress(pickle.dumps(self.daily_list)))})        # 更新每日净值记录
+            d.update({'status': 'finish'})  # 更新状态未完成
+            d.update(result_info)  # 补充回测结果
+            d.update({'task_finish_time': datetime.now()})  # 更新回测完成时间
+            d.update({'trade_list': binary.Binary(zlib.compress(pickle.dumps(self.trade_pnl_list)))})  # 更新交易记录
+            d.update({'daily_list': binary.Binary(zlib.compress(pickle.dumps(self.daily_list)))})  # 更新每日净值记录
 
             self.write_log(u'更新回测结果至数据库')
 

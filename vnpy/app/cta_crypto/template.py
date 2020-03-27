@@ -16,11 +16,9 @@ from vnpy.trader.constant import Interval, Direction, Offset, Status, OrderType
 from vnpy.trader.object import BarData, TickData, OrderData, TradeData
 from vnpy.trader.utility import virtual, append_data, extract_vt_symbol, get_underlying_symbol
 
-from .base import StopOrder, EngineType
-from vnpy.component.cta_grid_trade import CtaGrid, CtaGridTrade, LOCK_GRID
+from .base import StopOrder
+from vnpy.component.cta_grid_trade import CtaGrid, CtaGridTrade
 from vnpy.component.cta_position import CtaPosition
-from vnpy.component.cta_policy import CtaPolicy  # noqa
-
 
 class CtaTemplate(ABC):
     """CTA策略模板"""
@@ -416,8 +414,6 @@ class CtaTemplate(ABC):
             self.cta_engine.sync_strategy_data(self)
 
 
-
-
 class CtaFutureTemplate(CtaTemplate):
     """
     合约期货模板
@@ -426,7 +422,7 @@ class CtaFutureTemplate(CtaTemplate):
     price_tick = 1  # 商品的最小价格跳动
     symbol_size = 10  # 商品得合约乘数
     margin_rate = 0.1  # 商品的保证金
-    volumn_tick = 1 # 商品最小成交数量
+    volumn_tick = 1  # 商品最小成交数量
 
     # 委托类型
     order_type = OrderType.LIMIT
@@ -441,7 +437,7 @@ class CtaFutureTemplate(CtaTemplate):
     backtesting = False
 
     # 逻辑过程日志
-    dist_fieldnames = ['datetime', 'symbol', 'volume', 'price','margin',
+    dist_fieldnames = ['datetime', 'symbol', 'volume', 'price', 'margin',
                        'operation', 'signal', 'stop_price', 'target_price',
                        'long_pos', 'short_pos']
 
@@ -844,37 +840,7 @@ class CtaFutureTemplate(CtaTemplate):
             self.active_orders.pop(order.vt_orderid, None)
             return
 
-        order_price = old_order['price']
-        order_type = old_order.get('order_type', OrderType.LIMIT)
-        order_retry = old_order.get('retry', 0)
         grid = old_order.get('grid', None)
-        if order_retry > 20:
-            # 这里超过20次尝试失败后，不再尝试,发出告警信息
-            msg = u'{}  {}/{}手， 重试开仓次数{}>20' \
-                .format(self.strategy_name,
-                        order_vt_symbol,
-                        order_volume,
-                        order_retry)
-            self.write_error(msg)
-            self.send_wechat(msg)
-
-            if grid:
-                if order.vt_orderid in grid.order_ids:
-                    grid.order_ids.remove(order.vt_orderid)
-
-                # 网格的所有委托单已经执行完毕
-                if len(grid.order_ids) == 0:
-                    grid.order_status = False
-
-                self.gt.save()
-                self.write_log(u'网格信息更新:{}'.format(grid.__dict__))
-
-            self.write_log(u'移除:{}'.format(order.vt_orderid))
-            self.active_orders.pop(order.vt_orderid, None)
-            return
-
-        order_retry += 1
-
         pre_status = old_order.get('status', Status.NOTTRADED)
         old_order.update({'status': Status.CANCELLED})
         self.write_log(u'委托单状态:{}=>{}'.format(pre_status, old_order.get('status')))
@@ -918,29 +884,7 @@ class CtaFutureTemplate(CtaTemplate):
             self.active_orders.pop(order.vt_orderid, None)
             return
 
-        order_price = old_order['price']
-        order_type = old_order.get('order_type', OrderType.LIMIT)
-        order_retry = old_order.get('retry', 1)
         grid = old_order.get('grid', None)
-        if order_retry > 20:
-            msg = u'{} 平仓撤单 {}/{}手， 重试平仓次数{}>20' \
-                .format(self.strategy_name, order_symbol, order_volume, order_retry)
-            self.write_error(msg)
-            self.send_wechat(msg)
-            if grid:
-                if order.vt_orderid in grid.order_ids:
-                    grid.order_ids.remove(order.vt_orderid)
-                if not grid.order_ids:
-                    grid.order_status = False
-                self.gt.save()
-                self.write_log(u'更新网格=>{}'.format(grid.__dict__))
-
-            self.write_log(u'移除活动订单:{}'.format(order.vt_orderid))
-            self.active_orders.pop(order.vt_orderid, None)
-            return
-
-        order_retry += 1
-
         pre_status = old_order.get('status', Status.NOTTRADED)
         old_order.update({'status': Status.CANCELLED})
         self.write_log(u'委托单状态:{}=>{}'.format(pre_status, old_order.get('status')))
@@ -956,7 +900,6 @@ class CtaFutureTemplate(CtaTemplate):
 
     def on_stop_order(self, stop_order: StopOrder):
         self.write_log(f'停止单触发:{stop_order.__dict__}')
-
 
     def grid_check_stop(self):
         """
@@ -976,12 +919,12 @@ class CtaFutureTemplate(CtaTemplate):
             if g.stop_price > 0 and g.stop_price > self.cur_price and g.open_status and not g.order_status:
                 # 调用平仓模块
                 self.write_log(u'{} {}当前价:{} 触发多单止损线{},开仓价:{},v：{}'.
-                                 format(self.cur_datetime,
-                                        self.vt_symbol,
-                                        self.cur_price,
-                                        g.stop_price,
-                                        g.open_price,
-                                        g.volume))
+                               format(self.cur_datetime,
+                                      self.vt_symbol,
+                                      self.cur_price,
+                                      g.stop_price,
+                                      g.open_price,
+                                      g.volume))
                 if self.grid_sell(g):
                     self.write_log(u'多单止盈/止损委托成功')
                 else:
@@ -993,8 +936,8 @@ class CtaFutureTemplate(CtaTemplate):
             if g.stop_price > 0 and g.stop_price < self.cur_price and g.open_status and not g.order_status:
                 # 网格止损
                 self.write_log(u'{} {}当前价:{} 触发空单止损线:{}, 开仓价:{},v：{}'.
-                                 format(self.cur_datetime, self.vt_symbol, self.cur_price, g.stop_price,
-                                        g.open_price, g.volume))
+                               format(self.cur_datetime, self.vt_symbol, self.cur_price, g.stop_price,
+                                      g.open_price, g.volume))
                 if self.grid_cover(g):
                     self.write_log(u'空单止盈/止损委托成功')
                 else:
@@ -1013,15 +956,14 @@ class CtaFutureTemplate(CtaTemplate):
                                grid=grid)
         if len(vt_orderids) > 0:
             self.write_log(u'创建{}事务多单,开仓价：{}，数量：{}，止盈价:{},止损价:{}'
-                             .format(grid.type, grid.open_price, grid.volume, grid.close_price, grid.stop_price))
+                           .format(grid.type, grid.open_price, grid.volume, grid.close_price, grid.stop_price))
             self.gt.dn_grids.append(grid)
             self.gt.save()
             return True
         else:
             self.write_error(u'创建{}事务多单,委托失败，开仓价：{}，数量：{}，止盈价:{}'
-                                  .format(grid.type, grid.open_price, grid.volume, grid.close_price))
+                             .format(grid.type, grid.open_price, grid.volume, grid.close_price))
             return False
-
 
     def grid_short(self, grid):
         """
@@ -1036,14 +978,14 @@ class CtaFutureTemplate(CtaTemplate):
                                  grid=grid)
         if len(vt_orderids) > 0:
             self.write_log(u'创建{}事务空单,指数开空价：{}，主力开仓价:{},数量：{}，止盈价:{},止损价:{}'
-                             .format(grid.type, grid.open_price, self.cur_price, grid.volume, grid.close_price,
-                                     grid.stop_price))
+                           .format(grid.type, grid.open_price, self.cur_price, grid.volume, grid.close_price,
+                                   grid.stop_price))
             self.gt.up_grids.append(grid)
             self.gt.save()
             return True
         else:
             self.write_error(u'创建{}事务空单,委托失败,开仓价：{}，数量：{}，止盈价:{}'
-                                  .format(grid.type, grid.open_price, grid.volume, grid.close_price))
+                             .format(grid.type, grid.open_price, grid.volume, grid.close_price))
             return False
 
     def grid_sell(self, grid):
@@ -1302,7 +1244,6 @@ class CtaFutureTemplate(CtaTemplate):
         if len(self.active_orders) == 0:
             self.entrust = 0
 
-
     def display_grids(self):
         """更新网格显示信息"""
         if not self.inited:
@@ -1340,7 +1281,9 @@ class CtaFutureTemplate(CtaTemplate):
             save_path = self.cta_engine.get_data_path()
         try:
             if 'margin' not in dist_data:
-                dist_data.update({'margin': dist_data.get('price', 0) * dist_data.get('volume', 0) * self.cta_engine.get_margin_rate(dist_data.get('symbol', self.vt_symbol))})
+                dist_data.update({'margin': dist_data.get('price', 0) * dist_data.get('volume',
+                                                                                      0) * self.cta_engine.get_margin_rate(
+                    dist_data.get('symbol', self.vt_symbol))})
             if self.position and 'long_pos' not in dist_data:
                 dist_data.update({'long_pos': self.position.long_pos})
             if self.position and 'short_pos' not in dist_data:
@@ -1373,5 +1316,3 @@ class CtaFutureTemplate(CtaTemplate):
         if self.backtesting:
             return
         self.cta_engine.send_wechat(msg=msg, strategy=self)
-
-

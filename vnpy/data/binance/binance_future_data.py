@@ -201,7 +201,7 @@ class BinanceFutureData(RestClient):
                     "name": name,
                     "price_tick": pricetick,
                     "symbol_size": 20,
-                    "margin_rate" : round(float(d['requiredMarginPercent']) / 100,5),
+                    "margin_rate": round(float(d['requiredMarginPercent']) / 100, 5),
                     "min_volume": min_volume,
                     "product": Product.FUTURES.value,
                     "commission_rate": 0.005
@@ -217,7 +217,6 @@ class BinanceFutureData(RestClient):
         f = os.path.abspath(os.path.join(os.path.dirname(__file__), 'future_contracts.json'))
         contracts = load_json(f, auto_save=False)
         return contracts
-
 
     def save_contracts(self):
         """保存合约配置"""

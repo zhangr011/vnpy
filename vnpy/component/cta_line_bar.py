@@ -3353,10 +3353,10 @@ class CtaLineBar(object):
         #  记录所有SK的顶部和底部
         # 峰(顶部)
         if self.line_sk[-1] < self.line_sk[-2] and self.line_sk[-3] < self.line_sk[-2]:
-            t = {}
+            t = dict()
             t['type'] = u'T'
             t['sk'] = self.line_sk[-2]
-            t['price'] = max([self.high_array[-4:]])
+            t['price'] = max(self.high_array[-4:])
             t['time'] = self.line_bar[-1].datetime
             t['bars'] = 0
             if len(self.skd_top_list) > self.max_hold_bars:
@@ -3369,10 +3369,10 @@ class CtaLineBar(object):
 
         # 谷(底部)
         elif self.line_sk[-1] > self.line_sk[-2] and self.line_sk[-3] > self.line_sk[-2]:
-            b = {}
+            b = dict()
             b['type'] = u'B'
             b['sk'] = self.line_sk[-2]
-            b['price'] = min([bar.low_price for bar in self.line_bar[-4:]])
+            b['price'] = min(self.low_array[-4:])
             b['time'] = self.line_bar[-1].datetime
             b['bars'] = 0
             if len(self.skd_buttom_list) > self.max_hold_bars:
