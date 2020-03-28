@@ -138,7 +138,7 @@ class CtaEngine(BaseEngine):
 
         self.vt_tradeids = set()  # for filtering duplicate trade
 
-        self.holdings = {}
+        self.positions = {}
 
         self.last_minute = None
 
@@ -243,9 +243,6 @@ class CtaEngine(BaseEngine):
         """"""
         order = event.data
 
-        holding = self.get_position_holding(order.vt_symbol, order.gateway_name)
-        holding.update_order(order)
-
         strategy = self.orderid_strategy_map.get(order.vt_orderid, None)
         if not strategy:
             return
@@ -281,9 +278,6 @@ class CtaEngine(BaseEngine):
         if trade.vt_tradeid in self.vt_tradeids:
             return
         self.vt_tradeids.add(trade.vt_tradeid)
-
-        holding = self.get_position_holding(trade.vt_symbol, trade.gateway_name)
-        holding.update_trade(trade)
 
         strategy = self.orderid_strategy_map.get(trade.vt_orderid, None)
         if not strategy:
@@ -341,8 +335,7 @@ class CtaEngine(BaseEngine):
         """"""
         position = event.data
 
-        holding = self.get_position_holding(position.vt_symbol, position.gateway_name)
-        holding.update_position(position)
+        self.positions.update({position.vt_positionid: position})
 
     def check_unsubscribed_symbols(self):
         """检查未订阅合约"""
@@ -786,7 +779,7 @@ class CtaEngine(BaseEngine):
         contract = self.main_engine.get_contract(vt_symbol)
         if contract is None:
             self.write_error(f'查询不到{vt_symbol}合约信息')
-            return 0.1
+            return 0.001
 
         return contract.pricetick
 
@@ -796,7 +789,7 @@ class CtaEngine(BaseEngine):
         contract = self.main_engine.get_contract(vt_symbol)
         if contract is None:
             self.write_error(f'查询不到{vt_symbol}合约信息')
-            return 1
+            return 0.01
 
         return contract.min_volume
 
@@ -832,21 +825,13 @@ class CtaEngine(BaseEngine):
 
     def get_position(self, vt_symbol: str, direction: Direction, gateway_name: str = ''):
         """ 查询合约在账号的持仓,需要指定方向"""
+        contract = self.main_engine.get_contract(vt_symbol)
+        if contract:
+            if contract.gateway_name and not gateway_name:
+                gateway_name = contract.gateway_name
+
         vt_position_id = f"{gateway_name}.{vt_symbol}.{direction.value}"
         return self.main_engine.get_position(vt_position_id)
-
-    def get_position_holding(self, vt_symbol: str, gateway_name: str = ''):
-        """ 查询合约在账号的持仓（包含多空）"""
-        k = f'{gateway_name}.{vt_symbol}'
-        holding = self.holdings.get(k, None)
-        if not holding:
-            symbol, exchange = extract_vt_symbol(vt_symbol)
-
-            contract = self.main_engine.get_contract(vt_symbol)
-
-            holding = PositionHolding(contract)
-            self.holdings[k] = holding
-        return holding
 
     def get_engine_type(self):
         """"""
@@ -1498,19 +1483,15 @@ class CtaEngine(BaseEngine):
 
         compare_pos = dict()  # vt_symbol: {'账号多单': xx, '账号空单':xxx, '策略空单':[], '策略多单':[]}
 
-        for holding_key in list(self.holdings.keys()):
+        for position in list(self.positions.values()):
             # gateway_name.symbol.exchange => symbol.exchange
-            vt_symbol = '.'.join(holding_key.split('.')[-2:])
-
+            vt_symbol = position.vt_symbol
             vt_symbols.add(vt_symbol)
-            holding = self.holdings.get(holding_key, None)
-            if holding is None:
-                continue
 
             compare_pos[vt_symbol] = OrderedDict(
                 {
-                    "账号空单": holding.short_pos,
-                    '账号多单': holding.long_pos,
+                    "账号空单": abs(position.volume) if position.volume < 0 else 0,
+                    '账号多单': position.volume if position.volume > 0 else 0,
                     '策略空单': 0,
                     '策略多单': 0,
                     '空单策略': [],

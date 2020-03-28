@@ -997,7 +997,9 @@ class CtaFutureTemplate(CtaTemplate):
         """
         self.write_log(u'执行事务平多仓位:{}'.format(grid.to_json()))
 
-        self.account_pos = self.cta_engine.get_position_holding(self.vt_symbol)
+        self.account_pos = self.cta_engine.get_position(
+            vt_symbol=self.vt_symbol,
+            direction=Direction.NET)
 
         if self.account_pos is None:
             self.write_error(u'无法获取{}得持仓信息'.format(self.vt_symbol))
@@ -1050,7 +1052,9 @@ class CtaFutureTemplate(CtaTemplate):
         """
         self.write_log(u'执行事务平空仓位:{}'.format(grid.to_json()))
 
-        self.account_pos = self.cta_engine.get_position_holding(self.vt_symbol)
+        self.account_pos = self.cta_engine.get_position(
+            vt_symbol=self.vt_symbol,
+            direction=Direction.NET)
         if self.account_pos is None:
             self.write_error(u'无法获取{}得持仓信息'.format(self.vt_symbol))
             return False
@@ -1064,17 +1068,21 @@ class CtaFutureTemplate(CtaTemplate):
         # 发出cover委托
         if grid.traded_volume > 0:
             grid.volume -= grid.traded_volume
+            grid.volume = round(grid.volume, 7)
             grid.traded_volume = 0
 
-        grid.volume = round(grid.volume, 7)
-
-        if 0 < abs(self.account_pos.short_pos) < grid.volume:
-            self.write_error(u'当前{}的空单持仓:{}，不满足平仓目标:{}, 强制降低'
+        if self.account_pos.volume >= 0:
+            self.write_error(u'当前{}的净持仓:{}，不能平空单'
                              .format(self.vt_symbol,
-                                     self.account_pos.short_pos,
+                                     self.account_pos.volume))
+            return False
+        if abs(self.account_pos.volume) < grid.volume:
+            self.write_error(u'当前{}的净持仓:{}，不满足平仓目标:{}, 强制降低'
+                             .format(self.vt_symbol,
+                                     self.account_pos.volume,
                                      grid.volume))
 
-            grid.volume = abs(self.account_pos.short_pos)
+            grid.volume = abs(self.account_pos.volume)
 
         vt_orderids = self.cover(
             price=cover_price,

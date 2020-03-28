@@ -77,11 +77,12 @@ class CtaLineBar(object):
     self.lineM = None                       # 1分钟K线
     lineMSetting = {}
     lineMSetting['name'] = u'M1'
+    lineMSetting['interval'] = Interval.MINUTE
     lineMSetting['bar_interval'] = 60    # 1分钟对应60秒
-    lineMSetting['inputEma1Len'] = 7        # EMA线1的周期
-    lineMSetting['inputEma2Len'] = 21       # EMA线2的周期
-    lineMSetting['inputBollLen'] = 20       # 布林特线周期
-    lineMSetting['inputBollStdRate'] = 2    # 布林特线标准差
+    lineMSetting['para_ema1_len'] = 7        # EMA线1的周期
+    lineMSetting['para_ema2_len'] = 21       # EMA线2的周期
+    lineMSetting['para_boll_len'] = 20       # 布林特线周期
+    lineMSetting['para_boll_std_rate'] = 2    # 布林特线标准差
     lineMSetting['price_tick'] = self.price_tick  # 最小条
     lineMSetting['underlying_symbol'] = self.underlying_symbol  #商品短号
     self.lineM = CtaLineBar(self, self.onBar, lineMSetting)
@@ -207,7 +208,7 @@ class CtaLineBar(object):
             # 修正精度
             if self.price_tick < 1:
                 exponent = decimal.Decimal(str(self.price_tick))
-                self.round_n = max(abs(exponent.as_tuple().exponent), 4)
+                self.round_n = max(abs(exponent.as_tuple().exponent) + 2, 4)
 
             # 导入卡尔曼过滤器
             if self.para_active_kf:

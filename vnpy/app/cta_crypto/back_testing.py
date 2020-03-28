@@ -41,7 +41,8 @@ from vnpy.trader.object import (
     TickData,
     OrderData,
     TradeData,
-    ContractData
+    ContractData,
+    PositionData
 )
 from vnpy.trader.constant import (
     Exchange,
@@ -127,10 +128,6 @@ class BackTestingEngine(object):
 
         self.order_strategy_dict = {}  # orderid 与 strategy的映射
 
-        # 持仓缓存字典
-        # key为vt_symbol，value为PositionBuffer对象
-        self.pos_holding_dict = {}
-
         self.trade_count = 0  # 成交编号
         self.trade_dict = OrderedDict()  # 用于统计成交收益时，还没处理得交易
         self.trades = OrderedDict()  # 记录所有得成交记录
@@ -139,7 +136,7 @@ class BackTestingEngine(object):
         self.long_position_list = []  # 多单持仓
         self.short_position_list = []  # 空单持仓
 
-        self.holdings = {}  # 多空持仓
+        self.positions = {}  # 账号持仓，对象为PositionData
 
         # 当前最新数据，用于模拟成交用
         self.gateway_name = u'BackTest'
@@ -388,13 +385,13 @@ class BackTestingEngine(object):
     def get_exchange(self, symbol: str):
         return self.symbol_exchange_dict.get(symbol, Exchange.LOCAL)
 
-    def get_position_holding(self, vt_symbol: str, gateway_name: str = ''):
-        """ 查询合约在账号的持仓（包含多空）"""
+    def get_position(self, vt_symbol: str, direction: Direction, gateway_name: str = ''):
+        """ 查询合约在账号的持仓"""
         if not gateway_name:
             gateway_name = self.gateway_name
-        k = f'{gateway_name}.{vt_symbol}'
-        holding = self.holdings.get(k, None)
-        if not holding:
+        k = f'{gateway_name}.{vt_symbol}.{direction.value}'
+        pos = self.positions.get(k, None)
+        if not pos:
             contract = self.get_contract(vt_symbol)
             if not contract:
                 self.write_log(f'{vt_symbol}合约信息不存在，构造一个')
@@ -413,9 +410,14 @@ class BackTestingEngine(object):
                                         size=self.get_size(vt_symbol),
                                         pricetick=self.get_price_tick(vt_symbol),
                                         margin_rate=self.get_margin_rate(vt_symbol))
-            holding = PositionHolding(contract)
-            self.holdings[k] = holding
-        return holding
+            pos = PositionData(
+                gateway_name=gateway_name,
+                symbol=contract.symbol,
+                exchange=contract.exchange,
+                direction=direction
+            )
+            self.positions[k] = pos
+        return pos
 
     def set_name(self, test_name):
         """
@@ -1081,9 +1083,13 @@ class BackTestingEngine(object):
             self.append_trade(trade)
 
             # 更新持仓缓存数据
-            k = '.'.join([self.gateway_name, trade.vt_symbol])
-            holding = self.get_position_holding(trade.vt_symbol, self.gateway_name)
-            holding.update_trade(trade)
+            pos = self.get_position(vt_symbol=trade.vt_symbol,direction=Direction.NET)
+            pre_volume = pos.volume
+            if trade.direction == Direction.LONG:
+                pos.volume = round(pos.volume + trade.volume, 7)
+            else:
+                pos.volume = round(pos.volume - trade.volume, 7)
+            self.write_log(f'{trade.vt_symbol} volume:{pre_volume} => {pos.volume}')
 
             strategy.on_trade(trade)
 
@@ -1160,21 +1166,26 @@ class BackTestingEngine(object):
                 trade.strategy_name = strategy.strategy_name
 
                 # 更新持仓缓存数据
-                k = '.'.join([self.gateway_name, trade.vt_symbol])
-                holding = self.get_position_holding(trade.vt_symbol, self.gateway_name)
-                holding.update_trade(trade)
-                strategy.on_trade(trade)
+                pos = self.get_position(vt_symbol=trade.vt_symbol, direction=Direction.NET)
+                pre_volume = pos.volume
+                if trade.direction == Direction.LONG:
+                    pos.volume = round(pos.volume + trade.volume, 7)
+                else:
+                    pos.volume = round(pos.volume - trade.volume, 7)
+                self.write_log(f'{trade.vt_symbol} volume:{pre_volume} => {pos.volume}')
 
                 self.trade_dict[trade.vt_tradeid] = trade
                 self.trades[trade.vt_tradeid] = copy.copy(trade)
                 self.write_log(u'vt_trade_id:{0}'.format(trade.vt_tradeid))
 
-                self.write_log(u'{} : crossLimitOrder: TradeId:{},  posBuffer = {}'.format(trade.strategy_name,
+                self.write_log(u'{} : crossLimitOrder: TradeId:{}'.format(trade.strategy_name,
                                                                                            trade.tradeid,
-                                                                                           holding.to_str()))
+                                                                                           ))
 
                 # 写入交易记录
                 self.append_trade(trade)
+
+                strategy.on_trade(trade)
 
                 # 更新资金曲线
                 fund_kline = self.get_fund_kline(trade.strategy_name)
@@ -1192,20 +1203,6 @@ class BackTestingEngine(object):
 
         # 实时计算模式
         self.realtime_calculate()
-
-    def update_pos_buffer(self):
-        """更新持仓信息,把今仓=>昨仓"""
-
-        for k, v in self.pos_holding_dict.items():
-            if v.long_td > 0:
-                self.write_log(u'调整多单持仓:今仓{}=> 0 昨仓{} => 昨仓:{}'.format(v.long_td, v.long_yd, v.long_pos))
-                v.long_td = 0
-                v.longYd = v.long_pos
-
-            if v.short_td > 0:
-                self.write_log(u'调整空单持仓:今仓{}=> 0 昨仓{} => 昨仓:{}'.format(v.short_td, v.short_yd, v.short_pos))
-                v.short_td = 0
-                v.short_yd = v.short_pos
 
     def get_data_path(self):
         """
@@ -1841,19 +1838,6 @@ class BackTestingEngine(object):
             self.output(msg)
         else:
             self.write_log(msg)
-
-        # 今仓 =》 昨仓
-        for holding in self.holdings.values():
-            if holding.long_td > 0:
-                self.write_log(
-                    f'{holding.vt_symbol} 多单今仓{holding.long_td},昨仓:{holding.long_yd}=> 昨仓:{holding.long_pos}')
-                holding.long_td = 0
-                holding.long_yd = holding.long_pos
-            if holding.short_td > 0:
-                self.write_log(
-                    f'{holding.vt_symbol} 空单今仓{holding.short_td},昨仓:{holding.short_yd}=> 昨仓:{holding.short_pos}')
-                holding.short_td = 0
-                holding.short_yd = holding.short_pos
 
     # ---------------------------------------------------------------------
     def export_trade_result(self):

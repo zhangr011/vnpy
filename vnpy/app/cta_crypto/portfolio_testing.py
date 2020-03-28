@@ -279,8 +279,7 @@ class PortfolioTestingEngine(BackTestingEngine):
 
                         # 第二个交易日,撤单
                         self.cancel_orders()
-                        # 更新持仓缓存
-                        self.update_pos_buffer()
+
 
                         gc_collect_days += 1
                         if gc_collect_days >= 10:

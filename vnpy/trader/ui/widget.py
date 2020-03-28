@@ -750,7 +750,7 @@ class TradingWidget(QtWidgets.QWidget):
             self.return_label.setText(f"{r:.2f}%")
 
         if tick.bid_price_2:
-            self.bp2_label.setText(str(round(tick.bid_price_2), 7))
+            self.bp2_label.setText(str(round(tick.bid_price_2, 7)))
             self.bv2_label.setText(str(round(tick.bid_volume_2, 7)))
             self.ap2_label.setText(str(round(tick.ask_price_2, 7)))
             self.av2_label.setText(str(round(tick.ask_volume_2, 7)))

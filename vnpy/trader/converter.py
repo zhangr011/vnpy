@@ -130,11 +130,11 @@ class PositionHolding:
         if position.direction == Direction.LONG:
             self.long_pos = position.volume
             self.long_yd = position.yd_volume
-            self.long_td = self.long_pos - self.long_yd
+            self.long_td = round(self.long_pos - self.long_yd, 7)
         else:
             self.short_pos = position.volume
             self.short_yd = position.yd_volume
-            self.short_td = self.short_pos - self.short_yd
+            self.short_td = round(self.short_pos - self.short_yd, 7)
 
     def update_order(self, order: OrderData) -> None:
         """"""
@@ -211,7 +211,7 @@ class PositionHolding:
             if order.offset == Offset.OPEN:
                 continue
 
-            frozen = order.volume - order.traded
+            frozen = round(order.volume - order.traded, 7)
 
             if order.direction == Direction.LONG:
                 if order.offset == Offset.CLOSETODAY:
@@ -238,8 +238,8 @@ class PositionHolding:
                                                 - self.long_td)
                         self.long_td_frozen = self.long_td
 
-            self.long_pos_frozen = self.long_td_frozen + self.long_yd_frozen
-            self.short_pos_frozen = self.short_td_frozen + self.short_yd_frozen
+            self.long_pos_frozen = round(self.long_td_frozen + self.long_yd_frozen, 7)
+            self.short_pos_frozen = round(self.short_td_frozen + self.short_yd_frozen, 7)
 
     def convert_order_request_shfe(self, req: OrderRequest) -> List[OrderRequest]:
         """上期所，委托单拆分"""

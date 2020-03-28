@@ -494,10 +494,13 @@ class BinancefRestApi(RestClient):
         for asset in data["assets"]:
             account = AccountData(
                 accountid=asset["asset"],
-                balance=float(asset["walletBalance"]),
+                balance=float(asset["walletBalance"]) + float(asset["maintMargin"]),
                 frozen=float(asset["maintMargin"]),
+                holding_profit=float(asset['unrealizedProfit']),
                 gateway_name=self.gateway_name
             )
+            # 修正vnpy AccountData
+            account.balance += account.holding_profit
 
             if account.balance:
                 self.gateway.on_account(account)
@@ -516,69 +519,18 @@ class BinancefRestApi(RestClient):
         """"""
         for d in data:
             volume = float(d["positionAmt"])
-
-            if volume > 0:
-                long_position = PositionData(
-                    symbol=d["symbol"],
-                    exchange=Exchange.BINANCE,
-                    direction=Direction.LONG,
-                    volume=abs(volume),
-                    price=float(d["entryPrice"]),
-                    pnl=float(d["unRealizedProfit"]),
-                    gateway_name=self.gateway_name,
-                )
-                short_position = PositionData(
-                    symbol=d["symbol"],
-                    exchange=Exchange.BINANCE,
-                    direction=Direction.SHORT,
-                    volume=0,
-                    price=0,
-                    pnl=0,
-                    gateway_name=self.gateway_name,
-                )
-            elif volume < 0:
-                long_position = PositionData(
-                    symbol=d["symbol"],
-                    exchange=Exchange.BINANCE,
-                    direction=Direction.LONG,
-                    volume=0,
-                    price=0,
-                    pnl=0,
-                    gateway_name=self.gateway_name,
-                )
-                short_position = PositionData(
-                    symbol=d["symbol"],
-                    exchange=Exchange.BINANCE,
-                    direction=Direction.SHORT,
-                    volume=abs(volume),
-                    price=float(d["entryPrice"]),
-                    pnl=float(d["unRealizedProfit"]),
-                    gateway_name=self.gateway_name,
-                )
-            else:
-                long_position = PositionData(
-                    symbol=d["symbol"],
-                    exchange=Exchange.BINANCE,
-                    direction=Direction.LONG,
-                    volume=0,
-                    price=0,
-                    pnl=0,
-                    gateway_name=self.gateway_name,
-                )
-                short_position = PositionData(
-                    symbol=d["symbol"],
-                    exchange=Exchange.BINANCE,
-                    direction=Direction.SHORT,
-                    volume=0,
-                    price=0,
-                    pnl=0,
-                    gateway_name=self.gateway_name,
-                )
-
-            self.gateway.on_position(long_position)
-            self.gateway.on_position(short_position)
-
-       # self.gateway.write_log("持仓信息查询成功")
+            position = PositionData(
+                symbol=d["symbol"],
+                exchange=Exchange.BINANCE,
+                direction=Direction.NET,
+                volume=volume,
+                price=float(d["entryPrice"]),
+                pnl=float(d["unRealizedProfit"]),
+                gateway_name=self.gateway_name,
+            )
+            self.gateway.on_position(position)
+          
+        # self.gateway.write_log("持仓信息查询成功")
 
     def on_query_order(self, data: dict, request: Request) -> None:
         """"""
@@ -831,15 +783,34 @@ class BinancefTradeWebsocketApi(WebsocketClient):
 
     def on_account(self, packet: dict) -> None:
         """"""
+        holding_pnl = 0
+        for pos_data in packet["a"]["P"]:
+            print(pos_data)
+            volume = float(pos_data["pa"])
+            position = PositionData(
+                symbol=pos_data["s"],
+                exchange=Exchange.BINANCE,
+                direction=Direction.NET,
+                volume=abs(volume),
+                price=float(pos_data["ep"]),
+                pnl=float(pos_data["cr"]),
+                gateway_name=self.gateway_name,
+            )
+            holding_pnl += float(pos_data['up'])
+            self.gateway.on_position(position)
+
         for acc_data in packet["a"]["B"]:
             account = AccountData(
                 accountid=acc_data["a"],
-                balance=float(acc_data["wb"]),
+                balance=round(float(acc_data["wb"]), 7),
                 frozen=float(acc_data["wb"]) - float(acc_data["cw"]),
+                holding_profit=round(holding_pnl, 7),
                 gateway_name=self.gateway_name
             )
 
             if account.balance:
+                account.balance += account.holding_profit
+                account.available = float(acc_data["cw"])
                 self.gateway.on_account(account)
 
         for pos_data in packet["a"]["P"]:
