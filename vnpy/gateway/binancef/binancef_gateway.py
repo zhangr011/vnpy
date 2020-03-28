@@ -409,7 +409,7 @@ class BinancefRestApi(RestClient):
             "side": DIRECTION_VT2BINANCEF[req.direction],
             "type": ORDERTYPE_VT2BINANCEF[req.type],
             "price": float(req.price),
-            "quantity": round(req.volume, 7),
+            "quantity": float(req.volume),
             "newClientOrderId": orderid,
             "newOrderRespType": "ACK"
         }
@@ -812,18 +812,6 @@ class BinancefTradeWebsocketApi(WebsocketClient):
                 account.balance += account.holding_profit
                 account.available = float(acc_data["cw"])
                 self.gateway.on_account(account)
-
-        for pos_data in packet["a"]["P"]:
-            position = PositionData(
-                symbol=pos_data["s"],
-                exchange=Exchange.BINANCE,
-                direction=Direction.NET,
-                volume=round(float(pos_data["pa"]), 7),
-                price=float(pos_data["ep"]),
-                pnl=float(pos_data["cr"]),
-                gateway_name=self.gateway_name,
-            )
-            self.gateway.on_position(position)
 
     def on_order(self, packet: dict) -> None:
         """"""
