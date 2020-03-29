@@ -961,9 +961,9 @@ class CtaLineBar(object):
                        round(self.line_boll_middle[-1], self.round_n),
                        round(self.line_boll_upper[-1], self.round_n),
                        round(self.line_boll_lower[-1], self.round_n),
-                       round(self.line_middle_atan[-1], 2) if len(self.line_middle_atan) > 0 else 0,
-                       round(self.line_upper_atan[-1], 2) if len(self.line_upper_atan) > 0 else 0,
-                       round(self.line_lower_atan[-1], 2) if len(self.line_lower_atan) > 0 else 0)
+                       round(self.line_middle_atan[-1], self.round_n) if len(self.line_middle_atan) > 0 else 0,
+                       round(self.line_upper_atan[-1], self.round_n) if len(self.line_upper_atan) > 0 else 0,
+                       round(self.line_lower_atan[-1], self.round_n) if len(self.line_lower_atan) > 0 else 0)
 
         if (self.para_boll2_len > 0 or self.para_boll2_tb_len > 0) and len(self.line_boll_upper) > 0:
             msg = msg + u',Boll2({}):std:{},m:{},u:{},l:{}'. \
@@ -998,8 +998,8 @@ class CtaLineBar(object):
 
         if self.para_active_skd and len(self.line_sk) > 1 and len(self.line_sd) > 1:
             msg = msg + u',SK:{}/SD:{}{}{},count:{}' \
-                .format(round(self.line_sk[-1], 2),
-                        round(self.line_sd[-1], 2),
+                .format(round(self.line_sk[-1], self.round_n),
+                        round(self.line_sd[-1], self.round_n),
                         u'金叉' if self.cur_skd_count == 1 else u'',
                         u'死叉' if self.cur_skd_count == -1 else u'',
                         self.cur_skd_count)
@@ -1379,7 +1379,7 @@ class CtaLineBar(object):
             # 计算斜率
             if len(self.line_ma1) > 2 and self.line_ma1[-2] != 0:
                 ma1_atan = math.atan((self.line_ma1[-1] / self.line_ma1[-2] - 1) * 100) * 180 / math.pi
-                ma1_atan = round(ma1_atan, 3)
+                ma1_atan = round(ma1_atan, self.round_n)
                 if len(self.line_ma1_atan) > self.max_hold_bars:
                     del self.line_ma1_atan[0]
                 self.line_ma1_atan.append(ma1_atan)
@@ -1397,7 +1397,7 @@ class CtaLineBar(object):
             # 计算斜率
             if len(self.line_ma2) > 2 and self.line_ma2[-2] != 0:
                 ma2_atan = math.atan((self.line_ma2[-1] / self.line_ma2[-2] - 1) * 100) * 180 / math.pi
-                ma2_atan = round(ma2_atan, 3)
+                ma2_atan = round(ma2_atan, self.round_n)
                 if len(self.line_ma2_atan) > self.max_hold_bars:
                     del self.line_ma2_atan[0]
                 self.line_ma2_atan.append(ma2_atan)
@@ -1415,7 +1415,7 @@ class CtaLineBar(object):
             # 计算斜率
             if len(self.line_ma3) > 2 and self.line_ma3[-2] != 0:
                 ma3_atan = math.atan((self.line_ma3[-1] / self.line_ma3[-2] - 1) * 100) * 180 / math.pi
-                ma3_atan = round(ma3_atan, 3)
+                ma3_atan = round(ma3_atan, self.round_n)
                 if len(self.line_ma3_atan) > self.max_hold_bars:
                     del self.line_ma3_atan[0]
                 self.line_ma3_atan.append(ma3_atan)
@@ -2032,21 +2032,21 @@ class CtaLineBar(object):
                 # 计算斜率
                 if len(self.line_boll_upper) > 2 and self.line_boll_upper[-2] != 0:
                     up_atan = math.atan((self.line_boll_upper[-1] / self.line_boll_upper[-2] - 1) * 100) * 180 / math.pi
-                    up_atan = round(up_atan, 3)
+                    up_atan = round(up_atan, self.round_n)
                     if len(self.line_upper_atan) > self.max_hold_bars:
                         del self.line_upper_atan[0]
                     self.line_upper_atan.append(up_atan)
                 if len(self.line_boll_middle) > 2 and self.line_boll_middle[-2] != 0:
                     mid_atan = math.atan(
                         (self.line_boll_middle[-1] / self.line_boll_middle[-2] - 1) * 100) * 180 / math.pi
-                    mid_atan = round(mid_atan, 3)
+                    mid_atan = round(mid_atan, self.round_n)
                     if len(self.line_middle_atan) > self.max_hold_bars:
                         del self.line_middle_atan[0]
                     self.line_middle_atan.append(mid_atan)
                 if len(self.line_boll_lower) > 2 and self.line_boll_lower[-2] != 0:
                     low_atan = math.atan(
                         (self.line_boll_lower[-1] / self.line_boll_lower[-2] - 1) * 100) * 180 / math.pi
-                    low_atan = round(low_atan, 3)
+                    low_atan = round(low_atan, self.round_n)
                     if len(self.line_lower_atan) > self.max_hold_bars:
                         del self.line_lower_atan[0]
                     self.line_lower_atan.append(low_atan)
@@ -2091,21 +2091,21 @@ class CtaLineBar(object):
                 if len(self.line_boll2_upper) > 2 and self.line_boll2_upper[-2] != 0:
                     up_atan = math.atan(
                         (self.line_boll2_upper[-1] / self.line_boll2_upper[-2] - 1) * 100) * 180 / math.pi
-                    up_atan = round(up_atan, 3)
+                    up_atan = round(up_atan, self.round_n)
                     if len(self.line_upper2_atan) > self.max_hold_bars:
                         del self.line_upper2_atan[0]
                     self.line_upper2_atan.append(up_atan)
                 if len(self.line_boll2_middle) > 2 and self.line_boll2_middle[-2] != 0:
                     mid_atan = math.atan(
                         (self.line_boll2_middle[-1] / self.line_boll2_middle[-2] - 1) * 100) * 180 / math.pi
-                    mid_atan = round(mid_atan, 3)
+                    mid_atan = round(mid_atan, self.round_n)
                     if len(self.line_middle2_atan) > self.max_hold_bars:
                         del self.line_middle2_atan[0]
                     self.line_middle2_atan.append(mid_atan)
                 if len(self.line_boll2_lower) > 2 and self.line_boll2_lower[-2] != 0:
                     low_atan = math.atan(
                         (self.line_boll2_lower[-1] / self.line_boll2_lower[-2] - 1) * 100) * 180 / math.pi
-                    low_atan = round(low_atan, 3)
+                    low_atan = round(low_atan, self.round_n)
                     if len(self.line_lower2_atan) > self.max_hold_bars:
                         del self.line_lower2_atan[0]
                     self.line_lower2_atan.append(low_atan)
@@ -2147,21 +2147,21 @@ class CtaLineBar(object):
                 # 计算斜率
                 if len(self.line_boll_upper) > 2 and self.line_boll_upper[-2] != 0:
                     up_atan = math.atan((self.line_boll_upper[-1] / self.line_boll_upper[-2] - 1) * 100) * 180 / math.pi
-                    up_atan = round(up_atan, 3)
+                    up_atan = round(up_atan, self.round_n)
                     if len(self.line_upper_atan) > self.max_hold_bars:
                         del self.line_upper_atan[0]
                     self.line_upper_atan.append(up_atan)
                 if len(self.line_boll_middle) > 2 and self.line_boll_middle[-2] != 0:
                     mid_atan = math.atan(
                         (self.line_boll_middle[-1] / self.line_boll_middle[-2] - 1) * 100) * 180 / math.pi
-                    mid_atan = round(mid_atan, 3)
+                    mid_atan = round(mid_atan, self.round_n)
                     if len(self.line_middle_atan) > self.max_hold_bars:
                         del self.line_middle_atan[0]
                     self.line_middle_atan.append(mid_atan)
                 if len(self.line_boll_lower) > 2 and self.line_boll_lower[-2] != 0:
                     low_atan = math.atan(
                         (self.line_boll_lower[-1] / self.line_boll_lower[-2] - 1) * 100) * 180 / math.pi
-                    low_atan = round(low_atan, 3)
+                    low_atan = round(low_atan, self.round_n)
                     if len(self.line_lower_atan) > self.max_hold_bars:
                         del self.line_lower_atan[0]
                     self.line_lower_atan.append(low_atan)
@@ -2202,21 +2202,21 @@ class CtaLineBar(object):
                 if len(self.line_boll2_upper) > 2 and self.line_boll2_upper[-2] != 0:
                     up_atan = math.atan(
                         (self.line_boll2_upper[-1] / self.line_boll2_upper[-2] - 1) * 100) * 180 / math.pi
-                    up_atan = round(up_atan, 3)
+                    up_atan = round(up_atan, self.round_n)
                     if len(self.line_upper2_atan) > self.max_hold_bars:
                         del self.line_upper2_atan[0]
                     self.line_upper2_atan.append(up_atan)
                 if len(self.line_boll2_middle) > 2 and self.line_boll2_middle[-2] != 0:
                     mid_atan = math.atan(
                         (self.line_boll2_middle[-1] / self.line_boll2_middle[-2] - 1) * 100) * 180 / math.pi
-                    mid_atan = round(mid_atan, 3)
+                    mid_atan = round(mid_atan, self.round_n)
                     if len(self.line_middle2_atan) > self.max_hold_bars:
                         del self.line_middle2_atan[0]
                     self.line_middle2_atan.append(mid_atan)
                 if len(self.line_boll2_lower) > 2 and self.line_boll2_lower[-2] != 0:
                     low_atan = math.atan(
                         (self.line_boll2_lower[-1] / self.line_boll2_lower[-2] - 1) * 100) * 180 / math.pi
-                    low_atan = round(low_atan, 3)
+                    low_atan = round(low_atan, self.round_n)
                     if len(self.line_lower2_atan) > self.max_hold_bars:
                         del self.line_lower2_atan[0]
                     self.line_lower2_atan.append(low_atan)
@@ -2258,15 +2258,15 @@ class CtaLineBar(object):
             # 计算斜率
             if len(self.line_boll_upper) > 2 and self.line_boll_upper[-1] != 0:
                 up_atan = math.atan((self._rt_upper / self.line_boll_upper[-1] - 1) * 100) * 180 / math.pi
-                self._rt_upper_atan = round(up_atan, 3)
+                self._rt_upper_atan = round(up_atan, self.round_n)
 
             if len(self.line_boll_middle) > 2 and self.line_boll_middle[-1] != 0:
                 mid_atan = math.atan((self._rt_middle / self.line_boll_middle[-1] - 1) * 100) * 180 / math.pi
-                self._rt_middle_atan = round(mid_atan, 3)
+                self._rt_middle_atan = round(mid_atan, self.round_n)
 
             if len(self.line_boll_lower) > 2 and self.line_boll_lower[-1] != 0:
                 low_atan = math.atan((self._rt_lower / self.line_boll_lower[-1] - 1) * 100) * 180 / math.pi
-                self._rt_lower_atan = round(low_atan, 3)
+                self._rt_lower_atan = round(low_atan, self.round_n)
 
         if boll_02_len > 0:
             if self.bar_len < min(14, boll_02_len) + 1:
@@ -2297,15 +2297,15 @@ class CtaLineBar(object):
             # 计算斜率
             if len(self.line_boll2_upper) > 2 and self.line_boll2_upper[-1] != 0:
                 up_atan = math.atan((self._rt_upper2 / self.line_boll2_upper[-1] - 1) * 100) * 180 / math.pi
-                self._rt_upper2_atan = round(up_atan, 3)
+                self._rt_upper2_atan = round(up_atan, self.round_n)
 
             if len(self.line_boll2_middle) > 2 and self.line_boll2_middle[-1] != 0:
                 mid_atan = math.atan((self._rt_middle2 / self.line_boll2_middle[-1] - 1) * 100) * 180 / math.pi
-                self._rt_middle2_atan = round(mid_atan, 3)
+                self._rt_middle2_atan = round(mid_atan, self.round_n)
 
             if len(self.line_boll2_lower) > 2 and self.line_boll2_lower[-1] != 0:
                 low_atan = math.atan((self._rt_lower2 / self.line_boll2_lower[-1] - 1) * 100) * 180 / math.pi
-                self._rt_lower2_atan = round(low_atan, 3)
+                self._rt_lower2_atan = round(low_atan, self.round_n)
 
     @property
     def rt_upper(self):
@@ -2670,15 +2670,15 @@ class CtaLineBar(object):
 
         if len(self.line_dif) > self.max_hold_bars:
             del self.line_dif[0]
-        self.line_dif.append(round(dif_list[-1], 2))
+        self.line_dif.append(round(dif_list[-1], self.round_n))
 
         if len(self.line_dea) > self.max_hold_bars:
             del self.line_dea[0]
-        self.line_dea.append(round(dea_list[-1], 2))
+        self.line_dea.append(round(dea_list[-1], self.round_n))
 
         if len(self.line_macd) > self.max_hold_bars:
             del self.line_macd[0]
-        self.line_macd.append(round(macd_list[-1] * 2, 2))  # 国内一般是2倍
+        self.line_macd.append(round(macd_list[-1] * 2, self.round_n))  # 国内一般是2倍
 
         # 更新 “段”（金叉-》死叉；或 死叉-》金叉)
         segment = self.macd_segment_list[-1] if len(self.macd_segment_list) > 0 else {}
@@ -2689,7 +2689,7 @@ class CtaLineBar(object):
             segment = {}
             # 金叉/死叉，更新位置&价格
             self.cur_macd_count, self.rt_macd_count = (1, 1) if self.line_macd[-1] > 0 else (-1, -1)
-            self.cur_macd_cross = round((self.line_dif[-1] + self.line_dea[-1]) / 2, 2)
+            self.cur_macd_cross = round((self.line_dif[-1] + self.line_dea[-1]) / 2, self.round_n)
             self.cur_macd_cross_price = self.close_array[-1]
             self.rt_macd_cross = self.cur_macd_cross
             self.rt_macd_cross_price = self.cur_macd_cross_price
@@ -2722,7 +2722,7 @@ class CtaLineBar(object):
 
         else:
             # 继续金叉
-            if self.line_macd[-1] > 0 and self.cur_macd_count > 0:
+            if self.line_macd[-1] > 0 and self.cur_macd_count >= 0:
                 self.cur_macd_count += 1
 
                 segment.update({
@@ -2740,7 +2740,7 @@ class CtaLineBar(object):
                 self.rt_macd_cross_price = 0
 
             # 继续死叉
-            elif self.line_macd[-1] < 0 and self.cur_macd_count < 0:
+            elif self.line_macd[-1] < 0 and self.cur_macd_count <= 0:
                 self.cur_macd_count -= 1
                 segment.update({
                     'macd_count': self.cur_macd_count,
@@ -2783,22 +2783,22 @@ class CtaLineBar(object):
                                  fastperiod=self.para_macd_fast_len,
                                  slowperiod=self.para_macd_slow_len, signalperiod=self.para_macd_signal_len)
 
-        self._rt_dif = round(dif[-1], 2) if len(dif) > 0 else None
-        self._rt_dea = round(dea[-1], 2) if len(dea) > 0 else None
-        self._rt_macd = round(macd[-1] * 2, 2) if len(macd) > 0 else None
+        self._rt_dif = round(dif[-1], self.round_n) if len(dif) > 0 else None
+        self._rt_dea = round(dea[-1], self.round_n) if len(dea) > 0 else None
+        self._rt_macd = round(macd[-1] * 2, self.round_n) if len(macd) > 0 else None
 
         # 判断是否实时金叉/死叉
         if self._rt_macd is not None:
             # 实时金叉
             if self._rt_macd >= 0 and self.line_macd[-1] < 0:
                 self.rt_macd_count = 1
-                self.rt_macd_cross = round((self._rt_dif + self._rt_dea) / 2, 2)
+                self.rt_macd_cross = round((self._rt_dif + self._rt_dea) / 2, self.round_n)
                 self.rt_macd_cross_price = self.cur_price
 
             # 实时死叉
             elif self._rt_macd <= 0 and self.line_macd[-1] > 0:
                 self.rt_macd_count = -1
-                self.rt_macd_cross = round((self._rt_dif + self._rt_dea) / 2, 2)
+                self.rt_macd_cross = round((self._rt_dif + self._rt_dea) / 2, self.round_n)
                 self.rt_macd_cross_price = self.cur_price
 
     @property
@@ -2966,7 +2966,7 @@ class CtaLineBar(object):
         cur_cci = ta.CCI(high=self.high_array[-2 * self.para_cci_len:], low=self.low_array[-2 * self.para_cci_len:],
                          close=self.close_array[-2 * self.para_cci_len:], timeperiod=self.para_cci_len)[-1]
 
-        self.cur_cci = round(float(cur_cci), 3)
+        self.cur_cci = round(float(cur_cci), self.round_n)
 
         if len(self.line_cci) > self.max_hold_bars:
             del self.line_cci[0]
@@ -3068,7 +3068,7 @@ class CtaLineBar(object):
 
         # atan2 = math.atan((ma5 / ma5_ref1 - 1) * 100) * 180 / math.pi
         # atan3 = math.atan(ma5 / ma5_ref1 - 1)* 100
-        self.cur_atan = round(self.cur_atan, 3)
+        self.cur_atan = round(self.cur_atan, self.round_n)
         # self.write_log(u'{}/{}/{}'.format(self.atan, atan2, atan3))
 
         if self.cur_period is None:
@@ -4069,18 +4069,18 @@ class CtaLineBar(object):
             return False
 
         # 振幅 = 高-低 / 收盘价 百分比
-        cur_wave_rate = round(100 * float((high - low) / close), 2)
+        cur_wave_rate = round(100 * float((high - low) / close), self.round_n)
 
         # 上涨时，判断上影线
         if direction == Direction.LONG:
             # 上影线比例 = 上影线（高- max（开盘，收盘））/ 当日振幅=（高-低）
-            cur_shadow_rate = round(100 * float((high - max(open, close)) / (high - low)), 2)
+            cur_shadow_rate = round(100 * float((high - max(open, close)) / (high - low)), self.round_n)
             if cur_wave_rate >= wave_rate and cur_shadow_rate >= shadow_rate:
                 return True
 
         # 下跌时，判断下影线
         elif direction == Direction.SHORT:
-            cur_shadow_rate = round(100 * float((min(open, close) - low) / (high - low)), 2)
+            cur_shadow_rate = round(100 * float((min(open, close) - low) / (high - low)), self.round_n)
             if cur_wave_rate >= wave_rate and cur_shadow_rate >= shadow_rate:
                 return True
 
@@ -4578,7 +4578,7 @@ class CtaMinuteBar(CtaLineBar):
             if int(bar.datetime.strftime('%H%M')) > 1130 and int(bar.datetime.strftime('%H%M')) < 1600:
                 # 扣除11:30到13:00的中场休息的90分钟
                 minutes_passed = minutes_passed - 90
-        else:
+        elif not self.is_7x24:
             if int(bar.datetime.strftime('%H%M')) > 1015 and int(bar.datetime.strftime('%H%M')) <= 1130:
                 # 扣除10:15到10:30的中场休息的15分钟
                 minutes_passed = minutes_passed - 15
