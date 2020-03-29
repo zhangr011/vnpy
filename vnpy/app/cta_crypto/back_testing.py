@@ -713,11 +713,6 @@ class BackTestingEngine(object):
         vt_symbol = strategy_setting.get('vt_symbol')
         if '.' in vt_symbol:
             symbol, exchange = extract_vt_symbol(vt_symbol)
-        elif self.contract_type == 'future':
-            symbol = vt_symbol
-            underly_symbol = get_underlying_symbol(symbol).upper()
-            exchange = self.get_exchange(f'{underly_symbol}99')
-            vt_symbol = '.'.join([symbol, exchange.value])
         else:
             symbol = vt_symbol
             exchange = Exchange.LOCAL
