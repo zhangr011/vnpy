@@ -1580,7 +1580,9 @@ class CtaProFutureTemplate(CtaProTemplate):
                         self.write_log(u'撤单失败,更新状态为撤单成功')
                         order_info.update({'status': Status.CANCELLED})
                         self.active_orders.update({vt_orderid: order_info})
-
+                        if order_grid:
+                            if vt_orderid in order_grid.order_ids:
+                                order_grid.order_ids.remove(vt_orderid)
                 continue
 
             # 处理状态为‘撤销’的委托单

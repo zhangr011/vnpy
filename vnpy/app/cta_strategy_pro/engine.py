@@ -1533,7 +1533,7 @@ class CtaEngine(BaseEngine):
                 'account_id': self.engine_config.get('account_id', '-'),
                 'vt_symbol': vt_symbol,
                 'direction': Direction.SHORT.value,
-                'strategy_list': symbol_pos.get('多单策略', [])}
+                'strategy_list': symbol_pos.get('空单策略', [])}
 
             # 多空都一致
             if round(symbol_pos['账号空单'], 7) == round(symbol_pos['策略空单'], 7) and \

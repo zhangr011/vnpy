@@ -377,7 +377,7 @@ class BackTestingEngine(object):
 
     def get_position_holding(self, vt_symbol: str, gateway_name: str = ''):
         """ 查询合约在账号的持仓（包含多空）"""
-        if gateway_name:
+        if len(gateway_name) == 0:
             gateway_name = self.gateway_name
         k = f'{gateway_name}.{vt_symbol}'
         holding = self.holdings.get(k, None)
@@ -952,7 +952,7 @@ class BackTestingEngine(object):
                 strategy_cond = strategy.strategy_name == order_strategy.strategy_name
 
             if offset_cond and symbol_cond and strategy_cond:
-                self.write_log(u'撤销订单:{},{} {}@{}'
+                self.write_log(u'撤销限价订单:{},{} {}@{}'
                                .format(vt_orderid, order.direction, order.price, order.volume))
                 order.status = Status.CANCELLED
                 order.cancel_time = str(self.last_dt)
