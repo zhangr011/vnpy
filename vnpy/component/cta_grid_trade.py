@@ -38,48 +38,35 @@ class CtaGrid(object):
     包括交易方向，开仓价格，平仓价格，止损价格，开仓状态，平仓状态
     """
 
-    def __init__(self,
-                 direction: Direction = None,
-                 open_price: float = 0,
-                 close_price: float = 0,
-                 stop_price: float = 0,
-                 vt_symbol: str = '',
-                 volume: float = 0,
-                 traded_volume: float = 0,
-                 order_status: bool = False,
-                 open_status: bool = False,
-                 close_status: bool = False,
-                 open_time: datetime = None,
-                 order_time: datetime = None,
-                 reuse_count: int = 0,
-                 type: str = ''
-                 ):
+    def __init__(self, **kwargs ):
 
-        self.id: str = str(uuid.uuid1())  # gid
-        self.direction = direction  # 交易方向（LONG：多，正套；SHORT：空，反套）
-        self.open_price = open_price  # 开仓价格
-        self.close_price = close_price  # 止盈价格
-        self.stop_price = stop_price  # 止损价格
-        self.vt_symbol = vt_symbol  # 品种合约
-        self.volume = volume  # 开仓数量( 兼容数字货币 )
-        self.traded_volume = traded_volume  # 已成交数量 开仓时，为开仓数量，平仓时，为平仓数量
-        self.order_status = order_status  # 挂单状态: True,已挂单，False，未挂单
-        self.order_ids = []  # order_id list
-        self.open_status = open_status  # 开仓状态
-        self.close_status = close_status  # 平仓状态
-        self.open_time = open_time  # 开仓时间
-        self.order_time = order_time  # 委托时间
-        self.lock_grid_ids = []  # 锁单的网格，[gid,gid]
-        self.reuse_count = reuse_count  # 重用次数（0， 平仓后是否删除）
-        self.type = type  # 网格类型标签
-        self.snapshot = {}  # 切片数据，如记录开仓点时的某些状态数据
+        self.id: str = kwargs.get('id', str(uuid.uuid1()))  # gid
+        self.direction = kwargs.get('direction', None)  # 交易方向（LONG：多，正套；SHORT：空，反套）
+        if isinstance(self.direction, str):
+            self.direction = Direction(self.direction)
+        self.open_price = kwargs.get('open_price', 0)  # 开仓价格
+        self.close_price = kwargs.get('close_price', 0)  # 止盈价格
+        self.stop_price = kwargs.get('stop_price', 0)  # 止损价格
+        self.vt_symbol = kwargs.get('vt_symbol', '')  # 品种合约
+        self.volume = kwargs.get('volume', 0.0)  # 开仓数量( 兼容数字货币 )
+        self.traded_volume = kwargs.get('traded_volume', 0.0)  # 已成交数量 开仓时，为开仓数量，平仓时，为平仓数量
+        self.order_status = kwargs.get('order_status', False)  # 挂单状态: True,已挂单，False，未挂单
+        self.order_ids = kwargs.get('order_ids',[])  # order_id list
+        self.open_status = kwargs.get('open_status', False)  # 开仓状态
+        self.close_status = kwargs.get('close_status', False)  # 平仓状态
+        self.open_time = kwargs.get('open_time', None)  # 开仓时间
+        self.order_time = kwargs.get('order_time', None)  # 委托时间
+        self.lock_grid_ids = kwargs.get('lock_grid_ids', [])  # 锁单的网格，[gid,gid]
+        self.reuse_count = kwargs.get('reuse_count', 0)  # 重用次数（0， 平仓后是否删除）
+        self.type = kwargs.get('type', '')  # 网格类型标签
+        self.snapshot = kwargs.get('snapshot',{})  # 切片数据，如记录开仓点时的某些状态数据
 
     def to_json(self):
         """输出JSON"""
 
         j = OrderedDict()
         j['id'] = self.id
-        j['direction'] = self.direction.value if self.direction else ''
+        j['direction'] = self.direction.value if isinstance(self.direction, Direction) else ''
         j['open_price'] = self.open_price  # 开仓价格
         j['close_price'] = self.close_price  # 平仓价格
         j['stop_price'] = self.stop_price  # 止损价格
@@ -90,7 +77,7 @@ class CtaGrid(object):
         j['order_ids'] = self.order_ids  # OrderId
         j['open_status'] = self.open_status  # 开仓状态
         j['close_status'] = self.close_status  # 平仓状态
-        j['lockGrids'] = self.lock_grid_ids  # 对锁的网格
+        j['lock_grid_ids'] = self.lock_grid_ids  # 对锁的网格
         j['reuse_count'] = self.reuse_count  # 是否重用
         j['type'] = self.type  # 类型
         j['snapshot'] = self.snapshot  # 切片数据
@@ -124,7 +111,7 @@ class CtaGrid(object):
             self.vt_symbol = j.get('vt_symbol', '')
             self.volume = j.get('volume', 0.0)
             self.traded_volume = j.get('traded_volume', 0.0)  # 已交易的合约数量
-            self.lock_grid_ids = j.get('lockGrids', [])
+            self.lock_grid_ids = j.get('lock_grid_ids', [])
             self.type = j.get('type', '')
 
             self.reuse_count = j.get('reuse_count', 0)
@@ -900,8 +887,8 @@ class CtaGridTrade(CtaComponent):
         data[u'up_grids'] = up_grids
         data[u'dn_grids'] = dn_grids
 
-        with open(grid_json_file, 'w') as f:
-            json_data = json.dumps(data, indent=4)
+        with open(grid_json_file, 'w', encoding='utf8') as f:
+            json_data = json.dumps(data, indent=4, ensure_ascii=True)
             f.write(json_data)
 
         self.write_log(u'GrideTrade保存文件{}完成'.format(grid_json_file))
@@ -928,7 +915,7 @@ class CtaGridTrade(CtaComponent):
             self.write_log(u'{}不存在，新建保存保存'.format(grid_json_file))
             try:
                 with open(grid_json_file, 'w') as f:
-                    json_data = json.dumps(data, indent=4)
+                    json_data = json.dumps(data, indent=4, ensure_ascii=True)
                     f.write(json_data)
             except Exception as ex:
                 self.write_log(u'写入网格文件{}异常:{}'.format(grid_json_file, str(ex)))
@@ -951,7 +938,7 @@ class CtaGridTrade(CtaComponent):
         grids = []
         for grid_obj in json_grids:
 
-            grid = CtaGrid(grid_obj)
+            grid = CtaGrid(**grid_obj)
 
             self.write_log(grid.to_str())
 
