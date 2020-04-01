@@ -11,6 +11,20 @@ from vnpy.trader.utility import load_json, save_json
 # 期货的配置文件
 TDX_FUTURE_CONFIG = 'tdx_future_config.json'
 # 股票的配置文件
+# 存储格式 dict{
+#   "cache_time": datetime,
+#   "symbol_dict": {
+#       "symbol_marketid": {
+#           'code', '395001',
+#           'volunit', 100,
+#           'decimal_point', 2,
+#           'name', '主板Ａ股',
+#           'pre_close', 458.0,
+#           'exchagne','SZSE',
+#           'stock_type', 'index_cn',
+#           'market_id', 0
+#           }
+#    } }
 TDX_STOCK_CONFIG = 'tdx_stock_config.pkb2'
 
 
@@ -110,6 +124,64 @@ def save_cache_json(data_dict: dict, json_file_name: str):
     """保存本地缓存的JSON配置信息"""
     config_file_name = os.path.abspath(os.path.join(os.path.dirname(__file__), json_file_name))
     save_json(filename=config_file_name, data=data_dict)
+
+
+def get_stock_type(code):
+    """获取股票得分类"""
+    market_id = get_tdx_market_code(code)
+
+    if market_id == 0:
+        return get_stock_type_sz(code)
+    else:
+        return get_stock_type_sh(code)
+
+
+def get_stock_type_sz(code):
+    """深市代码分类
+    Arguments:
+        code {[type]} -- [description]
+    Returns:
+        [type] -- [description]
+    """
+
+    if str(code)[0:2] in ['00', '30', '02']:
+        return 'stock_cn'
+    elif str(code)[0:2] in ['39']:
+        return 'index_cn'
+    elif str(code)[0:2] in ['15']:
+        return 'etf_cn'
+    elif str(code)[0:2] in ['10', '11', '13']:
+        # 10xxxx 国债现货
+        # 11xxxx 债券
+        # 12xxxx 国债回购
+        return 'bond_cn'
+    elif str(code)[0:2] in ['12']:
+        # 12xxxx 可转换债券
+        return 'cb_cn'
+
+    elif str(code)[0:2] in ['20']:
+        return 'stockB_cn'
+    else:
+        return 'undefined'
+
+
+def get_stock_type_sh(code):
+    if str(code)[0] == '6':
+        return 'stock_cn'
+    elif str(code)[0:3] in ['000', '880']:
+        return 'index_cn'
+    elif str(code)[0:2] == '51':
+        return 'etf_cn'
+    # 110×××120×××企业债券；
+    # 129×××100×××可转换债券；
+    elif str(code)[0:3] in ["009", "112", '120', "132", "204"]:
+        return 'bond_cn'
+
+    elif str(code)[0:3] in ["110", "113", "121", "122", "126",
+                            "130", "181", "190", "191", "192", "201", "202", "203"]:
+        return 'cb_cn'
+    else:
+        return 'undefined'
 
 
 class FakeStrategy(object):

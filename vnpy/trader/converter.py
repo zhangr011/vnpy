@@ -25,8 +25,8 @@ class OffsetConverter:
 
     def update_position(self, position: PositionData) -> None:
         """"""
-        if not self.is_convert_required(position.vt_symbol):
-            return
+        # if not self.is_convert_required(position.vt_symbol):
+        #     return
 
         holding = self.get_position_holding(position.vt_symbol, position.gateway_name)
         holding.update_position(position)
@@ -57,6 +57,10 @@ class OffsetConverter:
 
     def get_position_holding(self, vt_symbol: str, gateway_name: str = '') -> "PositionHolding":
         """获取持仓信息"""
+        if len(gateway_name) == 0:
+            contract = self.main_engine.get_contract(vt_symbol)
+            if contract:
+                gateway_name = contract.gateway_name
         k = f'{gateway_name}.{vt_symbol}'
         holding = self.holdings.get(k, None)
         if not holding:

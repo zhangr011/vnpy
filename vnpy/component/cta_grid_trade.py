@@ -123,9 +123,9 @@ class CtaGrid(object):
     def to_str(self):
         """转换字符串显示内容"""
 
-        str = u'o:{}/{};c:{}/{},r:{}/opentime:{}/ordertime:{}' \
+        str = u'o:{}/{};c:{}/{},r:{}/opentime:{}/ordertime:{},v:{}' \
             .format(self.open_price, self.open_status, self.close_price,
-                    self.close_status, self.order_ids, self.open_time, self.order_time)
+                    self.close_status, self.order_ids, self.open_time, self.order_time, self.volume)
         if len(self.vt_symbol) > 0:
             return u'{} {}'.format(self.vt_symbol, str)
         else:

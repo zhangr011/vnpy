@@ -373,7 +373,7 @@ class CtaLineBar(object):
 
         self.para_boll2_len = 0  # 第二条布林的计算K线周期
         self.para_boll2_tb_len = 0  # 第二跳布林的计算K线周期( 适用于TB的计算方式）
-        self.para_boll2_std_sate = 2  # 第二条布林标准差（缺省2倍）
+        self.para_boll2_std_rate = 2  # 第二条布林标准差（缺省2倍）
 
         self.para_kdj_len = 0  # KDJ指标的长度,缺省是9
         self.para_kdj_tb_len = 0  # KDJ指标的长度,缺省是9 ( for TB)
@@ -2059,9 +2059,9 @@ class CtaLineBar(object):
                 boll2Len = min(self.bar_len, self.para_boll2_len)
 
                 # 不包含当前最新的Bar
-                upper_list, middle_list, lower_list = ta.BBANDS(self.close_array[-2 * self.para_boll2_len],
-                                                                timeperiod=boll2Len, nbdevup=self.para_boll2_std_sate,
-                                                                nbdevdn=self.para_boll2_std_sate, matype=0)
+                upper_list, middle_list, lower_list = ta.BBANDS(self.close_array,
+                                                                timeperiod=boll2Len, nbdevup=self.para_boll2_std_rate,
+                                                                nbdevdn=self.para_boll2_std_rate, matype=0)
                 if len(self.line_boll2_upper) > self.max_hold_bars:
                     del self.line_boll2_upper[0]
                 if len(self.line_boll2_middle) > self.max_hold_bars:
@@ -2072,7 +2072,7 @@ class CtaLineBar(object):
                     del self.line_boll2_std[0]
 
                 # 1标准差
-                std = (upper_list[-1] - lower_list[-1]) / (self.para_boll2_std_sate * 2)
+                std = (upper_list[-1] - lower_list[-1]) / (self.para_boll2_std_rate * 2)
                 self.line_boll2_std.append(std)
 
                 upper = round(upper_list[-1], self.round_n)
@@ -2188,15 +2188,15 @@ class CtaLineBar(object):
 
                 middle = np.mean(self.close_array[-2 * boll2Len:])
                 self.line_boll2_middle.append(middle)  # 中轨
-                self.cur_middle2 = middle - middle % self.price_tick  # 中轨取整
+                self.cur_middle2 = middle  # 中轨取整
 
-                upper = middle + self.para_boll2_std_sate * std
+                upper = middle + self.para_boll2_std_rate * std
                 self.line_boll2_upper.append(upper)  # 上轨
-                self.cur_upper2 = upper - upper % self.price_tick  # 上轨取整
+                self.cur_upper2 = upper  # 上轨取整
 
-                lower = middle - self.para_boll2_std_sate * std
+                lower = middle - self.para_boll2_std_rate * std
                 self.line_boll2_lower.append(lower)  # 下轨
-                self.cur_lower2 = lower - lower % self.price_tick  # 下轨取整
+                self.cur_lower2 = lower  # 下轨取整
 
                 # 计算斜率
                 if len(self.line_boll2_upper) > 2 and self.line_boll2_upper[-2] != 0:
@@ -2229,6 +2229,8 @@ class CtaLineBar(object):
         if not (boll_01_len > 0 or boll_02_len > 0):  # 不计算
             return
 
+        rt_close_array = np.append(self.close_array, [self.line_bar[-1].close_price])
+
         if boll_01_len > 0:
             if self.bar_len < min(14, boll_01_len) + 1:
                 return
@@ -2236,7 +2238,7 @@ class CtaLineBar(object):
             bollLen = min(boll_01_len, self.bar_len)
 
             if self.para_boll_tb_len == 0:
-                upper_list, middle_list, lower_list = ta.BBANDS(self.close_array[-bollLen:],
+                upper_list, middle_list, lower_list = ta.BBANDS(rt_close_array,
                                                                 timeperiod=bollLen, nbdevup=self.para_boll_std_rate,
                                                                 nbdevdn=self.para_boll_std_rate, matype=0)
 
@@ -2247,8 +2249,8 @@ class CtaLineBar(object):
                 self._rt_lower = round(lower_list[-1], self.round_n)
             else:
                 # 1标准差
-                std = np.std(np.append(self.close_array[-boll_01_len:], [self.line_bar[-1].close]), ddof=1)
-                middle = np.mean(np.append(self.close_array[-boll_01_len:], [self.line_bar[-1].close]))
+                std = np.std(rt_close_array[-boll_01_len:])
+                middle = np.mean(rt_close_array[-boll_01_len:])
                 self._rt_middle = round(middle, self.round_n)
                 upper = middle + self.para_boll_std_rate * std
                 self._rt_upper = round(upper, self.round_n)
@@ -2275,19 +2277,20 @@ class CtaLineBar(object):
             bollLen = min(boll_02_len, self.bar_len)
 
             if self.para_boll2_tb_len == 0:
-                upper_list, middle_list, lower_list = ta.BBANDS(self.close_array[-bollLen:],
-                                                                timeperiod=bollLen, nbdevup=self.para_boll_std_rate,
-                                                                nbdevdn=self.para_boll_std_rate, matype=0)
+                upper_list, middle_list, lower_list = ta.BBANDS(
+                    rt_close_array,
+                    timeperiod=bollLen, nbdevup=self.para_boll2_std_rate,
+                    nbdevdn=self.para_boll2_std_rate, matype=0)
 
                 # 1标准差
-                std = (upper_list[-1] - lower_list[-1]) / (self.para_boll2_std_sate * 2)
+                std = (upper_list[-1] - lower_list[-1]) / (self.para_boll2_std_rate * 2)
                 self._rt_upper2 = round(upper_list[-1], self.round_n)
                 self._rt_middle2 = round(middle_list[-1], self.round_n)
                 self._rt_lower2 = round(lower_list[-1], self.round_n)
             else:
                 # 1标准差
-                std = np.std(np.append(self.close_array[-boll_02_len:], [self.line_bar[-1].close]), ddof=1)
-                middle = np.mean(np.append(self.close_array[-boll_02_len:], [self.line_bar[-1].close]))
+                std = np.std(rt_close_array[-bollLen:], ddof=1)
+                middle = np.mean(rt_close_array[-bollLen:])
                 self._rt_middle2 = round(middle, self.round_n)
                 upper = middle + self.para_boll_std_rate * std
                 self._rt_upper2 = round(upper, self.round_n)

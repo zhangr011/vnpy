@@ -1238,7 +1238,7 @@ class CtaEngine(BaseEngine):
         try:
             # 5.保存策略切片
             snapshot = strategy.get_klines_snapshot()
-            if len(snapshot) == 0:
+            if not snapshot:
                 self.write_log(f'{strategy_name}返回得K线切片数据为空')
                 return
 

@@ -1246,6 +1246,8 @@ class CtaProFutureTemplate(CtaProTemplate):
 
                 self.write_log(f'剩余委托单号:{grid.order_ids}')
 
+            self.gt.save()
+
         # 在策略得活动订单中，移除
         self.active_orders.pop(order.vt_orderid, None)
 
@@ -1274,6 +1276,16 @@ class CtaProFutureTemplate(CtaProTemplate):
         old_order['traded'] = order.traded
         order_vt_symbol = copy(old_order['vt_symbol'])
         order_volume = old_order['volume'] - old_order['traded']
+
+
+        order_price = old_order['price']
+        order_type = old_order.get('order_type', OrderType.LIMIT)
+        order_retry = old_order.get('retry', 0)
+        grid = old_order.get('grid', None)
+        if grid:
+            if order.vt_orderid in grid.order_ids:
+                grid.order_ids.remove(order.vt_orderid)
+
         if order_volume <= 0:
             msg = u'{} {}{}需重新开仓数量为{}，不再开仓' \
                 .format(self.strategy_name,
@@ -1286,10 +1298,6 @@ class CtaProFutureTemplate(CtaProTemplate):
             self.active_orders.pop(order.vt_orderid, None)
             return
 
-        order_price = old_order['price']
-        order_type = old_order.get('order_type', OrderType.LIMIT)
-        order_retry = old_order.get('retry', 0)
-        grid = old_order.get('grid', None)
         if order_retry > 20:
             # 这里超过20次尝试失败后，不再尝试,发出告警信息
             msg = u'{}  {}/{}手， 重试开仓次数{}>20' \
@@ -1299,15 +1307,9 @@ class CtaProFutureTemplate(CtaProTemplate):
                         order_retry)
             self.write_error(msg)
             self.send_wechat(msg)
-
-            if grid:
-                if order.vt_orderid in grid.order_ids:
-                    grid.order_ids.remove(order.vt_orderid)
-
-                # 网格的所有委托单已经执行完毕
-                if len(grid.order_ids) == 0:
-                    grid.order_status = False
-
+            # 网格的所有委托单已经执行完毕
+            if len(grid.order_ids) == 0:
+                grid.order_status = False
                 self.gt.save()
                 self.write_log(u'网格信息更新:{}'.format(grid.__dict__))
 
@@ -1319,8 +1321,18 @@ class CtaProFutureTemplate(CtaProTemplate):
 
         # FAK 重新开单
         if old_order['direction'] == Direction.LONG and order_type == OrderType.FAK:
-            # 更新网格交易器
 
+            # 删除旧的委托记录
+            self.write_log(u'移除旧的委托记录:{}'.format(order.vt_orderid))
+            self.active_orders.pop(order.vt_orderid, None)
+
+            if order.traded > 0:
+                old_traded_volume = grid.traded_volume
+                grid.traded_volume += order.traded
+                self.write_log(f'{grid.direction.value}单部分{order.offset}仓，'
+                               + f'网格volume:{grid.volume}, traded_volume:{old_traded_volume}=>{grid.traded_volume}')
+
+            # 更新网格交易器
             self.write_log(u'FAK模式，需要重新发送buy委托.grid:{}'.format(grid.__dict__))
             # 更新委托平仓价
             buy_price = max(self.cur_mi_tick.ask_price_1, self.cur_mi_tick.last_price, order_price) + self.price_tick
@@ -1350,11 +1362,18 @@ class CtaProFutureTemplate(CtaProTemplate):
                 info.update({'retry': order_retry})
 
             self.gt.save()
+
+
+        elif old_order['direction'] == Direction.SHORT and order_type == OrderType.FAK:
             # 删除旧的委托记录
             self.write_log(u'移除旧的委托记录:{}'.format(order.vt_orderid))
             self.active_orders.pop(order.vt_orderid, None)
 
-        elif old_order['direction'] == Direction.SHORT and order_type == OrderType.FAK:
+            if order.traded > 0:
+                old_traded_volume = grid.traded_volume
+                grid.traded_volume += order.traded
+                self.write_log(f'{grid.direction.value}单部分{order.offset}仓，'
+                               + f'网格volume:{grid.volume}, traded_volume:{old_traded_volume}=>{grid.traded_volume}')
 
             self.write_log(u'FAK模式，需要重新发送short委托.grid:{}'.format(grid.__dict__))
             short_price = min(self.cur_mi_tick.bid_price_1, self.cur_mi_tick.last_price, order_price) - self.price_tick
@@ -1385,9 +1404,7 @@ class CtaProFutureTemplate(CtaProTemplate):
                 info.update({'retry': order_retry})
 
             self.gt.save()
-            # 删除旧的委托记录
-            self.write_log(u'移除旧的委托记录:{}'.format(order.vt_orderid))
-            self.active_orders.pop(order.vt_orderid, None)
+
         else:
             pre_status = old_order.get('status', Status.NOTTRADED)
             old_order.update({'status': Status.CANCELLED})
@@ -1423,6 +1440,15 @@ class CtaProFutureTemplate(CtaProTemplate):
         # order_time = old_order['order_time']
         order_vt_symbol = copy(old_order['vt_symbol'])
         order_volume = old_order['volume'] - old_order['traded']
+
+        order_price = old_order['price']
+        order_type = old_order.get('order_type', OrderType.LIMIT)
+        order_retry = old_order.get('retry', 0)
+        grid = old_order.get('grid', None)
+        if grid:
+            if order.vt_orderid in grid.order_ids:
+                grid.order_ids.remove(order.vt_orderid)
+
         if order_volume <= 0:
             msg = u'{} {}{}重新平仓数量为{}，不再平仓' \
                 .format(self.strategy_name, order.vt_orderid, order_vt_symbol, order_volume)
@@ -1432,20 +1458,15 @@ class CtaProFutureTemplate(CtaProTemplate):
             self.active_orders.pop(order.vt_orderid, None)
             return
 
-        order_price = old_order['price']
-        order_type = old_order.get('order_type', OrderType.LIMIT)
-        order_retry = old_order.get('retry', 0)
-        grid = old_order.get('grid', None)
+
         if order_retry > 20:
             msg = u'{} 平仓撤单 {}/{}手， 重试平仓次数{}>20' \
                 .format(self.strategy_name, order_vt_symbol, order_volume, order_retry)
             self.write_error(msg)
             self.send_wechat(msg)
-            if grid:
-                if order.vt_orderid in grid.order_ids:
-                    grid.order_ids.remove(order.vt_orderid)
-                if not grid.order_ids:
-                    grid.order_status = False
+
+            if not grid.order_ids:
+                grid.order_status = False
                 self.gt.save()
                 self.write_log(u'更新网格=>{}'.format(grid.__dict__))
 
@@ -1456,6 +1477,14 @@ class CtaProFutureTemplate(CtaProTemplate):
         order_retry += 1
 
         if old_order['direction'] == Direction.LONG and order_type == OrderType.FAK:
+            self.write_log(u'移除活动订单:{}'.format(order.vt_orderid))
+            self.active_orders.pop(order.vt_orderid, None)
+            if order.traded > 0:
+                old_traded_volume = grid.traded_volume
+                grid.traded_volume += order.traded
+                self.write_log(f'{grid.direction.value}单部分{order.offset}仓，'
+                               + f'网格volume:{grid.volume}, traded_volume:{old_traded_volume}=>{grid.traded_volume}')
+
             self.write_log(u'FAK模式，需要重新发送cover委托.grid:{}'.format(grid.__dict__))
             # 更新委托平仓价
             cover_tick = self.tick_dict.get(order_vt_symbol, self.cur_mi_tick)
@@ -1484,10 +1513,17 @@ class CtaProFutureTemplate(CtaProTemplate):
                 info.update({'retry': order_retry})
 
             self.gt.save()
-            self.write_log(u'移除活动订单:{}'.format(order.vt_orderid))
-            self.active_orders.pop(order.vt_orderid, None)
+
 
         elif old_order['direction'] == Direction.SHORT and order_type == OrderType.FAK:
+            self.write_log(u'移除活动订单:{}'.format(order.vt_orderid))
+            self.active_orders.pop(order.vt_orderid, None)
+            if order.traded > 0:
+                old_traded_volume = grid.traded_volume
+                grid.traded_volume += order.traded
+                self.write_log(f'{grid.direction.value}单部分{order.offset}仓，'
+                               + f'网格volume:{grid.volume}, traded_volume:{old_traded_volume}=>{grid.traded_volume}')
+
             self.write_log(u'FAK模式，需要重新发送sell委托.grid:{}'.format(grid.__dict__))
             sell_tick = self.tick_dict.get(order_vt_symbol, self.cur_mi_tick)
             sell_price = min(sell_tick.bid_price_1, sell_tick.last_price, order_price) - self.price_tick
@@ -1517,9 +1553,6 @@ class CtaProFutureTemplate(CtaProTemplate):
                 info.update({'retry': order_retry})
 
             self.gt.save()
-
-            self.write_log(u'移除活动订单:{}'.format(order.vt_orderid))
-            self.active_orders.pop(order.vt_orderid, None)
 
         else:
             pre_status = old_order.get('status', Status.NOTTRADED)
@@ -1583,6 +1616,8 @@ class CtaProFutureTemplate(CtaProTemplate):
                         if order_grid:
                             if vt_orderid in order_grid.order_ids:
                                 order_grid.order_ids.remove(vt_orderid)
+                            if len(order_grid.order_ids) == 0:
+                                order_grid.order_status = False
                 continue
 
             # 处理状态为‘撤销’的委托单

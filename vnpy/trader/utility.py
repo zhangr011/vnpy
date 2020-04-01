@@ -9,7 +9,7 @@ import os
 import csv
 import re
 from pathlib import Path
-from typing import Callable, Dict, Tuple, Union
+from typing import Callable, Dict, Tuple, Union, Any
 from decimal import Decimal
 from math import floor, ceil
 from time import time
@@ -17,6 +17,8 @@ from datetime import datetime, timedelta
 from functools import wraps, lru_cache
 import numpy as np
 import talib
+import pickle
+import bz2
 
 from .object import BarData, TickData
 from .constant import Exchange, Interval
@@ -613,6 +615,21 @@ def display_dual_axis(df, columns1, columns2=[], invert_yaxis1=False, invert_yax
             save_images_to_excel(file_name, sheet_name, [image_name])
     else:
         plt.show()
+
+
+def load_data_from_pkb2(pkb2_file_name):
+    """获取本地压缩的数据"""
+    data = None
+    if not os.path.exists(pkb2_file_name):
+        return data
+    with bz2.BZ2File(pkb2_file_name, 'rb') as f:
+        data = pickle.load(f)
+        return data
+
+def save_data_to_pkb2(data: Any, pkb2_file_name):
+    """保存本地缓存的配置地址信息"""
+    with bz2.BZ2File(pkb2_file_name, 'wb') as f:
+        pickle.dump(data, f)
 
 
 class BarGenerator:

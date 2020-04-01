@@ -133,3 +133,26 @@
     index-url=http://pypi.douban.com/simple
     [install]
     trusted-host=pypi.douban.com
+
+13. 升级anaconda
+
+    
+    anaconda用法：
+    查看已经安装的包：
+    pip list 或者 conda list
+    
+    安装和更新：
+    pip install requests
+    pip install requests --upgrade
+    或者
+    conda install requests
+    conda update requests
+    
+    更新所有库
+    conda update --all
+    
+    更新 conda 自身
+    conda update conda
+    
+    更新 anaconda 自身
+    conda update anaconda

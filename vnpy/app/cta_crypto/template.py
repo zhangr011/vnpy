@@ -789,6 +789,7 @@ class CtaFutureTemplate(CtaTemplate):
 
                 self.write_log(f'剩余委托单号:{grid.order_ids}')
 
+            self.gt.save()
         # 在策略得活动订单中，移除
         self.active_orders.pop(order.vt_orderid, None)
 

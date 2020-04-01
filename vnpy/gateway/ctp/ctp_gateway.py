@@ -693,10 +693,22 @@ class CtpTdApi(TdApi):
         symbol = data["InstrumentID"]
         exchange = symbol_exchange_map[symbol]
 
+        order_type = OrderType.LIMIT
+        if data["OrderPriceType"] == THOST_FTDC_OPT_LimitPrice and data["TimeCondition"] == THOST_FTDC_TC_IOC:
+            if data["VolumeCondition"] == THOST_FTDC_VC_AV:
+                order_type = OrderType.FAK
+            elif data["VolumeCondition"] == THOST_FTDC_VC_CV:
+                order_type = OrderType.FOK
+
+        if data["OrderPriceType"] == THOST_FTDC_OPT_AnyPrice:
+            order_type = OrderType.MARKET
+
+
         order = OrderData(
             symbol=symbol,
             exchange=exchange,
             orderid=orderid,
+            type=order_type,
             direction=DIRECTION_CTP2VT[data["Direction"]],
             offset=OFFSET_CTP2VT.get(data["CombOffsetFlag"], Offset.NONE),
             price=data["LimitPrice"],
@@ -913,12 +925,22 @@ class CtpTdApi(TdApi):
         order_ref = data["OrderRef"]
         orderid = f"{frontid}_{sessionid}_{order_ref}"
 
+        order_type = OrderType.LIMIT
+        if data["OrderPriceType"] == THOST_FTDC_OPT_LimitPrice and data["TimeCondition"] == THOST_FTDC_TC_IOC:
+            if data["VolumeCondition"] == THOST_FTDC_VC_AV:
+                order_type = OrderType.FAK
+            elif data["VolumeCondition"] == THOST_FTDC_VC_CV:
+                order_type = OrderType.FOK
+
+        if data["OrderPriceType"] == THOST_FTDC_OPT_AnyPrice:
+            order_type = OrderType.MARKET
+
         order = OrderData(
             symbol=symbol,
             exchange=exchange,
             orderid=orderid,
             sys_orderid=data.get('OrderSysID', ""),
-            type=ORDERTYPE_CTP2VT[data["OrderPriceType"]],
+            type=order_type,
             direction=DIRECTION_CTP2VT[data["Direction"]],
             offset=OFFSET_CTP2VT[data["CombOffsetFlag"]],
             price=data["LimitPrice"],

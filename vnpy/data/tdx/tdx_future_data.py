@@ -241,6 +241,7 @@ class TdxFutureData(object):
                 self.symbol_exchange_dict.update({tdx_symbol: Tdx_Vn_Exchange_Map.get(str(tdx_market_id))})
                 self.symbol_market_dict.update({tdx_symbol: tdx_market_id})
 
+
     # ----------------------------------------------------------------------
     def get_bars(self,
                  symbol: str,
@@ -292,7 +293,7 @@ class TdxFutureData(object):
             end_date = end_dt
         if qry_start_date > end_date:
             qry_start_date = end_date
-        self.write_log('{}开始下载tdx:{} {}数据, {} to {}.'
+        self.write_log('{}开始下载tdx:{},周期类型:{}数据, {} to {}.'
                        .format(datetime.now(), tdx_symbol, period, qry_start_date, end_date))
         # print('{}开始下载tdx:{} {}数据, {} to {}.'.format(datetime.now(), tdx_symbol, tdx_period, last_date, end_date))
 

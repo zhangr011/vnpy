@@ -793,6 +793,10 @@ class CtaEngine(BaseEngine):
 
     def get_price(self, vt_symbol: str):
         """查询合约的最新价格"""
+        price = self.main_engine.get_price(vt_symbol)
+        if price:
+            return price
+
         tick = self.main_engine.get_tick(vt_symbol)
         if tick:
             return tick.last_price
@@ -819,6 +823,10 @@ class CtaEngine(BaseEngine):
 
     def get_position(self, vt_symbol: str, direction: Direction, gateway_name: str = ''):
         """ 查询合约在账号的持仓,需要指定方向"""
+        if len(gateway_name) == 0:
+            contract = self.main_engine.get_contract(vt_symbol)
+            if contract and contract.gateway_name:
+                gateway_name = contract.gateway_name
         vt_position_id = f"{gateway_name}.{vt_symbol}.{direction.value}"
         return self.main_engine.get_position(vt_position_id)
 
@@ -1178,7 +1186,7 @@ class CtaEngine(BaseEngine):
         try:
             # 5.保存策略切片
             snapshot = strategy.get_klines_snapshot()
-            if len(snapshot) == 0:
+            if not snapshot:
                 self.write_log(f'{strategy_name}返回得K线切片数据为空')
                 return
 
