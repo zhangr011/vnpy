@@ -634,6 +634,17 @@ class CtaProTemplate(CtaTemplate):
         self.symbol_size = self.cta_engine.get_size(self.vt_symbol)
         self.margin_rate = self.cta_engine.get_margin_rate(self.vt_symbol)
 
+
+    def sync_data(self):
+        """同步更新数据"""
+        if not self.backtesting:
+            self.write_log(u'保存k线缓存数据')
+            self.save_klines_to_cache()
+
+        if self.inited and self.trading:
+            self.write_log(u'保存policy数据')
+            self.policy.save()
+
     def save_klines_to_cache(self, kline_names: list = []):
         """
         保存K线数据到缓存

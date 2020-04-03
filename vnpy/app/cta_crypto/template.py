@@ -427,6 +427,7 @@ class CtaFutureTemplate(CtaTemplate):
     # 委托类型
     order_type = OrderType.LIMIT
     cancel_seconds = 120  # 撤单时间(秒)
+    activate_market = False
 
     # 资金相关
     max_invest_rate = 0.1  # 最大仓位(0~1)
@@ -454,6 +455,7 @@ class CtaFutureTemplate(CtaTemplate):
         self.account_pos = None  # 当前账号vt_symbol持仓信息
 
         self.last_minute = None  # 最后的分钟,用于on_tick内每分钟处理的逻辑
+        self.display_bars = True
 
         super().__init__(
             cta_engine, strategy_name, vt_symbol, setting
@@ -480,6 +482,20 @@ class CtaFutureTemplate(CtaTemplate):
         self.symbol_size = self.cta_engine.get_size(self.vt_symbol)
         self.margin_rate = self.cta_engine.get_margin_rate(self.vt_symbol)
         self.volumn_tick = self.cta_engine.get_volume_tick(self.vt_symbol)
+
+        if self.activate_market:
+            self.write_log(f'{self.strategy_name}使用市价单委托方式')
+            self.order_type = OrderType.MARKET
+
+    def sync_data(self):
+        """同步更新数据"""
+        if not self.backtesting:
+            self.write_log(u'保存k线缓存数据')
+            self.save_klines_to_cache()
+
+        if self.inited and self.trading:
+            self.write_log(u'保存policy数据')
+            self.policy.save()
 
     def save_klines_to_cache(self, kline_names: list = []):
         """
@@ -578,6 +594,7 @@ class CtaFutureTemplate(CtaTemplate):
         :return:
         """
         self.write_log(u'init_position(),初始化持仓')
+        changed = False
         if len(self.gt.up_grids) <= 0:
             self.position.short_pos = 0
             # 加载已开仓的空单数据，网格JSON
@@ -592,12 +609,14 @@ class CtaFutureTemplate(CtaTemplate):
                     if len(sg.order_ids) > 0 or sg.order_status:
                         self.write_log(f'重置委托状态:{sg.order_status},清除委托单：{sg.order_ids}')
                         sg.order_status = False
+                        [self.cancel_order(vt_orderid) for vt_orderid in sg.order_ids]
                         sg.order_ids = []
+                        changed = True
 
                     self.write_log(u'加载持仓空单[{},价格:{},数量:{}手,开仓时间:{}'
                                    .format(self.vt_symbol, sg.open_price,
                                            sg.volume, sg.open_time))
-                    self.position.short_pos -= sg.volume
+                    self.position.short_pos = round(self.position.short_pos - sg.volume, 7)
 
                 self.write_log(u'持久化空单，共持仓:{}手'.format(abs(self.position.short_pos)))
 
@@ -615,15 +634,17 @@ class CtaFutureTemplate(CtaTemplate):
                     if len(lg.order_ids) > 0 or lg.order_status:
                         self.write_log(f'重置委托状态:{lg.order_status},清除委托单：{lg.order_ids}')
                         lg.order_status = False
+                        [self.cancel_order(vt_orderid) for vt_orderid in lg.order_ids]
                         lg.order_ids = []
+                        changed = True
 
                     self.write_log(u'加载持仓多单[{},价格:{},数量:{}手, 开仓时间:{}'
                                    .format(self.vt_symbol, lg.open_price, lg.volume, lg.open_time))
-                    self.position.long_pos += lg.volume
+                    self.position.long_pos = round(self.position.long_pos + lg.volume, 7)
 
                 self.write_log(f'持久化多单，共持仓:{self.position.long_pos}手')
 
-        self.position.pos = self.position.long_pos + self.position.short_pos
+        self.position.pos = round(self.position.long_pos + self.position.short_pos, 7)
 
         self.write_log(u'{}加载持久化数据完成，多单:{}，空单:{},共:{}手'
                        .format(self.strategy_name,
@@ -631,7 +652,8 @@ class CtaFutureTemplate(CtaTemplate):
                                abs(self.position.short_pos),
                                self.position.pos))
         self.pos = self.position.pos
-        self.gt.save()
+        if changed:
+            self.gt.save()
         self.display_grids()
 
     def get_positions(self):
@@ -791,22 +813,16 @@ class CtaFutureTemplate(CtaTemplate):
 
             self.gt.save()
         # 在策略得活动订单中，移除
+        self.write_log(f'委托单{order.vt_orderid}完成，从活动订单中移除')
         self.active_orders.pop(order.vt_orderid, None)
 
     def on_order_open_canceled(self, order: OrderData):
         """
         委托开仓单撤销
-        如果是FAK模式，重新修改价格，再提交
-        FAK用于实盘，需要增加涨跌停判断
         :param order:
         :return:
         """
         self.write_log(u'委托开仓单撤销:{}'.format(order.__dict__))
-
-        if not self.trading:
-            if not self.backtesting:
-                self.write_error(u'当前不允许交易')
-            return
 
         if order.vt_orderid not in self.active_orders:
             self.write_error(u'{}不在未完成的委托单中{}。'.format(order.vt_orderid, self.active_orders))
@@ -816,28 +832,19 @@ class CtaFutureTemplate(CtaTemplate):
         old_order = self.active_orders[order.vt_orderid]
         self.write_log(u'{} 委托信息:{}'.format(order.vt_orderid, old_order))
         old_order['traded'] = order.traded
-        order_vt_symbol = copy(old_order['vt_symbol'])
-        order_volume = round(old_order['volume'] - old_order['traded'], 7)
-        if order_volume <= 0:
-            msg = u'{} {}{}需重新开仓数量为{}，不再开仓' \
-                .format(self.strategy_name,
-                        order.vt_orderid,
-                        order_vt_symbol,
-                        order_volume)
-            self.write_error(msg)
-
-            self.write_log(u'移除:{}'.format(order.vt_orderid))
-            self.active_orders.pop(order.vt_orderid, None)
-            return
 
         grid = old_order.get('grid', None)
+
         pre_status = old_order.get('status', Status.NOTTRADED)
         old_order.update({'status': Status.CANCELLED})
         self.write_log(u'委托单状态:{}=>{}'.format(pre_status, old_order.get('status')))
         if grid:
             if order.vt_orderid in grid.order_ids:
                 grid.order_ids.remove(order.vt_orderid)
-
+            if order.traded > 0:
+                pre_traded_volume = grid.traded_volume
+                grid.traded_volume = round(grid.traded_volume + order.traded,7)
+                self.write_log(f'撤单中部分成交:{order.traded} + 原已成交:{pre_traded_volume}  => {grid.traded_volume}')
             if not grid.order_ids:
                 grid.order_status = False
 
@@ -854,25 +861,10 @@ class CtaFutureTemplate(CtaTemplate):
             self.write_error(u'{}不在未完成的委托单中:{}。'.format(order.vt_orderid, self.active_orders))
             return
 
-        if not self.trading:
-            self.write_error(u'当前不允许交易')
-            return
-
         # 直接更新“未完成委托单”，更新volume,Retry次数
         old_order = self.active_orders[order.vt_orderid]
         self.write_log(u'{} 订单信息:{}'.format(order.vt_orderid, old_order))
         old_order['traded'] = order.traded
-        # order_time = old_order['order_time']
-        order_symbol = copy(old_order['vt_symbol'])
-        order_volume = old_order['volume'] - old_order['traded']
-        if order_volume <= 0:
-            msg = u'{} {}{}重新平仓数量为{}，不再平仓' \
-                .format(self.strategy_name, order.vt_orderid, order_symbol, order_volume)
-            self.write_error(msg)
-            self.send_wechat(msg)
-            self.write_log(u'活动订单移除:{}'.format(order.vt_orderid))
-            self.active_orders.pop(order.vt_orderid, None)
-            return
 
         grid = old_order.get('grid', None)
         pre_status = old_order.get('status', Status.NOTTRADED)
@@ -881,6 +873,10 @@ class CtaFutureTemplate(CtaTemplate):
         if grid:
             if order.vt_orderid in grid.order_ids:
                 grid.order_ids.remove(order.vt_orderid)
+            if order.traded > 0:
+                pre_traded_volume = grid.traded_volume
+                grid.traded_volume = round(grid.traded_volume + order.traded, 7)
+                self.write_log(f'撤单中部分成交:{order.traded} + 原已成交:{pre_traded_volume}  => {grid.traded_volume}')
             if len(grid.order_ids) == 0:
                 grid.order_status = False
             self.gt.save()
@@ -942,6 +938,7 @@ class CtaFutureTemplate(CtaTemplate):
         vt_orderids = self.buy(vt_symbol=self.vt_symbol,
                                price=self.cur_price,
                                volume=grid.volume,
+                               order_type=self.order_type,
                                order_time=self.cur_datetime,
                                grid=grid)
         if len(vt_orderids) > 0:
@@ -964,6 +961,7 @@ class CtaFutureTemplate(CtaTemplate):
         vt_orderids = self.short(vt_symbol=self.vt_symbol,
                                  price=self.cur_price,
                                  volume=grid.volume,
+                                 order_type=self.order_type,
                                  order_time=self.cur_datetime,
                                  grid=grid)
         if len(vt_orderids) > 0:
@@ -986,7 +984,7 @@ class CtaFutureTemplate(CtaTemplate):
         :return:
         """
         self.write_log(u'执行事务平多仓位:{}'.format(grid.to_json()))
-
+        """
         self.account_pos = self.cta_engine.get_position(
             vt_symbol=self.vt_symbol,
             direction=Direction.NET)
@@ -994,7 +992,7 @@ class CtaFutureTemplate(CtaTemplate):
         if self.account_pos is None:
             self.write_error(u'无法获取{}得持仓信息'.format(self.vt_symbol))
             return False
-
+        """
         # 发出委托卖出单
         if self.backtesting:
             sell_price = self.cur_price - self.price_tick
@@ -1007,6 +1005,7 @@ class CtaFutureTemplate(CtaTemplate):
             grid.volume = round(grid.volume, 7)
             grid.traded_volume = 0
 
+        """
         if self.account_pos.volume <= 0:
             self.write_error(u'当前{}的净持仓:{}，不能平多单'
                              .format(self.vt_symbol,
@@ -1019,11 +1018,12 @@ class CtaFutureTemplate(CtaTemplate):
                                      grid.volume))
 
             grid.volume = self.account_pos.volume
-
+        """
         vt_orderids = self.sell(
             vt_symbol=self.vt_symbol,
             price=sell_price,
             volume=grid.volume,
+            order_type=self.order_type,
             order_time=self.cur_datetime,
             grid=grid)
         if len(vt_orderids) == 0:
@@ -1045,14 +1045,14 @@ class CtaFutureTemplate(CtaTemplate):
         :return:
         """
         self.write_log(u'执行事务平空仓位:{}'.format(grid.to_json()))
-
+        """
         self.account_pos = self.cta_engine.get_position(
             vt_symbol=self.vt_symbol,
             direction=Direction.NET)
         if self.account_pos is None:
             self.write_error(u'无法获取{}得持仓信息'.format(self.vt_symbol))
             return False
-
+        """
         # 发出委托单
         if self.backtesting:
             cover_price = self.cur_price + self.price_tick
@@ -1065,6 +1065,7 @@ class CtaFutureTemplate(CtaTemplate):
             grid.volume = round(grid.volume, 7)
             grid.traded_volume = 0
 
+        """
         if self.account_pos.volume >= 0:
             self.write_error(u'当前{}的净持仓:{}，不能平空单'
                              .format(self.vt_symbol,
@@ -1077,13 +1078,15 @@ class CtaFutureTemplate(CtaTemplate):
                                      grid.volume))
 
             grid.volume = abs(self.account_pos.volume)
-
+        """
         vt_orderids = self.cover(
             price=cover_price,
             vt_symbol=self.vt_symbol,
             volume=grid.volume,
+            order_type=self.order_type,
             order_time=self.cur_datetime,
             grid=grid)
+
         if len(vt_orderids) == 0:
             if self.backtesting:
                 self.write_error(u'空单平仓委托失败')
@@ -1115,9 +1118,6 @@ class CtaFutureTemplate(CtaTemplate):
             order_vt_symbol = order_info.get('vt_symbol', self.vt_symbol)
             order_time = order_info['order_time']
             order_volume = order_info['volume'] - order_info['traded']
-            # order_price = order_info['price']
-            # order_direction = order_info['direction']
-            # order_offset = order_info['offset']
             order_grid = order_info['grid']
             order_status = order_info.get('status', Status.NOTTRADED)
             order_type = order_info.get('order_type', OrderType.LIMIT)
@@ -1240,7 +1240,7 @@ class CtaFutureTemplate(CtaTemplate):
 
         # 删除撤单的订单
         for vt_orderid in canceled_ids:
-            self.write_log(u'删除orderID:{0}'.format(vt_orderid))
+            self.write_log(f'活动订单撤单成功，移除{vt_orderid}')
             self.active_orders.pop(vt_orderid, None)
 
         if len(self.active_orders) == 0:
@@ -1250,7 +1250,9 @@ class CtaFutureTemplate(CtaTemplate):
         """更新网格显示信息"""
         if not self.inited:
             return
-
+        self.account_pos = self.cta_engine.get_position(vt_symbol=self.vt_symbol, direction=Direction.NET)
+        if self.account_pos:
+            self.write_log(f'账号{self.vt_symbol}持仓:{self.account_pos.volume}, 冻结:{self.account_pos.frozen}, 盈亏:{self.account_pos.pnl}')
         up_grids_info = self.gt.to_str(direction=Direction.SHORT)
         if len(self.gt.up_grids) > 0:
             self.write_log(up_grids_info)

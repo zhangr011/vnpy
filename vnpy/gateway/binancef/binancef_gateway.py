@@ -413,6 +413,9 @@ class BinancefRestApi(RestClient):
             "newClientOrderId": orderid,
             "newOrderRespType": "ACK"
         }
+        if req.type == OrderType.MARKET:
+            params.pop('timeInForce', None)
+            params.pop('price', None)
 
         self.add_request(
             method="POST",
@@ -529,7 +532,7 @@ class BinancefRestApi(RestClient):
                 gateway_name=self.gateway_name,
             )
             self.gateway.on_position(position)
-          
+
         # self.gateway.write_log("持仓信息查询成功")
 
     def on_query_order(self, data: dict, request: Request) -> None:

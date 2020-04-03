@@ -670,24 +670,17 @@ class CtaEngine(BaseEngine):
                     price=price,
                     volume=volume,
                     gateway_name=gateway_name)
-        if order_type == OrderType.FAK:
-            return self.send_fak_order(
-                strategy=strategy,
-                contract=contract,
-                direction=direction,
-                offset=offset,
-                price=price,
-                volume=volume,
-                gateway_name=gateway_name)
-        else:
-            return self.send_limit_order(
-                strategy=strategy,
-                contract=contract,
-                direction=direction,
-                offset=offset,
-                price=price,
-                volume=volume,
-                gateway_name=gateway_name)
+
+        return self.send_server_order(
+            strategy=strategy,
+            contract=contract,
+            direction=direction,
+            offset=offset,
+            price=price,
+            volume=volume,
+            type=order_type,
+            gateway_name=gateway_name
+            )
 
     def cancel_order(self, strategy: CtaTemplate, vt_orderid: str):
         """
@@ -919,6 +912,7 @@ class CtaEngine(BaseEngine):
             self.write_log(msg=msg,
                            strategy_name=strategy.strategy_name,
                            level=logging.CRITICAL)
+            self.send_wechat(msg)
 
     def add_strategy(
             self, class_name: str,
@@ -1490,8 +1484,7 @@ class CtaEngine(BaseEngine):
 
             compare_pos[vt_symbol] = OrderedDict(
                 {
-                    "账号空单": abs(position.volume) if position.volume < 0 else 0,
-                    '账号多单': position.volume if position.volume > 0 else 0,
+                    "账号净仓": position.volume,
                     '策略空单': 0,
                     '策略多单': 0,
                     '空单策略': [],
@@ -1511,8 +1504,7 @@ class CtaEngine(BaseEngine):
                     self.write_log(u'账号持仓信息获取不到{}，创建一个'.format(vt_symbol))
                     symbol_pos = OrderedDict(
                         {
-                            "账号空单": 0,
-                            '账号多单': 0,
+                            "账号净仓": 0,
                             '策略空单': 0,
                             '策略多单': 0,
                             '空单策略': [],
@@ -1521,12 +1513,12 @@ class CtaEngine(BaseEngine):
                     )
 
                 if pos.get('direction') == 'short':
-                    symbol_pos.update({'策略空单': symbol_pos.get('策略空单', 0) + abs(pos.get('volume', 0))})
+                    symbol_pos.update({'策略空单': round(symbol_pos.get('策略空单', 0) + abs(pos.get('volume', 0)), 7)})
                     symbol_pos['空单策略'].append(
                         u'{}({})'.format(strategy_pos['strategy_name'], abs(pos.get('volume', 0))))
                     self.write_log(u'更新{}策略持空仓=>{}'.format(vt_symbol, symbol_pos.get('策略空单', 0)))
                 if pos.get('direction') == 'long':
-                    symbol_pos.update({'策略多单': symbol_pos.get('策略多单', 0) + abs(pos.get('volume', 0))})
+                    symbol_pos.update({'策略多单': round(symbol_pos.get('策略多单', 0) + abs(pos.get('volume', 0)),7)})
                     symbol_pos['多单策略'].append(
                         u'{}({})'.format(strategy_pos['strategy_name'], abs(pos.get('volume', 0))))
                     self.write_log(u'更新{}策略持多仓=>{}'.format(vt_symbol, symbol_pos.get('策略多单', 0)))
@@ -1537,47 +1529,21 @@ class CtaEngine(BaseEngine):
         for vt_symbol in sorted(vt_symbols):
             # 发送不一致得结果
             symbol_pos = compare_pos.pop(vt_symbol)
-            d_long = {
-                'account_id': self.engine_config.get('account_id', '-'),
-                'vt_symbol': vt_symbol,
-                'direction': Direction.LONG.value,
-                'strategy_list': symbol_pos.get('多单策略', [])}
 
-            d_short = {
-                'account_id': self.engine_config.get('account_id', '-'),
-                'vt_symbol': vt_symbol,
-                'direction': Direction.SHORT.value,
-                'strategy_list': symbol_pos.get('空单策略', [])}
+            net_symbol_pos = round(round(symbol_pos['策略多单'], 7) - round(symbol_pos['策略空单'], 7),7)
 
             # 多空都一致
-            if round(symbol_pos['账号空单'], 7) == round(symbol_pos['策略空单'], 7) and \
-                    round(symbol_pos['账号多单'], 7) == round(symbol_pos['策略多单'], 7):
+            if round(symbol_pos['账号净仓'], 7) == net_symbol_pos:
                 msg = u'{}多空都一致.{}\n'.format(vt_symbol, json.dumps(symbol_pos, indent=2, ensure_ascii=False))
                 self.write_log(msg)
                 compare_info += msg
             else:
                 pos_compare_result += '\n{}: '.format(vt_symbol)
-                # 多单不一致
-                if round(symbol_pos['策略多单'], 7) != round(symbol_pos['账号多单'], 7):
-                    msg = '{}多单[账号({}), 策略{},共({})], ' \
-                        .format(vt_symbol,
-                                symbol_pos['账号多单'],
-                                symbol_pos['多单策略'],
-                                symbol_pos['策略多单'])
+                msg = f"{vt_symbol} [{symbol_pos}]"
 
-                    pos_compare_result += msg
-                    self.write_error(u'{}不一致:{}'.format(vt_symbol, msg))
-                    compare_info += u'{}不一致:{}\n'.format(vt_symbol, msg)
-                # 空单不一致
-                if round(symbol_pos['策略空单'], 7) != round(symbol_pos['账号空单'], 7):
-                    msg = '{}空单[账号({}), 策略{},共({})], ' \
-                        .format(vt_symbol,
-                                symbol_pos['账号空单'],
-                                symbol_pos['空单策略'],
-                                symbol_pos['策略空单'])
-                    pos_compare_result += msg
-                    self.write_error(u'{}不一致:{}'.format(vt_symbol, msg))
-                    compare_info += u'{}不一致:{}\n'.format(vt_symbol, msg)
+                pos_compare_result += msg
+                self.write_error(u'{}不一致:{}'.format(vt_symbol, json.dumps(symbol_pos, indent=2, ensure_ascii=False)))
+                compare_info += u'{}不一致:{}\n'.format(vt_symbol, json.dumps(symbol_pos, indent=2, ensure_ascii=False))
 
         # 不匹配，输入到stdErr通道
         if pos_compare_result != '':
