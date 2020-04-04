@@ -51,7 +51,7 @@ class CtaTemplate(ABC):
         self.entrust = 0  # 是否正在委托, 0, 无委托 , 1, 委托方向是LONG， -1, 委托方向是SHORT
 
         self.tick_dict = {}  # 记录所有on_tick传入最新tick
-
+        self.active_orders = {}
         # Copy a new variables list here to avoid duplicate insert when multiple
         # strategy instances are created with the same strategy class.
         self.variables = copy(self.variables)
