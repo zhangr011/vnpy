@@ -449,6 +449,7 @@ class CtaFutureTemplate(CtaTemplate):
         self.policy = None  # 事务执行组件
         self.gt = None  # 网格交易组件
         self.klines = {}  # K线组件字典: kline_name: kline
+        self.activate_market = False
 
         self.cur_datetime: datetime = None  # 当前Tick时间
         self.cur_tick: TickData = None  # 最新的合约tick( vt_symbol)
@@ -844,10 +845,16 @@ class CtaFutureTemplate(CtaTemplate):
                 grid.order_ids.remove(order.vt_orderid)
             if order.traded > 0:
                 pre_traded_volume = grid.traded_volume
-                grid.traded_volume = round(grid.traded_volume + order.traded,7)
-                self.write_log(f'撤单中部分成交:{order.traded} + 原已成交:{pre_traded_volume}  => {grid.traded_volume}')
-            if not grid.order_ids:
+                grid.traded_volume = round(grid.traded_volume + order.traded, 7)
+                self.write_log(f'撤单中部分开仓:{order.traded} + 原已成交:{pre_traded_volume}  => {grid.traded_volume}')
+            if len(grid.order_ids):
                 grid.order_status = False
+                if grid.traded_volume > 0:
+                    pre_volume = grid.volume
+                    grid.volume = grid.traded_volume
+                    grid.traded_volume = 0
+                    grid.open_status = True
+                    self.write_log(f'开仓完成，grid.volume {pre_volume} => {grid.volume}')
 
             self.gt.save()
         self.active_orders.update({order.vt_orderid: old_order})
@@ -877,9 +884,20 @@ class CtaFutureTemplate(CtaTemplate):
             if order.traded > 0:
                 pre_traded_volume = grid.traded_volume
                 grid.traded_volume = round(grid.traded_volume + order.traded, 7)
-                self.write_log(f'撤单中部分成交:{order.traded} + 原已成交:{pre_traded_volume}  => {grid.traded_volume}')
+                self.write_log(f'撤单中部分平仓成交:{order.traded} + 原已成交:{pre_traded_volume}  => {grid.traded_volume}')
             if len(grid.order_ids) == 0:
                 grid.order_status = False
+                if grid.traded_volume > 0:
+                    pre_volume = grid.volume
+                    grid.volume = round(grid.volume - grid.traded_volume, 7)
+                    grid.traded_volume = 0
+                    if grid.volume <= 0:
+                        grid.volume = 0
+                        grid.open_status = False
+                        self.write_log(f'强制全部平仓完成')
+                    else:
+                        self.write_log(f'平仓委托中，撤单完成，部分成交，减少持仓grid.volume {pre_volume} => {grid.volume}')
+
             self.gt.save()
         self.active_orders.update({order.vt_orderid: old_order})
 
@@ -1235,7 +1253,7 @@ class CtaFutureTemplate(CtaTemplate):
                             and order_grid \
                             and len(order_grid.order_ids) == 0 \
                             and order_grid.traded_volume == 0:
-                        self.write_log(u'移除委托网格{}'.format(order_grid.__dict__))
+                        self.write_log(u'移除从未开仓成功的委托网格{}'.format(order_grid.__dict__))
                         order_info['grid'] = None
                         self.gt.remove_grids_by_ids(direction=order_grid.direction, ids=[order_grid.id])
 

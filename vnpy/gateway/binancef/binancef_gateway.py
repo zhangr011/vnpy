@@ -173,10 +173,10 @@ class BinancefGateway(BaseGateway):
         if self.count < 2:
             return
         self.count = 0
-
-        func = self.query_functions.pop(0)
-        func()
-        self.query_functions.append(func)
+        if len(self.query_functions) > 0:
+            func = self.query_functions.pop(0)
+            func()
+            self.query_functions.append(func)
 
     def get_order(self, orderid: str):
         return self.rest_api.get_order(orderid)
@@ -397,6 +397,7 @@ class BinancefRestApi(RestClient):
             self.gateway_name
         )
         self.orders.update({orderid: copy(order)})
+        self.gateway.write_log(f'返回订单更新:{order.__dict__}')
         self.gateway.on_order(order)
 
         data = {
@@ -495,15 +496,24 @@ class BinancefRestApi(RestClient):
     def on_query_account(self, data: dict, request: Request) -> None:
         """"""
         for asset in data["assets"]:
+            """ {
+            "asset": "USDT", // 资产名
+            "initialMargin": "0.33683000", // 起始保证金
+            "maintMargin": "0.02695000", // 维持保证金
+            "marginBalance": "8.74947592", // 保证金余额
+            "maxWithdrawAmount": "8.41264592", // 最大可提款金额,同`GET /fapi/balance`中“withdrawAvailable”
+            "openOrderInitialMargin": "0.00000000", // 挂单起始保证金
+            "positionInitialMargin": "0.33683000", // 持仓起始保证金
+            "unrealizedProfit": "-0.44537584", // 持仓未实现盈亏
+            "walletBalance": "9.19485176" // 账户余额
+            }"""
             account = AccountData(
-                accountid=asset["asset"],
-                balance=float(asset["walletBalance"]) + float(asset["maintMargin"]),
+                accountid=f"{self.gateway_name}_{asset['asset']}",
+                balance=float(asset["marginBalance"]),
                 frozen=float(asset["maintMargin"]),
                 holding_profit=float(asset['unrealizedProfit']),
                 gateway_name=self.gateway_name
             )
-            # 修正vnpy AccountData
-            account.balance += account.holding_profit
 
             if account.balance:
                 self.gateway.on_account(account)
@@ -555,6 +565,7 @@ class BinancefRestApi(RestClient):
                 gateway_name=self.gateway_name,
             )
             self.orders.update({order.orderid: copy(order)})
+            self.gateway.write_log(f'返回订单查询结果：{order.__dict__}')
             self.gateway.on_order(order)
 
         self.gateway.write_log("委托信息查询成功")
@@ -638,10 +649,11 @@ class BinancefRestApi(RestClient):
         order = request.extra
         order.status = Status.REJECTED
         self.orders.update({order.orderid: copy(order)})
+        self.gateway.write_log(f'订单委托失败:{order.__dict__}')
         self.gateway.on_order(order)
 
         msg = f"委托失败，状态码：{status_code}，信息：{request.response.text}"
-        self.gateway.write_log(msg)
+        self.gateway.write_error(msg)
 
     def on_send_order_error(
             self, exception_type: type, exception_value: Exception, tb, request: Request
@@ -652,8 +664,11 @@ class BinancefRestApi(RestClient):
         order = request.extra
         order.status = Status.REJECTED
         self.orders.update({order.orderid: copy(order)})
+        self.gateway.write_log(f'发送订单异常:{order.__dict__}')
         self.gateway.on_order(order)
 
+        msg = f"委托失败，拒单"
+        self.gateway.write_error(msg)
         # Record exception if not ConnectionError
         if not issubclass(exception_type, ConnectionError):
             self.on_error(exception_type, exception_value, tb, request)
@@ -785,7 +800,35 @@ class BinancefTradeWebsocketApi(WebsocketClient):
             self.on_order(packet)
 
     def on_account(self, packet: dict) -> None:
-        """"""
+        """websocket返回得Balance/Position信息更新"""
+        """
+        {
+          "B":[                             // 余额信息
+            {
+              "a":"USDT",                   // 资产名称
+              "wb":"122624.12345678",       // 钱包余额
+              "cw":"100.12345678"           // 除去逐仓保证金的钱包余额
+            },
+            {
+              "a":"BNB",           
+              "wb":"1.00000000",
+              "cw":"0.00000000"         
+            }
+          ],
+          "P":[
+            {
+              "s":"BTCUSDT",            // 交易对
+              "pa":"1",                 // 仓位
+              "ep":"9000",              // 入仓价格
+              "cr":"200",               // (费前)累计实现损益
+              "up":"0.2732781800",      // 持仓未实现盈亏
+              "mt":"isolated",          // 保证金模式
+              "iw":"0.06391979"         // 若为逐仓，仓位保证金
+            }
+          ]
+        }
+        """
+        # 计算持仓收益
         holding_pnl = 0
         for pos_data in packet["a"]["P"]:
             print(pos_data)
@@ -794,7 +837,7 @@ class BinancefTradeWebsocketApi(WebsocketClient):
                 symbol=pos_data["s"],
                 exchange=Exchange.BINANCE,
                 direction=Direction.NET,
-                volume=abs(volume),
+                volume=volume,
                 price=float(pos_data["ep"]),
                 pnl=float(pos_data["cr"]),
                 gateway_name=self.gateway_name,
@@ -804,7 +847,7 @@ class BinancefTradeWebsocketApi(WebsocketClient):
 
         for acc_data in packet["a"]["B"]:
             account = AccountData(
-                accountid=acc_data["a"],
+                accountid=f"{self.gateway_name}_{acc_data['a']}",
                 balance=round(float(acc_data["wb"]), 7),
                 frozen=float(acc_data["wb"]) - float(acc_data["cw"]),
                 holding_profit=round(holding_pnl, 7),
@@ -817,7 +860,7 @@ class BinancefTradeWebsocketApi(WebsocketClient):
                 self.gateway.on_account(account)
 
     def on_order(self, packet: dict) -> None:
-        """"""
+        """ws处理on_order事件"""
         self.gateway.write_log(json.dumps(packet, indent=2))
         dt = datetime.fromtimestamp(packet["E"] / 1000)
         time = dt.strftime("%Y-%m-%d %H:%M:%S")
@@ -848,7 +891,7 @@ class BinancefTradeWebsocketApi(WebsocketClient):
                 time=time,
                 gateway_name=self.gateway_name
             )
-
+        self.gateway.write_log(f'WS返回订单更新:{order.__dict__}')
         self.gateway.on_order(order)
 
         # Push trade event

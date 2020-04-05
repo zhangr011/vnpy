@@ -28,23 +28,26 @@ class CtaPosition(CtaComponent):
                 self.write_error(content=f'开仓异常,净:{self.pos},多:{self.long_pos},加多:{volume},超过:{self.maxPos}')
 
             # 更新
-            self.write_log(f'多仓:{self.long_pos}->{self.long_pos + volume}')
-            self.write_log(f'净:{self.pos}->{self.pos + volume}')
+            pre_long_pos = self.long_pos
+            pre_pos = self.pos
             self.long_pos += volume
             self.pos += volume
             self.long_pos = round(self.long_pos, 7)
             self.pos = round(self.pos, 7)
+            self.write_log(f'多仓:{pre_long_pos}->{self.long_pos}')
+            self.write_log(f'净:{pre_pos}->{self.pos}')
 
         if direction == Direction.SHORT:  # 加空仓
             if (min(self.pos, self.short_pos) - volume) < (0 - self.maxPos):
                 self.write_error(content=f'开仓异常,净:{self.pos},空:{self.short_pos},加空:{volume},超过:{self.maxPos}')
-
-            self.write_log(f'空仓:{self.short_pos}->{self.short_pos - volume}')
-            self.write_log(f'净:{self.pos}->{self.pos - volume}')
+            pre_short_pos = self.short_pos
+            pre_pos = self.pos
             self.short_pos -= volume
             self.pos -= volume
             self.short_pos = round(self.short_pos, 7)
             self.pos = round(self.pos, 7)
+            self.write_log(f'空仓:{pre_short_pos}->{self.short_pos}')
+            self.write_log(f'净:{pre_pos}->{self.pos}')
         return True
 
     def close_pos(self, direction: Direction, volume: float):

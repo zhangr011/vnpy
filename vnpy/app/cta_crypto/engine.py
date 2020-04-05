@@ -199,21 +199,28 @@ class CtaEngine(BaseEngine):
 
     def process_timer_event(self, event: Event):
         """ 处理定时器事件"""
-
+        all_trading = True
         # 触发每个策略的定时接口
         for strategy in list(self.strategies.values()):
             strategy.on_timer()
+            if not strategy.trading:
+                all_trading = False
 
         dt = datetime.now()
 
         if self.last_minute != dt.minute:
             self.last_minute = dt.minute
 
-            # 主动获取所有策略得持仓信息
-            all_strategy_pos = self.get_all_strategy_pos()
+            if all_trading:
+                # 主动获取所有策略得持仓信息
+                all_strategy_pos = self.get_all_strategy_pos()
 
-            # 推送到事件
-            self.put_all_strategy_pos_event(all_strategy_pos)
+                # 比对仓位，使用上述获取得持仓信息，不用重复获取
+                self.compare_pos(strategy_pos_list=copy(all_strategy_pos))
+
+                # 推送到事件
+                self.put_all_strategy_pos_event(all_strategy_pos)
+
 
     def process_tick_event(self, event: Event):
         """处理tick到达事件"""
@@ -1455,7 +1462,7 @@ class CtaEngine(BaseEngine):
         d.update(strategy.get_parameters())
         return d
 
-    def compare_pos(self):
+    def compare_pos(self, strategy_pos_list=[]):
         """
         对比账号&策略的持仓,不同的话则发出微信提醒
         :return:
@@ -1467,14 +1474,14 @@ class CtaEngine(BaseEngine):
         self.write_log(u'开始对比账号&策略的持仓')
 
         # 获取当前策略得持仓
-        strategy_pos_list = self.get_all_strategy_pos()
+        if len(strategy_pos_list) == 0:
+            strategy_pos_list = self.get_all_strategy_pos()
         self.write_log(u'策略持仓清单:{}'.format(strategy_pos_list))
 
         # 需要进行对比得合约集合（来自策略持仓/账号持仓）
         vt_symbols = set()
 
-        # 账号的持仓处理 => account_pos
-
+        # 账号的持仓处理 => compare_pos
         compare_pos = dict()  # vt_symbol: {'账号多单': xx, '账号空单':xxx, '策略空单':[], '策略多单':[]}
 
         for position in list(self.positions.values()):
@@ -1526,11 +1533,14 @@ class CtaEngine(BaseEngine):
         pos_compare_result = ''
         # 精简输出
         compare_info = ''
+
         for vt_symbol in sorted(vt_symbols):
             # 发送不一致得结果
-            symbol_pos = compare_pos.pop(vt_symbol)
-
-            net_symbol_pos = round(round(symbol_pos['策略多单'], 7) - round(symbol_pos['策略空单'], 7),7)
+            symbol_pos = compare_pos.pop(vt_symbol, None)
+            if not symbol_pos:
+                self.write_error(f'持仓对比中，找不到{vt_symbol}')
+                continue
+            net_symbol_pos = round(round(symbol_pos['策略多单'], 7) - round(symbol_pos['策略空单'], 7), 7)
 
             # 多空都一致
             if round(symbol_pos['账号净仓'], 7) == net_symbol_pos:
@@ -1538,17 +1548,15 @@ class CtaEngine(BaseEngine):
                 self.write_log(msg)
                 compare_info += msg
             else:
-                pos_compare_result += '\n{}: '.format(vt_symbol)
-                msg = f"{vt_symbol} [{symbol_pos}]"
+                pos_compare_result += '\n{}: {}'.format(vt_symbol, json.dumps(symbol_pos, indent=2, ensure_ascii=False))
 
-                pos_compare_result += msg
                 self.write_error(u'{}不一致:{}'.format(vt_symbol, json.dumps(symbol_pos, indent=2, ensure_ascii=False)))
                 compare_info += u'{}不一致:{}\n'.format(vt_symbol, json.dumps(symbol_pos, indent=2, ensure_ascii=False))
 
         # 不匹配，输入到stdErr通道
         if pos_compare_result != '':
             msg = u'账户{}持仓不匹配: {}' \
-                .format(self.engine_config.get('account_id', '-'),
+                .format(self.engine_config.get('accountid', '-'),
                         pos_compare_result)
             try:
                 from vnpy.trader.util_wechat import send_wx_msg

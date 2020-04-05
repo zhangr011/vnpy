@@ -314,6 +314,29 @@ def print_dict(d: dict):
     return '\n'.join([f'{key}:{d[key]}' for key in sorted(d.keys())])
 
 
+def get_csv_last_dt(file_name, dt_index=0, dt_format='%Y-%m-%d %H:%M:%S', line_length=1000):
+    """
+    获取csv文件最后一行的日期数据(第dt_index个字段必须是 '%Y-%m-%d %H:%M:%S'格式
+    :param file_name:文件名
+    :param line_length: 行数据的长度
+    :return: None，文件不存在，或者时间格式不正确
+    """
+    with open(file_name, 'r') as f:
+        f_size = os.path.getsize(file_name)
+        if f_size < line_length:
+            line_length = f_size
+        f.seek(f_size - line_length)  # 移动到最后1000个字节
+        for row in f.readlines()[-1:]:
+
+            datas = row.split(',')
+            if len(datas) > dt_index + 1:
+                try:
+                    last_dt = datetime.strptime(datas[dt_index], dt_format)
+                    return last_dt
+                except:
+                    return None
+        return None
+
 def append_data(file_name: str, dict_data: dict, field_names: list = []):
     """
     添加数据到csv文件中

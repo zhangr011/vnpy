@@ -806,6 +806,9 @@ class TradingWidget(QtWidgets.QWidget):
             symbol=symbol, exchange=Exchange(exchange_value)
         )
 
+        if self.checkFixed.isChecked():
+            self.checkFixed.setChecked(False)
+
         self.main_engine.subscribe(req, gateway_name)
 
     def clear_label_text(self) -> None:
@@ -930,9 +933,14 @@ class TradingWidget(QtWidgets.QWidget):
 
             self.offset_combo.setCurrentText(Offset.CLOSE.value)
 
-            self.volume_line.setText(str(pos.volume))
+            self.volume_line.setText(str(abs(pos.volume)))
+            if pos.direction == Direction.NET:
+                if pos.volume >= 0:
+                    self.direction_combo.setCurrentText(Direction.SHORT.value)
+                else:
+                    self.direction_combo.setCurrentText(Direction.LONG.value)
+            elif pos.direction == Direction.LONG:
 
-            if pos.direction in [Direction.LONG, Direction.NET]:
                 self.direction_combo.setCurrentText(Direction.SHORT.value)
             else:
                 self.direction_combo.setCurrentText(Direction.LONG.value)
