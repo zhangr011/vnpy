@@ -333,7 +333,7 @@ def get_csv_last_dt(file_name, dt_index=0, dt_format='%Y-%m-%d %H:%M:%S', line_l
                 try:
                     last_dt = datetime.strptime(datas[dt_index], dt_format)
                     return last_dt
-                except:
+                except: # noqa
                     return None
         return None
 

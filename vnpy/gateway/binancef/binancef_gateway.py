@@ -142,6 +142,7 @@ class BinancefGateway(BaseGateway):
     def cancel_order(self, req: CancelRequest) -> Request:
         """"""
         self.rest_api.cancel_order(req)
+        return True
 
     def query_account(self) -> None:
         """"""
@@ -397,7 +398,7 @@ class BinancefRestApi(RestClient):
             self.gateway_name
         )
         self.orders.update({orderid: copy(order)})
-        self.gateway.write_log(f'返回订单更新:{order.__dict__}')
+        self.gateway.write_log(f'委托返回订单更新:{order.__dict__}')
         self.gateway.on_order(order)
 
         data = {
@@ -861,7 +862,7 @@ class BinancefTradeWebsocketApi(WebsocketClient):
 
     def on_order(self, packet: dict) -> None:
         """ws处理on_order事件"""
-        self.gateway.write_log(json.dumps(packet, indent=2))
+        self.gateway.write_log('ws返回订单更新:\n'.format(json.dumps(packet, indent=2)))
         dt = datetime.fromtimestamp(packet["E"] / 1000)
         time = dt.strftime("%Y-%m-%d %H:%M:%S")
 
@@ -891,12 +892,12 @@ class BinancefTradeWebsocketApi(WebsocketClient):
                 time=time,
                 gateway_name=self.gateway_name
             )
-        self.gateway.write_log(f'WS返回订单更新:{order.__dict__}')
+        self.gateway.write_log(f'WS订单更新:\n{order.__dict__}')
         self.gateway.on_order(order)
 
         # Push trade event
         trade_volume = float(ord_data["l"])
-        if not trade_volume:
+        if trade_volume <= 0:
             return
 
         trade_dt = datetime.fromtimestamp(ord_data["T"] / 1000)
@@ -915,6 +916,7 @@ class BinancefTradeWebsocketApi(WebsocketClient):
             datetime=trade_time,
             gateway_name=self.gateway_name,
         )
+        self.gateway.write_log(f'WS成交更新:\n{trade.__dict__}')
         self.gateway.on_trade(trade)
 
 

@@ -4,9 +4,9 @@
 
 # 华富资产
 from vnpy.event import EventEngine
-from vnpy.trader.constant import Exchange
+from vnpy.trader.constant import Exchange  # noqa
 from vnpy.trader.engine import BaseEngine, MainEngine
-from vnpy.trader.event import EVENT_TIMER
+from vnpy.trader.event import EVENT_TIMER  # noqa
 
 APP_NAME = 'DispatchEngine'
 
@@ -20,4 +20,3 @@ class DispatchEngine(BaseEngine):
         self.main_engine = main_engine
         self.event_engine = event_engine
         self.create_logger(logger_name=APP_NAME)
-

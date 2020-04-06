@@ -209,7 +209,7 @@ class CtaLineBar(object):
             if self.price_tick < 1:
                 exponent = decimal.Decimal(str(self.price_tick))
                 self.round_n = max(abs(exponent.as_tuple().exponent) + 2, 4)
-
+                self.write_log(f'round_n: {self.round_n}')
             # 导入卡尔曼过滤器
             if self.para_active_kf:
                 try:
@@ -297,6 +297,8 @@ class CtaLineBar(object):
         self.paramList.append('para_bias_len')
         self.paramList.append('para_bias2_len')
         self.paramList.append('para_bias3_len')
+
+        self.paramList.append('para_bd_len')
 
         self.paramList.append('is_7x24')
 
@@ -408,6 +410,8 @@ class CtaLineBar(object):
         self.para_bias_len = 0  # 乖离率观测周期1
         self.para_bias2_len = 0  # 乖离率观测周期2
         self.para_bias3_len = 0  # 乖离率观测周期3
+
+        self.para_bd_len = 0   # 波段买卖观测长度
 
         # K 线的相关计算结果数据
         self.line_pre_high = []  # K线的前para_pre_len的的最高
@@ -628,6 +632,11 @@ class CtaLineBar(object):
         self._rt_bias2 = None
         self._rt_bias3 = None
 
+        # 波段买卖指标
+        self.line_bd_fast = []  # 波段快线
+        self.line_bd_slow = []  # 波段慢线
+        self.cur_bd_cross = 0  # 当前波段快线慢线金叉死叉， +金叉计算， - 死叉技术
+
     def set_params(self, setting: dict = {}):
         """设置参数"""
         d = self.__dict__
@@ -800,6 +809,7 @@ class CtaLineBar(object):
         self.__count_golden_section()
         self.__count_area(bar)
         self.__count_bias()
+        self.__count_bd()
         self.export_to_csv(bar)
 
         self.rt_executed = False
@@ -1370,7 +1380,7 @@ class CtaLineBar(object):
             count_len = min(self.para_ma1_len, self.bar_len)
 
             barMa1 = ta.MA(self.close_array[-count_len:], count_len)[-1]
-            barMa1 = round(float(barMa1), self.round_n)
+            barMa1 = round(barMa1, self.round_n)
 
             if len(self.line_ma1) > self.max_hold_bars:
                 del self.line_ma1[0]
@@ -1388,7 +1398,7 @@ class CtaLineBar(object):
         if self.para_ma2_len > 0:
             count_len = min(self.para_ma2_len, self.bar_len)
             barMa2 = ta.MA(self.close_array[-count_len:], count_len)[-1]
-            barMa2 = round(float(barMa2), self.round_n)
+            barMa2 = round(barMa2, self.round_n)
 
             if len(self.line_ma2) > self.max_hold_bars:
                 del self.line_ma2[0]
@@ -1406,7 +1416,7 @@ class CtaLineBar(object):
         if self.para_ma3_len > 0:
             count_len = min(self.para_ma3_len, self.bar_len)
             barMa3 = ta.MA(self.close_array[-count_len:], count_len)[-1]
-            barMa3 = round(float(barMa3), self.round_n)
+            barMa3 = round(barMa3, self.round_n)
 
             if len(self.line_ma3) > self.max_hold_bars:
                 del self.line_ma3[0]
@@ -1508,7 +1518,7 @@ class CtaLineBar(object):
             if count_len > 0:
                 close_ma_array = ta.MA(np.append(self.close_array[-count_len:], [self.line_bar[-1].close_price]),
                                        count_len)
-                self._rt_ma1 = round(float(close_ma_array[-1]), self.round_n)
+                self._rt_ma1 = round(close_ma_array[-1], self.round_n)
 
                 # 计算斜率
                 if len(close_ma_array) > 2 and close_ma_array[-2] != 0:
@@ -1520,7 +1530,7 @@ class CtaLineBar(object):
             if count_len > 0:
                 close_ma_array = ta.MA(np.append(self.close_array[-count_len:], [self.line_bar[-1].close_price]),
                                        count_len)
-                self._rt_ma2 = round(float(close_ma_array[-1]), self.round_n)
+                self._rt_ma2 = round(close_ma_array[-1], self.round_n)
 
                 # 计算斜率
                 if len(close_ma_array) > 2 and close_ma_array[-2] != 0:
@@ -1532,7 +1542,7 @@ class CtaLineBar(object):
             if count_len > 0:
                 close_ma_array = ta.MA(np.append(self.close_array[-count_len:], [self.line_bar[-1].close_price]),
                                        count_len)
-                self._rt_ma3 = round(float(close_ma_array[-1]), self.round_n)
+                self._rt_ma3 = round(close_ma_array[-1], self.round_n)
 
                 # 计算斜率
                 if len(close_ma_array) > 2 and close_ma_array[-2] != 0:
@@ -3985,9 +3995,48 @@ class CtaLineBar(object):
             return self.line_bias3[-1]
         return self._rt_bias3
 
+    def __count_bd(self):
+        """计算波段快/慢线"""
+        #
+        if self.para_bd_len <= 0:
+            # 不计算
+            return
+
+        if len(self.line_bar) < 2 * self.para_bd_len:
+            return
+
+        mid4_ema_array = ta.EMA(self.mid4_array, self.para_bd_len)
+
+        mid4_std = np.std(self.mid4_array[-self.para_bd_len:], ddof=1)
+
+        mid4_ema_diff_array = self.mid4_array - mid4_ema_array
+        var5_array = (mid4_ema_diff_array / mid4_std * 100 + 200) / 4
+        var6_array = (ta.EMA(var5_array, 5) - 25) * 1.56
+        fast_array = ta.EMA(var6_array, 2) * 1.22
+        slow_array = ta.EMA(fast_array, 2)
+
+        # 快线/慢线最后记录，追加到line_bd_fast/ list_bd_slow中
+        if len(self.line_bd_fast) > self.max_hold_bars:
+            self.line_bd_fast.pop(0)
+        if not np.isnan(fast_array[-1]):
+            self.line_bd_fast.append(fast_array[-1])
+
+        if len(self.line_bd_slow) > self.max_hold_bars:
+            self.line_bd_slow.pop(0)
+        if not np.isnan(slow_array[-1]):
+            self.line_bd_slow.append(slow_array[-1])
+
+        # 判断金叉/死叉
+        if len(self.line_bd_fast) > 2 and len(self.line_bd_slow) > 2:
+            if self.line_bd_fast[-1] > self.line_bd_slow[-1]:
+                self.cur_bd_cross = max(1, self.cur_bd_cross + 1)
+            elif self.line_bd_fast[-1] < self.line_bd_slow[-1]:
+                self.cur_bd_cross = min(-1, self.cur_bd_cross -1)
+
     def write_log(self, content):
         """记录CTA日志"""
         self.strategy.write_log(u'[' + self.name + u']' + content)
+
 
     def append_data(self, file_name, dict_data, field_names=None):
         """

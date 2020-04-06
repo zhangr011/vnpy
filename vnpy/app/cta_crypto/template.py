@@ -449,7 +449,15 @@ class CtaFutureTemplate(CtaTemplate):
         self.policy = None  # 事务执行组件
         self.gt = None  # 网格交易组件
         self.klines = {}  # K线组件字典: kline_name: kline
+
+        self.price_tick = 1  # 商品的最小价格跳动
+        self.symbol_size = 10  # 商品得合约乘数
+        self.margin_rate = 0.1  # 商品的保证金
+        self.volumn_tick = 1  # 商品最小成交数量
+        self.cancel_seconds = 120  # 撤单时间(秒)
         self.activate_market = False
+        self.order_type = OrderType.LIMIT
+        self.backtesting = False
 
         self.cur_datetime: datetime = None  # 当前Tick时间
         self.cur_tick: TickData = None  # 最新的合约tick( vt_symbol)
@@ -488,6 +496,10 @@ class CtaFutureTemplate(CtaTemplate):
         if self.activate_market:
             self.write_log(f'{self.strategy_name}使用市价单委托方式')
             self.order_type = OrderType.MARKET
+        else:
+            if not self.backtesting:
+                self.cancel_seconds = 10
+                self.write_log(f'实盘撤单时间10秒')
 
     def sync_data(self):
         """同步更新数据"""
@@ -789,6 +801,9 @@ class CtaFutureTemplate(CtaTemplate):
                 if order.offset != Offset.OPEN:
                     grid.open_status = False
                     grid.close_status = True
+                    if grid.volume < order.traded:
+                        self.write_log(f'网格平仓数量{grid.volume}，小于委托单成交数量:{order.volume}，修正为:{order.volume}')
+                        grid.volume = order.traded
 
                     self.write_log(f'{grid.direction.value}单已平仓完毕,order_price:{order.price}'
                                    + f',volume:{order.volume}')
@@ -847,7 +862,7 @@ class CtaFutureTemplate(CtaTemplate):
                 pre_traded_volume = grid.traded_volume
                 grid.traded_volume = round(grid.traded_volume + order.traded, 7)
                 self.write_log(f'撤单中部分开仓:{order.traded} + 原已成交:{pre_traded_volume}  => {grid.traded_volume}')
-            if len(grid.order_ids):
+            if len(grid.order_ids)==0:
                 grid.order_status = False
                 if grid.traded_volume > 0:
                     pre_volume = grid.volume
@@ -953,9 +968,13 @@ class CtaFutureTemplate(CtaTemplate):
         事务开多仓
         :return:
         """
+        if self.backtesting:
+            buy_price = self.cur_price + self.price_tick
+        else:
+            buy_price = self.cur_tick.ask_price_1
 
         vt_orderids = self.buy(vt_symbol=self.vt_symbol,
-                               price=self.cur_price,
+                               price=buy_price,
                                volume=grid.volume,
                                order_type=self.order_type,
                                order_time=self.cur_datetime,
@@ -976,15 +995,18 @@ class CtaFutureTemplate(CtaTemplate):
         事务开空仓
         :return:
         """
-
+        if self.backtesting:
+            short_price = self.cur_price - self.price_tick
+        else:
+            short_price = self.cur_tick.bid_price_1
         vt_orderids = self.short(vt_symbol=self.vt_symbol,
-                                 price=self.cur_price,
+                                 price=short_price,
                                  volume=grid.volume,
                                  order_type=self.order_type,
                                  order_time=self.cur_datetime,
                                  grid=grid)
         if len(vt_orderids) > 0:
-            self.write_log(u'创建{}事务空单,指数开空价：{}，主力开仓价:{},数量：{}，止盈价:{},止损价:{}'
+            self.write_log(u'创建{}事务空单,事务开空价：{}，当前价:{},数量：{}，止盈价:{},止损价:{}'
                            .format(grid.type, grid.open_price, self.cur_price, grid.volume, grid.close_price,
                                    grid.stop_price))
             self.gt.up_grids.append(grid)
@@ -1154,6 +1176,8 @@ class CtaFutureTemplate(CtaTemplate):
                         self.write_log(u'撤单失败,更新状态为撤单成功')
                         order_info.update({'status': Status.CANCELLED})
                         self.active_orders.update({vt_orderid: order_info})
+                        if order_grid and vt_orderid in order_grid.order_ids:
+                            order_grid.order_ids.remove(vt_orderid)
 
                 continue
 
@@ -1272,13 +1296,40 @@ class CtaFutureTemplate(CtaTemplate):
         self.account_pos = self.cta_engine.get_position(vt_symbol=self.vt_symbol, direction=Direction.NET)
         if self.account_pos:
             self.write_log(f'账号{self.vt_symbol}持仓:{self.account_pos.volume}, 冻结:{self.account_pos.frozen}, 盈亏:{self.account_pos.pnl}')
-        up_grids_info = self.gt.to_str(direction=Direction.SHORT)
-        if len(self.gt.up_grids) > 0:
-            self.write_log(up_grids_info)
 
-        dn_grids_info = self.gt.to_str(direction=Direction.LONG)
-        if len(self.gt.dn_grids) > 0:
-            self.write_log(dn_grids_info)
+        up_grids_info = ""
+        for grid in list(self.gt.up_grids):
+            if not grid.open_status and grid.order_status:
+                up_grids_info += f'平空中: [已平:{grid.traded_volume} => 目标:{grid.volume}, 委托时间:{grid.order_time}\n'
+                if len(grid.order_ids) > 0:
+                    up_grids_info += f'委托单号:{grid.order_ids}'
+                continue
+
+            if grid.open_status and not grid.order_status:
+                up_grids_info += f'持空中: [数量:{grid.volume}\n, 开仓时间:{grid.open_time}'
+                continue
+
+            if not grid.open_status and grid.order_status:
+                up_grids_info += f'开空中: [已开:{grid.traded_volume} => 目标:{grid.volume}, 委托时间:{grid.order_time}\n'
+                if len(grid.order_ids) > 0:
+                    up_grids_info += f'委托单号:{grid.order_ids}'
+
+        dn_grids_info = ""
+        for grid in list(self.gt.dn_grids):
+            if not grid.open_status and grid.order_status:
+                up_grids_info += f'平多中: [已平:{grid.traded_volume} => 目标:{grid.volume}, 委托时间:{grid.order_time}\n'
+                if len(grid.order_ids) > 0:
+                    up_grids_info += f'委托单号:{grid.order_ids}'
+                continue
+
+            if grid.open_status and not grid.order_status:
+                up_grids_info += f'持多中: [数量:{grid.volume}\n, 开仓时间:{grid.open_time}'
+                continue
+
+            if not grid.open_status and grid.order_status:
+                up_grids_info += f'开多中: [已开:{grid.traded_volume} => 目标:{grid.volume}, 委托时间:{grid.order_time}\n'
+                if len(grid.order_ids) > 0:
+                    up_grids_info += f'委托单号:{grid.order_ids}'
 
     def display_tns(self):
         """显示事务的过程记录=》 log"""

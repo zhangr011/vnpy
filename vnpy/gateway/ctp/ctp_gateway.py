@@ -703,7 +703,6 @@ class CtpTdApi(TdApi):
         if data["OrderPriceType"] == THOST_FTDC_OPT_AnyPrice:
             order_type = OrderType.MARKET
 
-
         order = OrderData(
             symbol=symbol,
             exchange=exchange,
@@ -1287,7 +1286,8 @@ class TdxMdApi():
                 else:
                     self.gateway.write_log(u'创建tdx连接, IP: {}/{}'.format(self.best_ip['ip'], self.best_ip['port']))
                     self.connection_status = True
-                    self.gateway.status.update({'tdx_con': True, 'tdx_con_time': datetime.now().strftime('%Y-%m-%d %H:%M%S')})
+                    self.gateway.status.update(
+                        {'tdx_con': True, 'tdx_con_time': datetime.now().strftime('%Y-%m-%d %H:%M%S')})
                     self.thread = Thread(target=self.run)
                     self.thread.start()
 
@@ -1824,7 +1824,7 @@ class TickCombiner(object):
             # 昨收盘价
             if self.last_leg2_tick.pre_close > 0 and self.last_leg1_tick.pre_close > 0:
                 ratio_tick.pre_close = 100 * self.last_leg1_tick.pre_close * self.leg1_ratio / (
-                            self.last_leg2_tick.pre_close * self.leg2_ratio)  # noqa
+                        self.last_leg2_tick.pre_close * self.leg2_ratio)  # noqa
                 ratio_tick.pre_close = round_to(
                     target=self.price_tick,
                     value=ratio_tick.pre_close
@@ -1833,7 +1833,7 @@ class TickCombiner(object):
             # 开盘价
             if self.last_leg2_tick.open_price > 0 and self.last_leg1_tick.open_price > 0:
                 ratio_tick.open_price = 100 * self.last_leg1_tick.open_price * self.leg1_ratio / (
-                            self.last_leg2_tick.open_price * self.leg2_ratio)  # noqa
+                        self.last_leg2_tick.open_price * self.leg2_ratio)  # noqa
                 ratio_tick.open_price = round_to(
                     target=self.price_tick,
                     value=ratio_tick.open_price

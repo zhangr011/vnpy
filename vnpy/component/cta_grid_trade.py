@@ -38,7 +38,7 @@ class CtaGrid(object):
     包括交易方向，开仓价格，平仓价格，止损价格，开仓状态，平仓状态
     """
 
-    def __init__(self, **kwargs ):
+    def __init__(self, **kwargs):
 
         self.id: str = kwargs.get('id', str(uuid.uuid1()))  # gid
         self.direction = kwargs.get('direction', None)  # 交易方向（LONG：多，正套；SHORT：空，反套）
@@ -51,7 +51,7 @@ class CtaGrid(object):
         self.volume = kwargs.get('volume', 0.0)  # 开仓数量( 兼容数字货币 )
         self.traded_volume = kwargs.get('traded_volume', 0.0)  # 已成交数量 开仓时，为开仓数量，平仓时，为平仓数量
         self.order_status = kwargs.get('order_status', False)  # 挂单状态: True,已挂单，False，未挂单
-        self.order_ids = kwargs.get('order_ids',[])  # order_id list
+        self.order_ids = kwargs.get('order_ids', [])  # order_id list
         self.open_status = kwargs.get('open_status', False)  # 开仓状态
         self.close_status = kwargs.get('close_status', False)  # 平仓状态
         self.open_time = kwargs.get('open_time', None)  # 开仓时间
@@ -59,7 +59,7 @@ class CtaGrid(object):
         self.lock_grid_ids = kwargs.get('lock_grid_ids', [])  # 锁单的网格，[gid,gid]
         self.reuse_count = kwargs.get('reuse_count', 0)  # 重用次数（0， 平仓后是否删除）
         self.type = kwargs.get('type', '')  # 网格类型标签
-        self.snapshot = kwargs.get('snapshot',{})  # 切片数据，如记录开仓点时的某些状态数据
+        self.snapshot = kwargs.get('snapshot', {})  # 切片数据，如记录开仓点时的某些状态数据
 
     def to_json(self):
         """输出JSON"""
