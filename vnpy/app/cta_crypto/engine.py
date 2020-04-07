@@ -599,7 +599,7 @@ class CtaEngine(BaseEngine):
         order = self.main_engine.get_order(vt_orderid)
         if not order:
             self.write_log(msg=f"撤单失败，找不到委托{vt_orderid}",
-                           strategy_Name=strategy.strategy_name,
+                           strategy_name=strategy.strategy_name,
                            level=logging.ERROR)
             return False
 
