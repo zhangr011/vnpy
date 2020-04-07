@@ -1276,6 +1276,8 @@ class CtaFutureTemplate(CtaTemplate):
                     if order_info['offset'] == Offset.OPEN \
                             and order_grid \
                             and len(order_grid.order_ids) == 0 \
+                            and not order_grid.open_status \
+                            and not order_grid.order_status  \
                             and order_grid.traded_volume == 0:
                         self.write_log(u'移除从未开仓成功的委托网格{}'.format(order_grid.__dict__))
                         order_info['grid'] = None
