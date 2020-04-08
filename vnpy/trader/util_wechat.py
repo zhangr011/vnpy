@@ -19,8 +19,8 @@ global wechat_lock
 wechat_lock = Lock()
 
 # 这里可以设置UID
-UID = 'UID_kZguGPBQPWn41Ni9FK4CgPts2Kj'
-APP_TOKEN = 'AT_aDuiQu41dmAQV2vUMXOaaTDrWyhKJN2'
+UID = 'UID_kZguGPBQPWn41Ni9FK4CgPts2K'
+APP_TOKEN = 'AT_aDuiQu41dmAQV2vUMXOaaTDrWyhKJN2z'
 
 
 class wechat_thread(Thread):
@@ -28,28 +28,29 @@ class wechat_thread(Thread):
     采用线程方式，不阻塞
     """
 
-    def __init__(self, uid: str, content: str, topic_ids: list = [], url: str = ''):
+    def __init__(self, uids: list, content: str, topic_ids: list = [], url: str = '', app_token=''):
 
         # text：消息标题，最长为256，必填。
         # desp：消息内容，最长64Kb，可空，支持MarkDown。
 
         super(wechat_thread, self).__init__(name="wechat_thread")
         self.request_url = "http://wxpusher.zjiecode.com/api/send/message"
-        self.uid = uid
+        self.uids = uids
         self.content = content
         self.topic_ids = topic_ids
         self.url = url
         self.lock = wechat_lock
+        self.app_token = app_token if len(app_token) > 0 else APP_TOKEN
 
     def run(self):
         if self.content is None or len(self.content) == 0:
             return
         params = {}
-        params['appToken'] = APP_TOKEN
+        params['appToken'] = self.app_token
         params['content'] = self.content
         params['contentType'] = 1
         params['topicIds'] = self.topic_ids
-        params['uids'] = [self.uid]
+        params['uids'] = self.uids
         params['url'] = self.url
 
         # 发送请求
@@ -65,7 +66,7 @@ class wechat_thread(Thread):
         print("wechat_thread sent successful!")
 
 
-def send_wx_msg(content=''):
+def send_wx_msg(content='', uids=[], app_token=''):
     """
     发送微信Msg
     :param content:   发送内容
@@ -75,7 +76,11 @@ def send_wx_msg(content=''):
     if len(content) == 0:
         return
 
-    t = wechat_thread(uid=UID, content=content)
+    # 没有配置的话，使用缺省UID
+    if len(uids) == 0:
+        uids.append(UID)
+
+    t = wechat_thread(uids=uids, content=content, app_token=app_token)
     t.daemon = False
     # t.run()
     t.start()
