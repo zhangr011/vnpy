@@ -2259,7 +2259,7 @@ class BackTestingEngine(object):
         :param trade:
         :return:
         """
-        strategy_name = getattr(trade, 'strategy', self.test_name)
+        strategy_name = getattr(trade, 'strategy_name', self.test_name)
         trade_fields = ['symbol', 'exchange', 'vt_symbol', 'tradeid',
                         'vt_tradeid', 'orderid', 'vt_orderid',
                         'direction',
