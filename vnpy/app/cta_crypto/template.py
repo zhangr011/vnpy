@@ -20,6 +20,7 @@ from .base import StopOrder
 from vnpy.component.cta_grid_trade import CtaGrid, CtaGridTrade
 from vnpy.component.cta_position import CtaPosition
 
+
 class CtaTemplate(ABC):
     """CTA策略模板"""
 
@@ -853,6 +854,10 @@ class CtaFutureTemplate(CtaTemplate):
         grid = old_order.get('grid', None)
 
         pre_status = old_order.get('status', Status.NOTTRADED)
+        if pre_status == Status.CANCELLED:
+            self.write_log(f'当前状态已经是{Status.CANCELLED}，不做调整处理')
+            return
+
         old_order.update({'status': Status.CANCELLED})
         self.write_log(u'委托单状态:{}=>{}'.format(pre_status, old_order.get('status')))
         if grid:
@@ -862,7 +867,7 @@ class CtaFutureTemplate(CtaTemplate):
                 pre_traded_volume = grid.traded_volume
                 grid.traded_volume = round(grid.traded_volume + order.traded, 7)
                 self.write_log(f'撤单中部分开仓:{order.traded} + 原已成交:{pre_traded_volume}  => {grid.traded_volume}')
-            if len(grid.order_ids)==0:
+            if len(grid.order_ids) == 0:
                 grid.order_status = False
                 if grid.traded_volume > 0:
                     pre_volume = grid.volume
@@ -891,6 +896,10 @@ class CtaFutureTemplate(CtaTemplate):
 
         grid = old_order.get('grid', None)
         pre_status = old_order.get('status', Status.NOTTRADED)
+        if pre_status == Status.CANCELLED:
+            self.write_log(f'当前状态已经是{Status.CANCELLED}，不做调整处理')
+            return
+
         old_order.update({'status': Status.CANCELLED})
         self.write_log(u'委托单状态:{}=>{}'.format(pre_status, old_order.get('status')))
         if grid:
@@ -1277,7 +1286,7 @@ class CtaFutureTemplate(CtaTemplate):
                             and order_grid \
                             and len(order_grid.order_ids) == 0 \
                             and not order_grid.open_status \
-                            and not order_grid.order_status  \
+                            and not order_grid.order_status \
                             and order_grid.traded_volume == 0:
                         self.write_log(u'移除从未开仓成功的委托网格{}'.format(order_grid.__dict__))
                         order_info['grid'] = None
@@ -1297,7 +1306,8 @@ class CtaFutureTemplate(CtaTemplate):
             return
         self.account_pos = self.cta_engine.get_position(vt_symbol=self.vt_symbol, direction=Direction.NET)
         if self.account_pos:
-            self.write_log(f'账号{self.vt_symbol}持仓:{self.account_pos.volume}, 冻结:{self.account_pos.frozen}, 盈亏:{self.account_pos.pnl}')
+            self.write_log(
+                f'账号{self.vt_symbol}持仓:{self.account_pos.volume}, 冻结:{self.account_pos.frozen}, 盈亏:{self.account_pos.pnl}')
 
         up_grids_info = ""
         for grid in list(self.gt.up_grids):

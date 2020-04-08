@@ -635,7 +635,7 @@ class CtaLineBar(object):
         # 波段买卖指标
         self.line_bd_fast = []  # 波段快线
         self.line_bd_slow = []  # 波段慢线
-        self.cur_bd_cross = 0  # 当前波段快线慢线金叉死叉， +金叉计算， - 死叉技术
+        self.cur_bd_count = 0  # 当前波段快线慢线金叉死叉， +金叉计算， - 死叉技术
 
     def set_params(self, setting: dict = {}):
         """设置参数"""
@@ -4029,9 +4029,9 @@ class CtaLineBar(object):
         # 判断金叉/死叉
         if len(self.line_bd_fast) > 2 and len(self.line_bd_slow) > 2:
             if self.line_bd_fast[-1] > self.line_bd_slow[-1]:
-                self.cur_bd_cross = max(1, self.cur_bd_cross + 1)
+                self.cur_bd_count = max(1, self.cur_bd_count + 1)
             elif self.line_bd_fast[-1] < self.line_bd_slow[-1]:
-                self.cur_bd_cross = min(-1, self.cur_bd_cross -1)
+                self.cur_bd_count = min(-1, self.cur_bd_count - 1)
 
     def write_log(self, content):
         """记录CTA日志"""

@@ -1263,7 +1263,7 @@ class BackTestingEngine(object):
             if v.long_td > 0:
                 self.write_log(u'调整多单持仓:今仓{}=> 0 昨仓{} => 昨仓:{}'.format(v.long_td, v.long_yd, v.long_pos))
                 v.long_td = 0
-                v.longYd = v.long_pos
+                v.long_yd = v.long_pos
 
             if v.short_td > 0:
                 self.write_log(u'调整空单持仓:今仓{}=> 0 昨仓{} => 昨仓:{}'.format(v.short_td, v.short_yd, v.short_pos))

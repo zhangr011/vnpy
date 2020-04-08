@@ -385,7 +385,7 @@ class BackTestingEngine(object):
     def get_exchange(self, symbol: str):
         return self.symbol_exchange_dict.get(symbol, Exchange.LOCAL)
 
-    def get_position(self, vt_symbol: str, direction: Direction, gateway_name: str = ''):
+    def get_position(self, vt_symbol: str, direction: Direction = Direction.NET, gateway_name: str = ''):
         """ 查询合约在账号的持仓"""
         if not gateway_name:
             gateway_name = self.gateway_name
