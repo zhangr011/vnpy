@@ -96,6 +96,7 @@ class BarData(BaseData):
     trading_day: str = ""  # '%Y-%m-%d'
 
     interval: Interval = None  # constant.py Internal 1m, 1h, 1d, 1w .etc
+    interval_num: int = 1   # 5 for 5m, 5h etc
     volume: float = 0
     open_interest: float = 0
     open_price: float = 0

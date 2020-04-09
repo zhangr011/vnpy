@@ -583,8 +583,8 @@ class BackTestingEngine(object):
     def new_bar(self, bar):
         """新的K线"""
         self.last_bar.update({bar.vt_symbol: bar})
-        if self.last_dt is None or (bar.datetime and bar.datetime > self.last_dt):
-            self.last_dt = bar.datetime
+        if self.last_dt is None or (bar.datetime and bar.datetime > self.last_dt - timedelta(seconds=self.bar_interval_seconds)):
+            self.last_dt = bar.datetime + timedelta(seconds=self.bar_interval_seconds)
         self.set_price(bar.vt_symbol, bar.close_price)
         self.cross_stop_order(bar=bar)  # 撮合停止单
         self.cross_limit_order(bar=bar)  # 先撮合限价单
@@ -898,7 +898,7 @@ class BackTestingEngine(object):
             if register_strategy.strategy_name != strategy.strategy_name:
                 return False
             order.status = Status.CANCELLED
-            order.cancelTime = str(self.last_dt)
+            order.cancel_time = str(self.last_dt)
             self.active_limit_orders.pop(vt_orderid, None)
             strategy.on_order(order)
             return True
@@ -960,6 +960,7 @@ class BackTestingEngine(object):
                 if strategy:
                     strategy.on_order(order)
 
+        # 撤销本地停止单
         for stop_orderid in list(self.active_stop_orders.keys()):
             order = self.active_stop_orders.get(stop_orderid, None)
             order_strategy = self.order_strategy_dict.get(stop_orderid, None)
@@ -992,6 +993,7 @@ class BackTestingEngine(object):
 
     def cross_stop_order(self, bar: BarData = None, tick: TickData = None):
         """
+        本地停止单撮合
         Cross stop order with last bar/tick data.
         """
         vt_symbol = bar.vt_symbol if bar else tick.vt_symbol

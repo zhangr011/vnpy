@@ -354,7 +354,7 @@ class BackTestingEngine(object):
         return self.volume_tick.get(vt_symbol, 1)
 
     def set_contract(self, symbol: str, exchange: Exchange, product: Product, name: str, size: int,
-                     price_tick: float, volume_tick: float = 1, margin_rate: float = 0.1):
+                     price_tick: float, volume_tick: float = 0.1, margin_rate: float = 0.1):
         """设置合约信息"""
         vt_symbol = '.'.join([symbol, exchange.value])
         if vt_symbol not in self.contract_dict:
@@ -560,8 +560,8 @@ class BackTestingEngine(object):
                 exchange=Exchange(symbol_data.get('exchange', 'LOCAL')),
                 product=Product(symbol_data.get('product', "期货")),
                 size=symbol_data.get('symbol_size', 10),
-                price_tick=symbol_data.get('price_tick', 1),
-                volume_tick=symbol_data.get('min_volume', 1),
+                price_tick=symbol_data.get('price_tick', 0.01),
+                volume_tick=symbol_data.get('min_volume', 0.1),
                 margin_rate=margin_rate
             )
 
@@ -601,8 +601,8 @@ class BackTestingEngine(object):
     def new_bar(self, bar):
         """新的K线"""
         self.last_bar.update({bar.vt_symbol: bar})
-        if self.last_dt is None or (bar.datetime and bar.datetime > self.last_dt):
-            self.last_dt = bar.datetime
+        if self.last_dt is None or (bar.datetime and bar.datetime > self.last_dt - timedelta(seconds=self.bar_interval_seconds)):
+            self.last_dt = bar.datetime + timedelta(seconds=self.bar_interval_seconds)
         self.set_price(bar.vt_symbol, bar.close_price)
         self.cross_stop_order(bar=bar)  # 撮合停止单
         self.cross_limit_order(bar=bar)  # 先撮合限价单
@@ -887,7 +887,7 @@ class BackTestingEngine(object):
             if register_strategy.strategy_name != strategy.strategy_name:
                 return False
             order.status = Status.CANCELLED
-            order.cancelTime = str(self.last_dt)
+            order.cancel_time = str(self.last_dt)
             self.active_limit_orders.pop(vt_orderid, None)
             strategy.on_order(order)
             return True
@@ -941,7 +941,7 @@ class BackTestingEngine(object):
                 strategy_cond = strategy.strategy_name == order_strategy.strategy_name
 
             if offset_cond and symbol_cond and strategy_cond:
-                self.write_log(u'撤销订单:{},{} {}@{}'
+                self.write_log(u'撤销限价订单:{},{} {}@{}'
                                .format(vt_orderid, order.direction, order.price, order.volume))
                 order.status = Status.CANCELLED
                 order.cancel_time = str(self.last_dt)

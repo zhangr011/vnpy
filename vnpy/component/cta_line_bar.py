@@ -1055,7 +1055,9 @@ class CtaLineBar(object):
             gateway_name=tick.gateway_name,
             symbol=tick.symbol,
             exchange=tick.exchange,
-            datetime=tick.datetime
+            datetime=tick.datetime,
+            interval=self.interval,
+            interval_num=self.bar_interval
         )  # 创建新的K线
         # 计算K线的整点分钟周期，这里周期最小是1分钟。如果你是采用非整点分钟，例如1.5分钟，请把这段注解掉
         if self.minute_interval and self.interval == Interval.SECOND:

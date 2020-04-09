@@ -283,7 +283,7 @@ class AlgoEngine(BaseEngine):
 
         ret = self.stop_algo(req.orderid)
         if ret:
-            order.cancelTime = datetime.now().strftime('%H:%M:%S.%f')
+            order.cancel_time = datetime.now().strftime('%H:%M:%S.%f')
             order.status = Status.CANCELLED
             event1 = Event(type=EVENT_ORDER, data=order)
             self.event_engine.put(event1)

@@ -8,6 +8,7 @@ from vnpy.component.base import CtaComponent
 from vnpy.trader.utility import get_folder_path
 
 TNS_STATUS_OBSERVATE = 'observate'
+TNS_STATUS_READY = 'ready'
 TNS_STATUS_ORDERING = 'ordering'
 TNS_STATUS_OPENED = 'opened'
 TNS_STATUS_CLOSED = 'closed'

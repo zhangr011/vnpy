@@ -38,6 +38,7 @@ from vnpy.trader.object import (
     SubscribeRequest,
     HistoryRequest
 )
+from vnpy.trader.utility import print_dict
 from vnpy.trader.event import EVENT_TIMER
 from vnpy.event import Event, EventEngine
 
@@ -508,11 +509,14 @@ class BinancefRestApi(RestClient):
             "unrealizedProfit": "-0.44537584", // 持仓未实现盈亏
             "walletBalance": "9.19485176" // 账户余额
             }"""
+            # self.gateway.write_log(print_dict(asset))
             account = AccountData(
                 accountid=f"{self.gateway_name}_{asset['asset']}",
                 balance=float(asset["marginBalance"]),
                 frozen=float(asset["maintMargin"]),
                 holding_profit=float(asset['unrealizedProfit']),
+                currency='USDT',
+                margin=float(asset["initialMargin"]),
                 gateway_name=self.gateway_name
             )
 
