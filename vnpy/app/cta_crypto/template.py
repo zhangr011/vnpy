@@ -194,7 +194,7 @@ class CtaTemplate(ABC):
         """
         Send buy order to open a long position.
         """
-        if OrderType in [OrderType.FAK, OrderType.FOK]:
+        if order_type in [OrderType.FAK, OrderType.FOK]:
             if self.is_upper_limit(vt_symbol):
                 self.write_error(u'涨停价不做FAK/FOK委托')
                 return []
@@ -214,7 +214,7 @@ class CtaTemplate(ABC):
         """
         Send sell order to close a long position.
         """
-        if OrderType in [OrderType.FAK, OrderType.FOK]:
+        if order_type in [OrderType.FAK, OrderType.FOK]:
             if self.is_lower_limit(vt_symbol):
                 self.write_error(u'跌停价不做FAK/FOK sell委托')
                 return []
@@ -234,7 +234,7 @@ class CtaTemplate(ABC):
         """
         Send short order to open as short position.
         """
-        if OrderType in [OrderType.FAK, OrderType.FOK]:
+        if order_type in [OrderType.FAK, OrderType.FOK]:
             if self.is_lower_limit(vt_symbol):
                 self.write_error(u'跌停价不做FAK/FOK short委托')
                 return []
@@ -254,7 +254,7 @@ class CtaTemplate(ABC):
         """
         Send cover order to close a short position.
         """
-        if OrderType in [OrderType.FAK, OrderType.FOK]:
+        if order_type in [OrderType.FAK, OrderType.FOK]:
             if self.is_upper_limit(vt_symbol):
                 self.write_error(u'涨停价不做FAK/FOK cover委托')
                 return []

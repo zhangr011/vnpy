@@ -118,6 +118,9 @@ class MainWindow(QtWidgets.QMainWindow):
         all_apps = self.main_engine.get_all_apps()
         for app in all_apps:
             try:
+                if getattr(app, 'widget_name') is None:
+                    continue
+
                 ui_module = import_module(app.app_module + ".ui")
                 widget_class = getattr(ui_module, app.widget_name)
 

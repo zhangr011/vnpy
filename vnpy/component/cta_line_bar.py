@@ -759,6 +759,10 @@ class CtaLineBar(object):
 
     def on_bar(self, bar: BarData):
         """OnBar事件"""
+        if not bar.interval:
+            bar.interval = self.interval
+            bar.interval_num = self.bar_interval
+
         # 计算相关数据
         bar_mid3 = round((bar.close_price + bar.high_price + bar.low_price) / 3, self.round_n)
         bar_mid4 = round((2 * bar.close_price + bar.high_price + bar.low_price) / 4, self.round_n)
@@ -816,7 +820,7 @@ class CtaLineBar(object):
 
         # 回调上层调用者
         if self.cb_on_bar:
-            self.cb_on_bar(bar)
+            self.cb_on_bar(bar=bar)
 
     def check_rt_funcs(self, func):
         """
@@ -3620,6 +3624,24 @@ class CtaLineBar(object):
             return True
 
         return False
+
+    @property
+    def rt_skd_dead_cross(self):
+        """是否实时SKD死叉"""
+        ret = self.is_skd_high_dead_cross(runtime=True, high_skd=15) and \
+                                      self.cur_skd_count > 0 and \
+                                      self.rt_skd_cross_price > 0 and \
+                                      self.cur_price <= self.rt_skd_cross_price
+        return ret
+
+    @property
+    def rt_skd_golden_cross(self):
+        """是否实时SKD金叉"""
+        ret = self.is_skd_low_golden_cross(runtime=True, low_skd=85) and \
+                      self.cur_skd_count < 0 and \
+                      self.rt_skd_cross_price > 0 and \
+                      self.cur_price >= self.rt_skd_cross_price
+        return ret
 
     def is_skd_high_dead_cross(self, runtime=False, high_skd=None):
         """

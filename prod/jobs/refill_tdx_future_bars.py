@@ -33,7 +33,7 @@ for underlying_symbol in api_01.future_contracts.keys():
     index_symbol = underlying_symbol + '99'
     print(f'开始更新:{index_symbol}')
     # csv数据文件名
-    bar_file_path = os.path.abspath(os.path.join(bar_data_folder, f'{underlying_symbol}99_{start_date}_1m.csv'))
+    bar_file_path = os.path.abspath(os.path.join(bar_data_folder, 'tdx', f'{underlying_symbol}99_{start_date}_1m.csv'))
 
     # 如果文件存在，
     if os.path.exists(bar_file_path):

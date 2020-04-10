@@ -545,8 +545,8 @@ class BackTestingEngine(object):
 
         for symbol, symbol_data in data_dict.items():
             self.write_log(u'配置{}数据:{}'.format(symbol, symbol_data))
-            self.set_price_tick(symbol, symbol_data.get('price_tick', 1))
-            self.set_volume_tick(symbol, symbol_data.get('min_volume', 1))
+            self.set_price_tick(symbol, symbol_data.get('price_tick', 0.01))
+            self.set_volume_tick(symbol, symbol_data.get('min_volume', 0.01))
             self.set_slippage(symbol, symbol_data.get('slippage', 0))
             self.set_size(symbol, symbol_data.get('symbol_size', 10))
             margin_rate = symbol_data.get('margin_rate', 0.1)
@@ -561,7 +561,7 @@ class BackTestingEngine(object):
                 product=Product(symbol_data.get('product', "期货")),
                 size=symbol_data.get('symbol_size', 10),
                 price_tick=symbol_data.get('price_tick', 0.01),
-                volume_tick=symbol_data.get('min_volume', 0.1),
+                volume_tick=symbol_data.get('min_volume', 0.01),
                 margin_rate=margin_rate
             )
 
@@ -827,7 +827,7 @@ class BackTestingEngine(object):
             direction=direction,
             offset=offset,
             type=order_type,
-            price=round_to(value=price, target=self.get_price_tick(symbol)),
+            price=round_to(value=price, target=self.get_price_tick(vt_symbol)),
             volume=volume,
             status=Status.NOTTRADED,
             time=str(self.last_dt)
