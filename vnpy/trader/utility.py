@@ -166,12 +166,19 @@ def get_trading_date(dt: datetime = None):
     else:
         return dt.strftime('%Y-%m-%d')
 
-
 def extract_vt_symbol(vt_symbol: str) -> Tuple[str, Exchange]:
     """
     :return: (symbol, exchange)
     """
-    symbol, exchange_str = vt_symbol.split(".")
+    if '.' in vt_symbol:
+        symbol, exchange_str = vt_symbol.split('.')
+    elif vt_symbol.isdigit():
+        symbol = vt_symbol
+        exchange_str = get_stock_exchange(code=symbol)
+    else:
+        symbol = vt_symbol
+        exchange_str = Exchange.LOCAL.value
+
     return symbol, Exchange(exchange_str)
 
 
