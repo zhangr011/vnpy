@@ -8,6 +8,7 @@
     6. 监听股票接口的 EVENT_HISTORY_ORDER 事件， 数据 => history_trades
     7. 监听股票接口的 EVENT_FUNDS_FLOW 事件， 数据 => funds_flow
     8. 监听 EVENT_STRATEGY_POS事件，数据 =》 mongodb Account.today_strategy_pos
+    9. 监听 EVENT_STRATEGY_SNAPSHOT事件， 数据=》 mongodb Account.strategy_snapshot
 
 配置文件 ar_setting.json
     

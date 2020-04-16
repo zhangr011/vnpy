@@ -214,6 +214,8 @@ class BinancefRestApi(RestClient):
 
         self.orders = {}
 
+        self.accountid = ""
+
     def sign(self, request: Request) -> Request:
         """
         Generate BINANCE signature.
@@ -398,6 +400,9 @@ class BinancefRestApi(RestClient):
             orderid,
             self.gateway_name
         )
+        order.accountid = self.accountid
+        order.vt_accountid = f"{self.gateway_name}.{self.accountid}"
+        order.datetime = datetime.now()
         self.orders.update({orderid: copy(order)})
         self.gateway.write_log(f'委托返回订单更新:{order.__dict__}')
         self.gateway.on_order(order)
@@ -510,14 +515,19 @@ class BinancefRestApi(RestClient):
             "walletBalance": "9.19485176" // 账户余额
             }"""
             # self.gateway.write_log(print_dict(asset))
+            if asset['asset'] != "USDT":
+                continue
+            if not self.accountid:
+                self.accountid = f"{self.gateway_name}_{asset['asset']}"
             account = AccountData(
-                accountid=f"{self.gateway_name}_{asset['asset']}",
+                accountid=self.accountid,
                 balance=float(asset["marginBalance"]),
                 frozen=float(asset["maintMargin"]),
                 holding_profit=float(asset['unrealizedProfit']),
                 currency='USDT',
                 margin=float(asset["initialMargin"]),
-                gateway_name=self.gateway_name
+                gateway_name=self.gateway_name,
+                trading_day=datetime.now().strftime('%Y-%m-%d')
             )
 
             if account.balance:
@@ -536,13 +546,16 @@ class BinancefRestApi(RestClient):
     def on_query_position(self, data: dict, request: Request) -> None:
         """"""
         for d in data:
+            # self.gateway.write_log(d)
             volume = float(d["positionAmt"])
             position = PositionData(
+                accountid=self.accountid,
                 symbol=d["symbol"],
                 exchange=Exchange.BINANCE,
                 direction=Direction.NET,
                 volume=volume,
                 price=float(d["entryPrice"]),
+                cur_price=float(d["markPrice"]),
                 pnl=float(d["unRealizedProfit"]),
                 gateway_name=self.gateway_name,
             )
@@ -557,7 +570,9 @@ class BinancefRestApi(RestClient):
             time = dt.strftime("%Y-%m-%d %H:%M:%S")
 
             order = OrderData(
+                accountid=self.accountid,
                 orderid=d["clientOrderId"],
+                sys_orderid=str(d["orderId"]),
                 symbol=d["symbol"],
                 exchange=Exchange.BINANCE,
                 price=float(d["price"]),
@@ -566,6 +581,7 @@ class BinancefRestApi(RestClient):
                 direction=DIRECTION_BINANCEF2VT[d["side"]],
                 traded=float(d["executedQty"]),
                 status=STATUS_BINANCEF2VT.get(d["status"], None),
+                datetime=dt,
                 time=time,
                 gateway_name=self.gateway_name,
             )
@@ -582,6 +598,7 @@ class BinancefRestApi(RestClient):
             time = dt.strftime("%Y-%m-%d %H:%M:%S")
 
             trade = TradeData(
+                accountid=self.accountid,
                 symbol=d['symbol'],
                 exchange=Exchange.BINANCE,
                 orderid=d['orderId'],
@@ -655,6 +672,11 @@ class BinancefRestApi(RestClient):
         order.status = Status.REJECTED
         self.orders.update({order.orderid: copy(order)})
         self.gateway.write_log(f'订单委托失败:{order.__dict__}')
+        if not order.accountid:
+            order.accountid = self.accountid
+            order.vt_accountid = f"{self.gateway_name}.{self.accountid}"
+        if not order.datetime:
+            order.datetime = datetime.now()
         self.gateway.on_order(order)
 
         msg = f"委托失败，状态码：{status_code}，信息：{request.response.text}"
@@ -670,6 +692,11 @@ class BinancefRestApi(RestClient):
         order.status = Status.REJECTED
         self.orders.update({order.orderid: copy(order)})
         self.gateway.write_log(f'发送订单异常:{order.__dict__}')
+        if not order.accountid:
+            order.accountid = self.accountid
+            order.vt_accountid = f"{self.gateway_name}.{self.accountid}"
+        if not order.datetime:
+            order.datetime = datetime.now()
         self.gateway.on_order(order)
 
         msg = f"委托失败，拒单"
@@ -784,6 +811,7 @@ class BinancefTradeWebsocketApi(WebsocketClient):
 
         self.gateway: BinancefGateway = gateway
         self.gateway_name: str = gateway.gateway_name
+        self.accountid = ""
 
     def connect(self, url: str, proxy_host: str, proxy_port: int) -> None:
         """"""
@@ -836,9 +864,12 @@ class BinancefTradeWebsocketApi(WebsocketClient):
         # 计算持仓收益
         holding_pnl = 0
         for pos_data in packet["a"]["P"]:
-            print(pos_data)
+            # print(pos_data)
             volume = float(pos_data["pa"])
+            if not self.accountid:
+                self.accountid = f"{self.gateway_name}_USDT"
             position = PositionData(
+                accountid=self.accountid,
                 symbol=pos_data["s"],
                 exchange=Exchange.BINANCE,
                 direction=Direction.NET,
@@ -851,12 +882,16 @@ class BinancefTradeWebsocketApi(WebsocketClient):
             self.gateway.on_position(position)
 
         for acc_data in packet["a"]["B"]:
+            if acc_data['a'] != 'USDT':
+                continue
             account = AccountData(
-                accountid=f"{self.gateway_name}_{acc_data['a']}",
+                accountid=self.accountid,
                 balance=round(float(acc_data["wb"]), 7),
                 frozen=float(acc_data["wb"]) - float(acc_data["cw"]),
                 holding_profit=round(holding_pnl, 7),
-                gateway_name=self.gateway_name
+                currency='USDT',
+                gateway_name=self.gateway_name,
+                trading_day=datetime.now().strftime('%Y-%m-%d')
             )
 
             if account.balance:
@@ -884,15 +919,18 @@ class BinancefTradeWebsocketApi(WebsocketClient):
         else:
             self.gateway.write_log(u'缓存中找不到Order,创建一个新的')
             order = OrderData(
+                accountid=self.accountid,
                 symbol=ord_data["s"],
                 exchange=Exchange.BINANCE,
                 orderid=str(ord_data["c"]),
+                sys_orderid=str(ord_data["i"]),
                 type=ORDERTYPE_BINANCEF2VT[ord_data["o"]],
                 direction=DIRECTION_BINANCEF2VT[ord_data["S"]],
                 price=float(ord_data["p"]),
                 volume=float(ord_data["q"]),
                 traded=float(ord_data["z"]),
                 status=STATUS_BINANCEF2VT[ord_data["X"]],
+                datetime=dt,
                 time=time,
                 gateway_name=self.gateway_name
             )
@@ -908,6 +946,7 @@ class BinancefTradeWebsocketApi(WebsocketClient):
         trade_time = trade_dt.strftime("%Y-%m-%d %H:%M:%S")
 
         trade = TradeData(
+            accountid=self.accountid,
             symbol=order.symbol,
             exchange=order.exchange,
             orderid=order.orderid,

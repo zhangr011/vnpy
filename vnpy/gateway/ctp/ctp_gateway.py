@@ -640,6 +640,8 @@ class CtpTdApi(TdApi):
         self.sysid_orderid_map = {}
         self.future_contract_changed = False
 
+        self.accountid = ""
+
     def onFrontConnected(self):
         """"""
         self.gateway.write_log("交易服务器连接成功")
@@ -754,6 +756,7 @@ class CtpTdApi(TdApi):
             position = self.positions.get(key, None)
             if not position:
                 position = PositionData(
+                    accountid=self.accountid,
                     symbol=data["InstrumentID"],
                     exchange=symbol_exchange_map[data["InstrumentID"]],
                     direction=DIRECTION_CTP2VT[data["PosiDirection"]],
@@ -800,6 +803,8 @@ class CtpTdApi(TdApi):
         """"""
         if "AccountID" not in data:
             return
+        if not self.accountid:
+            self.accountid = data['AccountID']
 
         account = AccountData(
             accountid=data["AccountID"],

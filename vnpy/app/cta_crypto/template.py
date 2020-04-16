@@ -815,6 +815,7 @@ class CtaFutureTemplate(CtaTemplate):
                 # 开仓完毕( buy, short)
                 else:
                     grid.open_status = True
+                    grid.open_time = self.cur_datetime
                     self.write_log(f'{grid.direction.value}单已开仓完毕,order_price:{order.price}'
                                    + f',volume:{order.volume}')
 
@@ -1312,36 +1313,41 @@ class CtaFutureTemplate(CtaTemplate):
         up_grids_info = ""
         for grid in list(self.gt.up_grids):
             if not grid.open_status and grid.order_status:
-                up_grids_info += f'平空中: [已平:{grid.traded_volume} => 目标:{grid.volume}, 委托时间:{grid.order_time}\n'
+                up_grids_info += f'平空中: [已平:{grid.traded_volume} => 目标:{grid.volume}, 委托时间:{grid.order_time}]\n'
                 if len(grid.order_ids) > 0:
                     up_grids_info += f'委托单号:{grid.order_ids}'
                 continue
 
             if grid.open_status and not grid.order_status:
-                up_grids_info += f'持空中: [数量:{grid.volume}\n, 开仓时间:{grid.open_time}'
+                up_grids_info += f'持空中: [数量:{grid.volume}\n, 开仓时间:{grid.open_time}]\n'
                 continue
 
             if not grid.open_status and grid.order_status:
-                up_grids_info += f'开空中: [已开:{grid.traded_volume} => 目标:{grid.volume}, 委托时间:{grid.order_time}\n'
+                up_grids_info += f'开空中: [已开:{grid.traded_volume} => 目标:{grid.volume}, 委托时间:{grid.order_time}]\n'
                 if len(grid.order_ids) > 0:
                     up_grids_info += f'委托单号:{grid.order_ids}'
 
         dn_grids_info = ""
         for grid in list(self.gt.dn_grids):
             if not grid.open_status and grid.order_status:
-                up_grids_info += f'平多中: [已平:{grid.traded_volume} => 目标:{grid.volume}, 委托时间:{grid.order_time}\n'
+                dn_grids_info += f'平多中: [已平:{grid.traded_volume} => 目标:{grid.volume}, 委托时间:{grid.order_time}]\n'
                 if len(grid.order_ids) > 0:
-                    up_grids_info += f'委托单号:{grid.order_ids}'
+                    dn_grids_info += f'委托单号:{grid.order_ids}'
                 continue
 
             if grid.open_status and not grid.order_status:
-                up_grids_info += f'持多中: [数量:{grid.volume}\n, 开仓时间:{grid.open_time}'
+                dn_grids_info += f'持多中: [数量:{grid.volume}\n, 开仓时间:{grid.open_time}]\n'
                 continue
 
             if not grid.open_status and grid.order_status:
-                up_grids_info += f'开多中: [已开:{grid.traded_volume} => 目标:{grid.volume}, 委托时间:{grid.order_time}\n'
+                dn_grids_info += f'开多中: [已开:{grid.traded_volume} => 目标:{grid.volume}, 委托时间:{grid.order_time}]\n'
                 if len(grid.order_ids) > 0:
-                    up_grids_info += f'委托单号:{grid.order_ids}'
+                    dn_grids_info += f'委托单号:{grid.order_ids}'
+
+        if len(up_grids_info) > 0:
+            self.write_log(up_grids_info)
+        if len(dn_grids_info) > 0:
+            self.write_log(dn_grids_info)
 
     def display_tns(self):
         """显示事务的过程记录=》 log"""

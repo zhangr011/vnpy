@@ -19,6 +19,7 @@ from collections import OrderedDict
 from concurrent.futures import ThreadPoolExecutor
 from copy import copy
 from functools import lru_cache
+from uuid import uuid1
 
 from vnpy.event import Event, EventEngine
 from vnpy.trader.engine import BaseEngine, MainEngine
@@ -37,6 +38,7 @@ from vnpy.trader.event import (
     EVENT_TRADE,
     EVENT_POSITION,
     EVENT_STRATEGY_POS,
+    EVENT_STRATEGY_SNAPSHOT
 )
 from vnpy.trader.constant import (
     Direction,
@@ -203,21 +205,27 @@ class CtaEngine(BaseEngine):
 
     def process_timer_event(self, event: Event):
         """ 处理定时器事件"""
-
+        all_trading = True
         # 触发每个策略的定时接口
         for strategy in list(self.strategies.values()):
             strategy.on_timer()
+            if not strategy.trading:
+                all_trading = False
 
         dt = datetime.now()
 
         if self.last_minute != dt.minute:
             self.last_minute = dt.minute
 
-            # 主动获取所有策略得持仓信息
-            all_strategy_pos = self.get_all_strategy_pos()
+            if all_trading:
+                # 主动获取所有策略得持仓信息
+                all_strategy_pos = self.get_all_strategy_pos()
 
-            # 推送到事件
-            self.put_all_strategy_pos_event(all_strategy_pos)
+                # 比对仓位，使用上述获取得持仓信息，不用重复获取
+                self.compare_pos(strategy_pos_list=copy(all_strategy_pos))
+
+                # 推送到事件
+                self.put_all_strategy_pos_event(all_strategy_pos)
 
     def process_tick_event(self, event: Event):
         """处理tick到达事件"""
@@ -867,6 +875,7 @@ class CtaEngine(BaseEngine):
             self.write_log(msg=msg,
                            strategy_name=strategy.strategy_name,
                            level=logging.CRITICAL)
+            self.send_wechat(msg)
 
     def add_strategy(
             self, class_name: str,
@@ -1196,6 +1205,15 @@ class CtaEngine(BaseEngine):
             with bz2.BZ2File(str(snapshot_file), 'wb') as f:
                 pickle.dump(snapshot, f)
                 self.write_log(u'切片保存成功:{}'.format(str(snapshot_file)))
+
+            # 通过事件方式，传导到account_recorder
+            snapshot.update({
+                'account_id': self.engine_config.get('accountid', '-'),
+                'strategy_group':  self.engine_config.get('strategy_group', self.engine_name),
+                'guid': str(uuid1())
+            })
+            event = Event(EVENT_STRATEGY_SNAPSHOT, snapshot)
+            self.event_engine.put(event)
 
         except Exception as ex:
             self.write_error(u'获取策略{}切片数据异常:'.format(strategy_name, str(ex)))

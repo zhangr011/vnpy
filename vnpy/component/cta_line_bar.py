@@ -636,6 +636,8 @@ class CtaLineBar(object):
         self.line_bd_fast = []  # 波段快线
         self.line_bd_slow = []  # 波段慢线
         self.cur_bd_count = 0  # 当前波段快线慢线金叉死叉， +金叉计算， - 死叉技术
+        self._bd_fast = 0
+        self._bd_slow = 0
 
     def set_params(self, setting: dict = {}):
         """设置参数"""
@@ -3492,7 +3494,7 @@ class CtaLineBar(object):
         :param:direction，多：检查是否有顶背离，空，检查是否有底背离
         :return:
         """
-        if len(self.skd_top_list) < 2 or len(self.skd_buttom_list) < 2 or self._rt_sk is None or self._rt_sd is None:
+        if len(self.skd_top_list) < 2 or len(self.skd_buttom_list) < 2:
             return False
 
         t1 = self.skd_top_list[-1]
@@ -3501,6 +3503,8 @@ class CtaLineBar(object):
         b2 = self.__get_2nd_item(self.skd_buttom_list[:-1])
 
         if runtime:
+            if self._rt_sk is None or self._rt_sd is None:
+                return False
             # 峰(顶部)
             if self._rt_sk < self.line_sk[-1] and self.line_sk[-2] < self.line_sk[-1]:
                 t1 = {}
@@ -3610,10 +3614,12 @@ class CtaLineBar(object):
         检查SDK的方向风险
         :return:
         """
-        if not self.para_active_skd or len(self.line_sk) < 2 or self._rt_sk is None:
+        if not self.para_active_skd or len(self.line_sk) < 2 :
             return False
 
         if runtime:
+            if self._rt_sk is None:
+                return False
             sk = self._rt_sk
         else:
             sk = self.line_sk[-1]
@@ -4056,6 +4062,46 @@ class CtaLineBar(object):
                 self.cur_bd_count = max(1, self.cur_bd_count + 1)
             elif self.line_bd_fast[-1] < self.line_bd_slow[-1]:
                 self.cur_bd_count = min(-1, self.cur_bd_count - 1)
+
+    def rt_count_bd(self):
+        """实时计算波段指标"""
+        if self.para_bd_len <= 0:
+            # 不计算
+            return
+
+        if len(self.line_bar) < 2 * self.para_bd_len:
+            return
+        bar_mid4 = (self.line_bar[-1].close_price * 2 + self.line_bar[-1].high_price + self.line_bar[-1].low_price)/4
+        bar_mid4 = round(bar_mid4, self.round_n)
+
+        mid4_array = np.append(self.mid4_array, [bar_mid4])
+        mid4_ema_array = ta.EMA(mid4_array, self.para_bd_len)
+
+        mid4_std = np.std(mid4_array[-self.para_bd_len:], ddof=1)
+
+        mid4_ema_diff_array = mid4_array - mid4_ema_array
+        var5_array = (mid4_ema_diff_array / mid4_std * 100 + 200) / 4
+        var6_array = (ta.EMA(var5_array, 5) - 25) * 1.56
+        fast_array = ta.EMA(var6_array, 2) * 1.22
+        slow_array = ta.EMA(fast_array, 2)
+
+        self._bd_fast = fast_array[-1]
+        self._bd_slow = slow_array[-1]
+
+    @property
+    def rt_bd_fast(self):
+        self.check_rt_funcs(self.rt_count_bd)
+        if self._bd_fast is None and len(self.para_bd_len) > 0:
+            return self.line_bd_fast[-1]
+        return self._bd_fast
+
+    @property
+    def rt_bd_slow(self):
+        self.check_rt_funcs(self.rt_count_bd)
+        if self._bd_slow is None and len(self.para_bd_len) > 0:
+            return self.line_bd_slow[-1]
+        return self._bd_slow
+
 
     def write_log(self, content):
         """记录CTA日志"""

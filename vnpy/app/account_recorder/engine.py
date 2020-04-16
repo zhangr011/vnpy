@@ -22,6 +22,7 @@ from datetime import datetime, timedelta
 from queue import Queue
 from threading import Thread
 from time import time
+from bson import binary
 
 from vnpy.event import Event, EventEngine
 from vnpy.trader.event import (
@@ -34,6 +35,7 @@ from vnpy.trader.event import (
     EVENT_HISTORY_ORDER,
     EVENT_FUNDS_FLOW,
     EVENT_STRATEGY_POS,
+    EVENT_STRATEGY_SNAPSHOT,
     EVENT_ERROR,
     EVENT_WARNING,
     EVENT_CRITICAL,
@@ -55,13 +57,14 @@ HISTORY_ORDER_COL = 'history_orders'
 HISTORY_TRADE_COL = 'history_trades'
 HISTORY_STRATEGY_POS_COL = 'history_strategy_pos'
 FUNDS_FLOW_COL = 'funds_flow'
+STRATEGY_SNAPSHOT = 'strategy_snapshot'
 
 ALERT_DB_NAME = "Alert"
 GW_ERROR_COL_NAME = "gw_error_msg"
 WARNING_COL_NAME = "warning_msg"
 CRITICAL_COL_NAME = "critical_msg"
 
-APP_NAME = "ACCOUNT_RECORDER"
+APP_NAME = "AccountRecorder"
 
 
 ########################################################################
@@ -129,11 +132,12 @@ class AccountRecorder(BaseEngine):
     # ----------------------------------------------------------------------
     def load_setting(self):
         """读取配置"""
+        self.write_log(f'{self.name}读取配置')
         try:
             d = load_json(self.setting_file_name)
 
             # mongo 数据库连接
-            mongo_seetting = d.get('mongo', {})
+            mongo_seetting = d.get('mongo_db', {})
             self.mongo_db = MongoData(host=mongo_seetting.get('host', 'localhost'),
                                       port=mongo_seetting.get('port', 27017))
 
@@ -151,6 +155,7 @@ class AccountRecorder(BaseEngine):
                 if account_setting.get('copy_history_strategypos', False):
                     self.copy_history_strategypos.append(gateway_name)
 
+            self.write_log(f'{self.name}读取配置完成')
         except Exception as ex:
             self.main_engine.writeCritical(u'读取:{}异常:{}'.format(self.setting_file_name, str(ex)))
 
@@ -175,6 +180,7 @@ class AccountRecorder(BaseEngine):
         self.event_engine.register(EVENT_ERROR, self.process_gw_error)
         self.event_engine.register(EVENT_WARNING, self.process_warning)
         self.event_engine.register(EVENT_CRITICAL, self.process_critical)
+        self.event_engine.register(EVENT_STRATEGY_SNAPSHOT, self.update_strategy_snapshot)
 
     # ----------------------------------------------------------------------
     def update_timer(self, event: Event):
@@ -214,7 +220,7 @@ class AccountRecorder(BaseEngine):
     def update_account(self, event: Event):
         """更新账号资金"""
         account = event.data
-        fld = {'accountid': account.accountid,
+        fld = {'account_id': account.accountid,
                'gateway_name': account.gateway_name,
                'trading_day': account.trading_day,
                'currency': account.currency}
@@ -224,14 +230,15 @@ class AccountRecorder(BaseEngine):
 
         self.gw_name_acct_id.update({account.gateway_name: account.accountid})
 
-        data = account.__dict__
+        acc_data = copy.copy(account.__dict__)
+        acc_data.update({'account_id': acc_data.pop('accountid')})
         # 更新至历史净值数据表
         self.update_data(db_name=ACCOUNT_DB_NAME, col_name=DAILY_INFO_COL, fld=copy.copy(fld),
-                         data=copy.copy(data))
+                         data=acc_data)
 
         fld.pop('trading_day', None)
         # 更新至最新净值数据
-        self.update_data(db_name=ACCOUNT_DB_NAME, col_name=ACCOUNT_INFO_COL, fld=fld, data=data)
+        self.update_data(db_name=ACCOUNT_DB_NAME, col_name=ACCOUNT_INFO_COL, fld=fld, data=copy.copy(acc_data))
 
         self.remove_pre_trading_day_data(account.accountid, account.trading_day)
 
@@ -274,7 +281,7 @@ class AccountRecorder(BaseEngine):
 
         return begin_day
 
-    def remove_pre_trading_day_data(self, accountid: str, trading_day: str):
+    def remove_pre_trading_day_data(self, account_id: str, trading_day: str):
         """
         移除非当前交易日得所有当日交易数据
         :param accountid:
@@ -285,20 +292,35 @@ class AccountRecorder(BaseEngine):
             return
 
         # 移除非当日得交易/持仓
-        flt = {'accountid': accountid,
+        flt = {'account_id': account_id,
                'trade_date': {'$ne': trading_day}}
-        self.main_engine.dbDelete(ACCOUNT_DB_NAME, TODAY_TRADE_COL, flt)
-        self.main_engine.dbDelete(ACCOUNT_DB_NAME, TODAY_POSITION_COL, flt)
+        self.write_log(f'移除非当日交易持仓:{flt}')
+        self.mongo_db.db_delete(
+            db_name=ACCOUNT_DB_NAME,
+            col_name=TODAY_TRADE_COL,
+            flt=flt)
+        self.mongo_db.db_delete(
+            db_name=ACCOUNT_DB_NAME,
+            col_name=TODAY_POSITION_COL,
+            flt=flt)
 
         # 移除非当日得委托
-        flt = {'accountid': accountid,
+        flt = {'account_id': account_id,
                'order_date': {'$ne': trading_day}}
-        self.main_engine.dbDelete(ACCOUNT_DB_NAME, TODAY_ORDER_COL, flt)
+        self.write_log(f'移除非当日委托:{flt}')
+        self.mongo_db.db_delete(
+            db_name=ACCOUNT_DB_NAME,
+            col_name=TODAY_ORDER_COL,
+            flt=flt)
 
         # 移除非当日得持仓
-        flt = {'account_id': accountid,
+        flt = {'account_id': account_id,
                'trading_day': {'$ne': trading_day}}
-        self.main_engine.dbDelete(ACCOUNT_DB_NAME, TODAY_STRATEGY_POS_COL, flt)
+        self.write_log(f'移除非当日持仓:{flt}')
+        self.mongo_db.db_delete(
+            db_name=ACCOUNT_DB_NAME,
+            col_name=TODAY_STRATEGY_POS_COL,
+            flt=flt)
 
         self.is_remove_pre_data = True
 
@@ -306,39 +328,46 @@ class AccountRecorder(BaseEngine):
         """更新当日记录"""
         order = event.data
         self.write_log(u'记录委托日志:{}'.format(order.__dict__))
-        if len(order.sysOrderID) == 0:
+        if len(order.sys_orderid) == 0:
             # 未有系统的委托编号，不做持久化
             return
-
-        order_date = get_trading_date(datetime.now())
+        dt = getattr(order, 'datetime')
+        if not dt:
+            order_date = datetime.now().strftime('%Y-%m-%d')
+        else:
+            order_date = dt.strftime('%Y-%m-%d')
 
         # 数据库需要提前建立多重索引
-        # db.today_orders.createIndex({'accountid':1,'vt_symbol':1,'sys_orderid':1,'order_date':1,'holder_id':1},{'name':'accountid_vtsymbol_sysorderid_order_date_holder_id','unique':true})
-        # db.today_orders.createIndex({'accountID':1})
+        # db.today_orders.createIndex({'account_id':1,'vt_symbol':1,'sys_orderid':1,'order_date':1,'holder_id':1},{'name':'accountid_vtsymbol_sysorderid_order_date_holder_id','unique':true})
+
         fld = {'vt_symbol': order.vt_symbol,
-               'accountid': order.accountid,
+               'account_id': order.accountid,
                'sys_orderid': order.sys_orderid,
                'order_date': order_date,
-               'holder_id': order.holder_id}
+               'holder_id': getattr(order,'holder_id','')}
 
         data = copy.copy(order.__dict__)
+        data.update({'account_id': data.pop('accountid')})
         data.update({'order_date': order_date})
         data.update({'exchange': order.exchange.value})
         data.update({'direction': order.direction.value})
+        data.update({'offset': order.offset.value})
+        data.update({'type': order.type.value})
+        data.update({'status': order.status.value})
 
         self.update_data(db_name=ACCOUNT_DB_NAME, col_name=TODAY_ORDER_COL, fld=fld, data=data)
 
         # 数据库需要提前建立多重索引
-        # db.history_orders.createIndex({'accountid':1,'vt_symbol':1,'sys_orderid':1,'order_date':1,'holder_id':1},{'name':'history_accountid_vtsymbol_sysorderid_order_date_holder_id'})
-        # db.history_orders.createIndex({'accountid':1})
+        # db.history_orders.createIndex({'account_id':1,'vt_symbol':1,'sys_orderid':1,'order_date':1,'holder_id':1},{'name':'history_accountid_vtsymbol_sysorderid_order_date_holder_id'})
+
         # 复制委托记录=》历史委托记录
-        if order.gatewayName in self.copy_history_orders:
+        if order.gateway_name in self.copy_history_orders:
             history_data = copy.copy(data)
             fld2 = {'vt_symbol': order.vt_symbol,
-                    'accountid': order.accountid,
+                    'account_id': order.accountid,
                     'sys_orderid': order.sys_orderid,
                     'order_date': order_date,
-                    'holder_id': order.holder_id}
+                    'holder_id': getattr(order,'holder_id','')}
 
             self.update_data(db_name=ACCOUNT_DB_NAME, col_name=HISTORY_ORDER_COL, fld=fld2, data=history_data)
 
@@ -348,28 +377,30 @@ class AccountRecorder(BaseEngine):
         trade_date = get_trading_date(datetime.now())
 
         fld = {'vt_symbol': trade.vt_symbol,
-               'accountid': trade.accountid,
+               'account_id': trade.accountid,
                'vt_tradeid': trade.vt_tradeid,
                'trade_date': trade_date,
                'holder_id': trade.holder_id}
 
         # 提前创建索引
-        # db.today_trades.createIndex({'accountid':1,'vt_symbol':1,'vt_tradeid':1,'trade_date':1,'holder_id':1},{'name':'accountID_vtSymbol_vtTradeID_trade_date_holder_id','unique':true})
-        # db.today_trades.createIndex({'accountid':1})
+        # db.today_trades.createIndex({'account_id':1,'vt_symbol':1,'vt_tradeid':1,'trade_date':1,'holder_id':1},{'name':'accountid_vtSymbol_vt_tradeid_trade_date_holder_id','unique':true})
+
         data = copy.copy(trade.__dict__)
+        data.update({'account_id': data.pop('accountid')})
         data.update({'trade_date': trade_date})
         data.update({'exchange': trade.exchange.value})
         data.update({'direction': trade.direction.value})
+        data.update({'offset': trade.offset.value})
 
         self.update_data(db_name=ACCOUNT_DB_NAME, col_name=TODAY_TRADE_COL, fld=fld, data=data)
 
-        # db.history_trades.createIndex({'accountid':1,'vt_symbol':1,'vt_tradeid':1,'trade_date':1,'holder_id':1},{'name':'accountID_vtSymbol_vtTradeID_trade_date_holder_id'})
-        # db.history_trades.createIndex({'accountid':1})
+        # db.history_trades.createIndex({'account_id':1,'vt_symbol':1,'vt_tradeid':1,'trade_date':1,'holder_id':1},{'name':'accountid_vtSymbol_vt_tradeid_trade_date_holder_id'})
+
         # 复制成交记录=》历史成交记录
         if trade.gateway_name in self.copy_history_trades:
             history_trade = copy.copy(data)
             fld2 = {'vt_symbol': trade.vt_symbol,
-                    'accountid': trade.accountid,
+                    'account_id': trade.accountid,
                     'vt_tradeid': trade.vt_tradeid,
                     'trade_date': trade_date,
                     'holder_id': trade.holder_id}
@@ -387,26 +418,40 @@ class AccountRecorder(BaseEngine):
 
         fld = {'vt_symbol': pos.vt_symbol,
                'direction': pos.direction.value,
-               'accountid': pos.accountid,
+               'account_id': pos.accountid,
                'trade_date': trade_date,
                'holder_id': pos.holder_id}
 
-        #  db.today_positions.createIndex({'accountid':1,'vt_symbol':1,'direction':1,'trade_date':1,'holder_id':1},{'name':'accountID_vtSymbol_direction_trade_date_holder_id'})
-        #  db.today_positions.createIndex({'accountid':1})
-        data = pos.__dict__
+        #  db.today_positions.createIndex({'account_id':1,'vt_symbol':1,'direction':1,'trade_date':1,'holder_id':1},{'name':'accountid_vtsymbol_direction_trade_date_holder_id'})
+
+        data = copy.copy(pos.__dict__)
+        data.update({'account_id': data.pop('accountid')})
         data.update({'trade_date': trade_date})
         data.update({'exchange': pos.exchange.value})
         data.update({'direction': pos.direction.value})
 
         # 补充 当前价格
-        try:
+        if pos.cur_price == 0:
             price = self.main_engine.get_price(pos.vt_symbol)
             if price:
                 data.update({'cur_price': price})
-        except:  # noqa
-            pass
 
         self.update_data(db_name=ACCOUNT_DB_NAME, col_name=TODAY_POSITION_COL, fld=fld, data=data)
+
+    def update_strategy_snapshot(self, event: Event):
+        """更新策略切片"""
+        snapshot = event.data
+        self.write_log(f"保存切片,{snapshot.get('account_id')},策略:{snapshot.get('strategy')}")
+        klines = snapshot.pop('klines', None)
+        if klines:
+            self.write_log(f"转换 =>BSON.binary.Binary")
+            snapshot.update({'klines': binary.Binary(klines)})
+        fld = {
+            'account_id': snapshot.get('account_id'),
+            'strategy': snapshot.get('strategy'),
+            'guid': snapshot.get('guid')
+        }
+        self.update_data(db_name=ACCOUNT_DB_NAME, col_name=STRATEGY_SNAPSHOT, fld=fld, data=snapshot)
 
     def update_history_trade(self, event: Event):
         """更新历史查询记录"""
@@ -414,63 +459,65 @@ class AccountRecorder(BaseEngine):
         trade_date = trade.time.split(' ')[0]
 
         fld = {'vt_symbol': trade.vt_symbol,
-               'accountid': trade.accountid,
-               'vt_tradeID': trade.vt_tradeid,
+               'account_id': trade.accountid,
+               'vt_tradeid': trade.vt_tradeid,
                'trade_date': trade_date,
                'holder_id': trade.holder_id}
 
-        data = trade.__dict__
+        data = copy.copy(trade.__dict__)
+        data.update({'account_id': data.pop('accountid')})
         data.update({'trade_date': trade_date})
         self.update_data(db_name=ACCOUNT_DB_NAME, col_name=HISTORY_TRADE_COL, fld=fld, data=data)
-        self.update_begin_day(trade.gatewayName, HISTORY_TRADE_COL, trade_date)
+        self.update_begin_day(trade.gateway_name, HISTORY_TRADE_COL, trade_date)
 
     def update_history_order(self, event: Event):
         """更新历史委托"""
         order = event.data
         order_date = order.time.split(' ')[0]
         fld = {'vt_symbol': order.vt_symbol,
-               'accountid': order.accountid,
+               'account_id': order.accountid,
                'sys_orderid': order.sys_orderid,
                'order_date': order_date,
                'holder_id': order.holder_id}
-        data = order.__dict__
+        data = copy.copy(order.__dict__)
+        data.update({'account_id': data.pop('accountid')})
         data.update({'order_date': order_date})
         self.update_data(db_name=ACCOUNT_DB_NAME, col_name=HISTORY_ORDER_COL, fld=fld, data=data)
 
-        self.update_begin_day(order.gatewayName, HISTORY_ORDER_COL, order_date)
+        self.update_begin_day(order.gateway_name, HISTORY_ORDER_COL, order_date)
 
     def update_funds_flow(self, event: Event):
         """更新历史资金流水"""
         funds_flow = event.data
-        data = funds_flow.__dict__
+        data = copy.copy(funds_flow.__dict__)
 
-        fld = {'accountid': funds_flow.accountid,
+        fld = {'account_id': funds_flow.accountid,
                'trade_date': funds_flow.trade_date,
                'trade_amount': funds_flow.trade_amount,
                'fund_remain': funds_flow.fund_remain,
                'contract_id': funds_flow.contract_id,
                'holder_id': funds_flow.holder_id}
-
+        data.update({'account_id': data.pop('accountid')})
         self.update_data(db_name=ACCOUNT_DB_NAME, col_name=FUNDS_FLOW_COL, fld=fld, data=data)
 
-        self.update_begin_day(funds_flow.gatewayName, HISTORY_ORDER_COL, funds_flow.trade_date)
+        self.update_begin_day(funds_flow.gateway_name, HISTORY_ORDER_COL, funds_flow.trade_date)
 
     def update_strategy_pos(self, event: Event):
+        """更新策略持仓事件"""
         data = event.data
         dt = data.get('datetime')
-        pos_trading_day = get_trading_date(dt)
-        data.update({'trading_day': pos_trading_day})
-        accountid = data.get('accountid')
-        fld = {
-            'accountid': accountid,
-            'stratregy_group': data.get('straregy_group', '-'),
-            'strategy_name': data.get('strategy_name'),
-            'datetime': dt.strftime("%Y-%m-%d %H:%M:%S"),
-            'inited': True,
-            'trading': True
-        }
 
-        self.update_data(db_name=ACCOUNT_DB_NAME, col_name=TODAY_STRATEGY_POS_COL, fld=fld, data=data)
+        account_id = data.get('accountid')
+        fld = {
+            'account_id': account_id,
+            'strategy_group': data.get('strategy_group', '-'),
+            'strategy_name': data.get('strategy_name')
+        }
+        pos_data = copy.copy(data)
+        pos_data.update({'account_id': pos_data.get('accountid')})
+        pos_data.update({'datetime': dt.strftime("%Y-%m-%d %H:%M:%S")})
+
+        self.update_data(db_name=ACCOUNT_DB_NAME, col_name=TODAY_STRATEGY_POS_COL, fld=fld, data=pos_data)
 
     def process_gw_error(self, event: Event):
         """ 处理gw的回报错误日志"""
@@ -512,7 +559,7 @@ class AccountRecorder(BaseEngine):
                 d.update({'log_time': datetime.now().strftime("%Y-%m-%d %H:%M:%S")})
                 d.update({'trading_day': get_trading_date()})
 
-                account_id = self.gw_name_acct_id.get(data.gatewayName, None)
+                account_id = self.gw_name_acct_id.get(data.gateway_name, None)
                 if account_id:
                     d.update({'account_id': account_id})
                     fld = copy.copy(d)
@@ -579,10 +626,12 @@ class AccountRecorder(BaseEngine):
         """启动"""
         self.active = True
         self.thread.start()
+        self.write_log(f'账号记录引擎启动')
 
     # ----------------------------------------------------------------------
     def stop(self):
         """退出"""
+        self.write_log(f'账号记录引擎退出')
         if self.mongo_db:
             self.mongo_db = None
 

@@ -73,7 +73,10 @@ class EnumCell(BaseCell):
         Set text using enum.constant.value.
         """
         if content:
-            super(EnumCell, self).set_content(content.value, data)
+            if isinstance(content, str):
+                super(EnumCell, self).set_content(content, data)
+            else:
+                super(EnumCell, self).set_content(content.value, data)
 
 
 class DirectionCell(EnumCell):

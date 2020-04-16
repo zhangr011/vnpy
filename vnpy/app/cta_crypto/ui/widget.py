@@ -202,8 +202,11 @@ class StrategyManager(QtWidgets.QFrame):
         reload_button = QtWidgets.QPushButton("重载")
         reload_button.clicked.connect(self.reload_strategy)
 
-        save_button = QtWidgets.QPushButton("保存")
+        save_button = QtWidgets.QPushButton("缓存")
         save_button.clicked.connect(self.save_strategy)
+
+        snapshot_button = QtWidgets.QPushButton("切片")
+        snapshot_button.clicked.connect(self.save_snapshot)
 
         strategy_name = self._data["strategy_name"]
         vt_symbol = self._data["vt_symbol"]
@@ -227,6 +230,7 @@ class StrategyManager(QtWidgets.QFrame):
         hbox.addWidget(remove_button)
         hbox.addWidget(reload_button)
         hbox.addWidget(save_button)
+        hbox.addWidget(snapshot_button)
 
         vbox = QtWidgets.QVBoxLayout()
         vbox.addWidget(label)
@@ -279,8 +283,12 @@ class StrategyManager(QtWidgets.QFrame):
         self.cta_engine.reload_strategy(self.strategy_name)
 
     def save_strategy(self):
+        """保存K线缓存"""
         self.cta_engine.save_strategy_data(self.strategy_name)
 
+    def save_snapshot(self):
+        """ 保存切片"""
+        self.cta_engine.save_strategy_snapshot(self.strategy_name)
 
 class DataMonitor(QtWidgets.QTableWidget):
     """

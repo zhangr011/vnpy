@@ -15,6 +15,7 @@ EVENT_LOG = "eLog"
 # 扩展
 EVENT_BAR = "eBar."
 EVENT_STRATEGY_POS = "eStrategyPos."
+EVENT_STRATEGY_SNAPSHOT = "eStrategySnapshot."
 
 # 拓展， 支持股票账号中，历史交成交/历史委托/资金流水
 EVENT_HISTORY_TRADE = 'eHistoryTrade.'

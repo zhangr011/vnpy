@@ -111,7 +111,7 @@ class MainEngine:
         if app.app_name == "RiskManager":
             self.rm_engine = engine
         elif app.app_name == "AlgoTrading":
-            self.algo_engine == engine
+            self.algo_engine = engine
         elif app.app_name == 'RpcService':
             self.rpc_service = engine
 

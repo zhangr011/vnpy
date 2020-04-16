@@ -19,6 +19,7 @@ from collections import OrderedDict
 from concurrent.futures import ThreadPoolExecutor
 from copy import copy
 from functools import lru_cache
+from uuid import uuid1
 
 from vnpy.event import Event, EventEngine
 from vnpy.trader.engine import BaseEngine, MainEngine
@@ -40,6 +41,7 @@ from vnpy.trader.event import (
     EVENT_TRADE,
     EVENT_POSITION,
     EVENT_STRATEGY_POS,
+    EVENT_STRATEGY_SNAPSHOT
 )
 from vnpy.trader.constant import (
     Direction,
@@ -1250,6 +1252,15 @@ class CtaEngine(BaseEngine):
                 pickle.dump(snapshot, f)
                 self.write_log(u'切片保存成功:{}'.format(str(snapshot_file)))
 
+            # 通过事件方式，传导到account_recorder
+            snapshot.update({
+                'account_id': self.engine_config.get('accountid', '-'),
+                'strategy_group':  self.engine_config.get('strategy_group', self.engine_name),
+                'guid': str(uuid1())
+            })
+            event = Event(EVENT_STRATEGY_SNAPSHOT, snapshot)
+            self.event_engine.put(event)
+
         except Exception as ex:
             self.write_error(u'获取策略{}切片数据异常:'.format(strategy_name, str(ex)))
             self.write_error(traceback.format_exc())
@@ -1419,11 +1430,10 @@ class CtaEngine(BaseEngine):
         for strategy_name in list(self.strategies.keys()):
             d = OrderedDict()
             d['accountid'] = self.engine_config.get('accountid', '-')
-            d['strategy_group'] = self.engine_config.get('strategy_group', '-')
+            d['strategy_group'] = self.engine_config.get('strategy_group', self.engine_name)
             d['strategy_name'] = strategy_name
             dt = datetime.now()
-            d['date'] = dt.strftime('%Y%m%d')
-            d['hour'] = dt.hour
+            d['trading_day'] = dt.strftime('%Y-%m-%d')
             d['datetime'] = datetime.now()
             strategy = self.strategies.get(strategy_name)
             d['inited'] = strategy.inited
