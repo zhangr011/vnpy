@@ -19,7 +19,7 @@ from vnpy.trader.event import EVENT_TIMER
 from vnpy.trader.object import TickData
 from vnpy.trader.utility import get_trading_date
 from vnpy.data.tdx.tdx_common import TDX_FUTURE_HOSTS
-from vnpy.app.cta_strategy_pro.base import (
+from vnpy.component.base import (
     NIGHT_MARKET_23,
     NIGHT_MARKET_SQ2,
     MARKET_DAY_ONLY)
