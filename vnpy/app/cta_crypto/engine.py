@@ -62,7 +62,6 @@ from vnpy.trader.utility import (
 
 from vnpy.trader.util_logger import setup_logger, logging
 from vnpy.trader.util_wechat import send_wx_msg
-from vnpy.trader.converter import PositionHolding
 
 from .base import (
     APP_NAME,
@@ -223,7 +222,6 @@ class CtaEngine(BaseEngine):
                 # 推送到事件
                 self.put_all_strategy_pos_event(all_strategy_pos)
 
-
     def process_tick_event(self, event: Event):
         """处理tick到达事件"""
         tick = event.data
@@ -358,8 +356,6 @@ class CtaEngine(BaseEngine):
             contract = self.main_engine.get_contract(vt_symbol)
             is_bar = True if vt_symbol in self.bar_strategy_map else False
             if contract:
-                dt = datetime.now()
-
                 self.write_log(f'重新提交合约{vt_symbol}订阅请求')
                 for strategy_name, is_bar in list(self.pending_subcribe_symbol_map[vt_symbol]):
                     self.subscribe_symbol(strategy_name=strategy_name,
@@ -689,7 +685,7 @@ class CtaEngine(BaseEngine):
             volume=volume,
             type=order_type,
             gateway_name=gateway_name
-            )
+        )
 
     def cancel_order(self, strategy: CtaTemplate, vt_orderid: str):
         """
@@ -825,7 +821,7 @@ class CtaEngine(BaseEngine):
             else:
                 return 0, 0, 0, 0
 
-    def get_position(self, vt_symbol: str, direction: Direction, gateway_name: str = ''):
+    def get_position(self, vt_symbol: str, direction: Direction = Direction.NET, gateway_name: str = ''):
         """ 查询合约在账号的持仓,需要指定方向"""
         contract = self.main_engine.get_contract(vt_symbol)
         if contract:
@@ -888,19 +884,7 @@ class CtaEngine(BaseEngine):
             callback: Callable[[TickData], None]
     ):
         """"""
-        symbol, exchange = extract_vt_symbol(vt_symbol)
-        end = datetime.now()
-        start = end - timedelta(days)
-
-        ticks = database_manager.load_tick_data(
-            symbol=symbol,
-            exchange=exchange,
-            start=start,
-            end=end,
-        )
-
-        for tick in ticks:
-            callback(tick)
+        pass
 
     def call_strategy_func(
             self, strategy: CtaTemplate, func: Callable, params: Any = None
@@ -1255,7 +1239,7 @@ class CtaEngine(BaseEngine):
             # 通过事件方式，传导到account_recorder
             snapshot.update({
                 'account_id': self.engine_config.get('accountid', '-'),
-                'strategy_group':  self.engine_config.get('strategy_group', self.engine_name),
+                'strategy_group': self.engine_config.get('strategy_group', self.engine_name),
                 'guid': str(uuid1())
             })
             event = Event(EVENT_STRATEGY_SNAPSHOT, snapshot)
@@ -1460,7 +1444,7 @@ class CtaEngine(BaseEngine):
 
         return parameters
 
-    def get_strategy_parameters(self, strategy_name):
+    def get_strategy_parameters(self, strategy_name: str):
         """
         Get parameters of a strategy.
         """
@@ -1471,6 +1455,15 @@ class CtaEngine(BaseEngine):
         d.update({'auto_start': strategy_config.get('auto_start', False)})
         d.update(strategy.get_parameters())
         return d
+
+    def get_strategy_value(self, strategy_name: str, parameter:str):
+        """获取策略的某个参数值"""
+        strategy = self.strategies.get(strategy_name)
+        if not strategy:
+            return None
+
+        value = getattr(strategy, parameter, None)
+        return value
 
     def compare_pos(self, strategy_pos_list=[]):
         """
@@ -1535,7 +1528,7 @@ class CtaEngine(BaseEngine):
                         u'{}({})'.format(strategy_pos['strategy_name'], abs(pos.get('volume', 0))))
                     self.write_log(u'更新{}策略持空仓=>{}'.format(vt_symbol, symbol_pos.get('策略空单', 0)))
                 if pos.get('direction') == 'long':
-                    symbol_pos.update({'策略多单': round(symbol_pos.get('策略多单', 0) + abs(pos.get('volume', 0)),7)})
+                    symbol_pos.update({'策略多单': round(symbol_pos.get('策略多单', 0) + abs(pos.get('volume', 0)), 7)})
                     symbol_pos['多单策略'].append(
                         u'{}({})'.format(strategy_pos['strategy_name'], abs(pos.get('volume', 0))))
                     self.write_log(u'更新{}策略持多仓=>{}'.format(vt_symbol, symbol_pos.get('策略多单', 0)))

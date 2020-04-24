@@ -419,6 +419,15 @@ class BackTestingEngine(object):
             self.positions[k] = pos
         return pos
 
+    def get_strategy_value(self, strategy_name: str, parameter:str):
+        """获取策略的某个参数值"""
+        strategy = self.strategies.get(strategy_name)
+        if not strategy:
+            return None
+
+        value = getattr(strategy, parameter, None)
+        return value
+
     def set_name(self, test_name):
         """
         设置组合的运行实例名称

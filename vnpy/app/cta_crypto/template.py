@@ -19,6 +19,7 @@ from vnpy.trader.utility import virtual, append_data, extract_vt_symbol, get_und
 from .base import StopOrder
 from vnpy.component.cta_grid_trade import CtaGrid, CtaGridTrade
 from vnpy.component.cta_position import CtaPosition
+from vnpy.component.cta_policy import CtaPolicy
 
 
 class CtaTemplate(ABC):
@@ -1376,6 +1377,8 @@ class CtaFutureTemplate(CtaTemplate):
                 dist_data.update({'margin': dist_data.get('price', 0) * dist_data.get('volume',
                                                                                       0) * self.cta_engine.get_margin_rate(
                     dist_data.get('symbol', self.vt_symbol))})
+            if 'datetime' not in dist_data:
+                dist_data.update({'datetime': self.cur_datetime})
             if self.position and 'long_pos' not in dist_data:
                 dist_data.update({'long_pos': self.position.long_pos})
             if self.position and 'short_pos' not in dist_data:
@@ -1408,3 +1411,92 @@ class CtaFutureTemplate(CtaTemplate):
         if self.backtesting:
             return
         self.cta_engine.send_wechat(msg=msg, strategy=self)
+
+
+class MultiContractPolicy(CtaPolicy):
+    """多合约Policy，记录持仓"""
+
+    def __init__(self, strategy=None, **kwargs):
+        super().__init__(strategy, **kwargs)
+        self.debug = kwargs.get('debug', False)
+        self.positions = {}  # vt_symbol: net_pos
+
+    def from_json(self, json_data):
+        """将数据从json_data中恢复"""
+        super().from_json(json_data)
+
+        self.positions = json_data.get('positions')
+
+    def to_json(self):
+        """转换至json文件"""
+        j = super().to_json()
+        j['positions'] = self.positions
+        return j
+
+    def on_trade(self, trade: TradeData):
+        """更新交易"""
+        pos = self.positions.get(trade.vt_symbol)
+
+        if pos is None:
+            pos = 0
+        pre_pos = pos
+        if trade.direction == Direction.LONG:
+            pos = round(pos + trade.volume, 7)
+
+        elif trade.direction == Direction.SHORT:
+            pos = round(pos - trade.volume, 7)
+
+        self.positions.update({trade.vt_symbol: pos})
+
+        if self.debug and self.strategy:
+            self.strategy.write_log(f'{trade.vt_symbol} pos:{pre_pos}=>{pos}')
+
+        self.save()
+
+
+class MultiContractTemplate(CtaTemplate):
+    """多合约交易模板"""
+
+    def __init__(self, cta_engine, strategy_name, vt_symbol, setting):
+
+        self.policy = None
+        self.cur_datetime = None
+        super().__init__(cta_engine, strategy_name, vt_symbol, setting)
+
+        self.policy = MultiContractPolicy(strategy=self, debug=True)
+
+    def sync_data(self):
+        """同步更新数据"""
+
+        if self.inited and self.trading:
+            self.write_log(u'保存policy数据')
+            self.policy.save()
+
+    def on_trade(self, trade: TradeData):
+        """成交回报事件处理"""
+        self.policy.on_trade(trade)
+
+    def get_positions(self):
+        """ 获取策略所有持仓详细"""
+        pos_list = []
+
+        for vt_symbol, pos in self.policy.positions.items():
+            pos_list.append({'vt_symbol': vt_symbol,
+                             'direction': 'long' if pos >= 0 else 'short',
+                             'volume': pos})
+
+        if self.cur_datetime and (datetime.now() - self.cur_datetime).total_seconds() < 10:
+            self.write_log(u'{}当前持仓:{}'.format(self.strategy_name, pos_list))
+        return pos_list
+
+    def on_order(self, order: OrderData):
+        pass
+
+    def on_init(self):
+        self.inited = True
+
+    def on_start(self):
+        self.trading = True
+
+    def on_stop(self):
+        self.trading = False
