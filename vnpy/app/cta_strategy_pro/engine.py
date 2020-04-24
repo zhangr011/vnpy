@@ -1469,7 +1469,16 @@ class CtaEngine(BaseEngine):
         d.update(strategy.get_parameters())
         return d
 
-    def compare_pos(self):
+    def get_strategy_value(self, strategy_name: str, parameter:str):
+        """获取策略的某个参数值"""
+        strategy = self.strategies.get(strategy_name)
+        if not strategy:
+            return None
+
+        value = getattr(strategy, parameter, None)
+        return value
+
+    def compare_pos(self, strategy_pos_list=[]):
         """
         对比账号&策略的持仓,不同的话则发出微信提醒
         :return:
@@ -1481,7 +1490,8 @@ class CtaEngine(BaseEngine):
         self.write_log(u'开始对比账号&策略的持仓')
 
         # 获取当前策略得持仓
-        strategy_pos_list = self.get_all_strategy_pos()
+        if len(strategy_pos_list) == 0:
+            strategy_pos_list = self.get_all_strategy_pos()
         self.write_log(u'策略持仓清单:{}'.format(strategy_pos_list))
 
         # 需要进行对比得合约集合（来自策略持仓/账号持仓）
