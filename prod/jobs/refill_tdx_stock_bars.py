@@ -1,11 +1,13 @@
 # flake8: noqa
 """
-下载通达信指数合约1分钟bar => vnpy项目目录/bar_data/tdx/
+下载通达信指数合约1分钟bar => vnpy项目目录/bar_data/
+上海股票 => SSE子目录
+深圳股票 => SZSE子目录
 """
 import os
 import sys
-import json
 import csv
+import json
 from collections import OrderedDict
 import pandas as pd
 
@@ -15,7 +17,8 @@ if vnpy_root not in sys.path:
 
 os.environ["VNPY_TESTING"] = "1"
 
-from vnpy.data.tdx.tdx_future_data import *
+from vnpy.data.tdx.tdx_stock_data import *
+from vnpy.trader.utility import load_json
 from vnpy.trader.utility import get_csv_last_dt
 
 # 保存的1分钟指数 bar目录
@@ -25,33 +28,47 @@ bar_data_folder = os.path.abspath(os.path.join(vnpy_root, 'bar_data'))
 start_date = '20160101'
 
 # 创建API对象
-api_01 = TdxFutureData()
+api_01 = TdxStockData()
 
 # 更新本地合约缓存信息
-api_01.update_mi_contracts()
+stock_list = load_json('stock_list.json')
+
+symbol_dict = api_01.symbol_dict
 
 # 逐一指数合约下载并更新
-for underlying_symbol in api_01.future_contracts.keys():
-    index_symbol = underlying_symbol + '99'
-    print(f'开始更新:{index_symbol}')
+for stock_code in stock_list:
+    market_id = get_tdx_market_code(stock_code)
+    if market_id == 0:
+        exchange_name = '深交所'
+        exchange = Exchange.SZSE
+    else:
+        exchange_name = '上交所'
+        exchange = Exchange.SSE
+
+    symbol_info = symbol_dict.get(f'{stock_code}_{market_id}')
+    stock_name = symbol_info.get('name')
+    print(f'开始更新:{exchange_name}/{stock_name}, 代码:{stock_code}')
+    bar_file_folder = os.path.abspath(os.path.join(bar_data_folder, f'{exchange.value}'))
+    if not os.path.exists(bar_file_folder):
+        os.makedirs(bar_file_folder)
     # csv数据文件名
-    bar_file_path = os.path.abspath(os.path.join(bar_data_folder, 'tdx', f'{underlying_symbol}99_{start_date}_1m.csv'))
+    bar_file_path = os.path.abspath(os.path.join(bar_file_folder, f'{stock_code}_{start_date}_1m.csv'))
 
     # 如果文件存在，
     if os.path.exists(bar_file_path):
-
-        #df_old = pd.read_csv(bar_file_path, index_col=0)
-        #df_old = df_old.rename(lambda x: pd.to_datetime(x, format="%Y-%m-%d %H:%M:%S"))
         # 取最后一条时间
         last_dt = get_csv_last_dt(bar_file_path)
+    else:
+        last_dt = None
+
+    if last_dt:
         start_dt = last_dt - timedelta(days=1)
         print(f'文件{bar_file_path}存在，最后时间:{start_date}')
     else:
-        last_dt = None
         start_dt = datetime.strptime(start_date, '%Y%m%d')
-        print(f'文件{bar_file_path}不存在，开始时间:{start_date}')
+        print(f'文件{bar_file_path}不存在，或读取最后记录错误,开始时间:{start_date}')
 
-    result, bars = api_01.get_bars(symbol=index_symbol,
+    result, bars = api_01.get_bars(symbol=stock_code,
                            period='1min',
                            callback=None,
                            start_dt=start_dt,
@@ -59,7 +76,6 @@ for underlying_symbol in api_01.future_contracts.keys():
     # [dict] => dataframe
     if not result or len(bars) == 0:
         continue
-
     if last_dt is None:
         data_df = pd.DataFrame(bars)
         data_df.set_index('datetime', inplace=True)
@@ -67,9 +83,8 @@ for underlying_symbol in api_01.future_contracts.keys():
         # print(data_df.head())
         print(data_df.tail())
         data_df.to_csv(bar_file_path, index=True)
-        print(f'首次更新{index_symbol} 数据 => 文件{bar_file_path}')
+        print(f'首次更新{stock_code} {stock_name}数据 => 文件{bar_file_path}')
         continue
-
 
     # 获取标题
     headers = []
@@ -91,7 +106,7 @@ for underlying_symbol in api_01.future_contracts.keys():
             bar_count += 1
             writer.writerow(bar)
 
-        print(f'更新{index_symbol} 数据 => 文件{bar_file_path}, 最后记录:{bars[-1]}')
+        print(f'更新{stock_code}  {stock_name} 数据 => 文件{bar_file_path}, 最后记录:{bars[-1]}')
 
 
 print('更新完毕')
