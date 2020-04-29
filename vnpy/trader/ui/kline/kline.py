@@ -1163,12 +1163,12 @@ class KLineWidget(KeyWraper):
 
             price = df_trades['price'].loc[idx]
             direction = df_trades['direction'].loc[idx]
-            if direction.lower() in ['long', 'direction.long']:
+            if direction.lower() in ['long', 'direction.long', '多']:
                 direction = Direction.LONG
             else:
                 direction = Direction.SHORT
             offset = df_trades['offset'].loc[idx]
-            if offset.lower() in ['open', 'offset.open']:
+            if offset.lower() in ['open', 'offset.open', '开']:
                 offset = Offset.OPEN
             else:
                 offset = Offset.CLOSE

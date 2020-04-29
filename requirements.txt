@@ -17,7 +17,7 @@ ta-lib
 ibapi
 deap
 pyzmq
-wmi
 QScintilla
 pytdx
 pykalman
+cython

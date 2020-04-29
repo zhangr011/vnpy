@@ -708,6 +708,7 @@ class CtpTdApi(TdApi):
         order = OrderData(
             symbol=symbol,
             exchange=exchange,
+            accountid=self.accountid,
             orderid=orderid,
             type=order_type,
             direction=DIRECTION_CTP2VT[data["Direction"]],

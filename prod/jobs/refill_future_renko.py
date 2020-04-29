@@ -1,5 +1,6 @@
 # flake8: noqa
-
+# 自动补全期货指数合约renko bar => Mongodb
+# 下载的tick数据缓存 => tick_data/tdx/future
 import sys, os, copy, csv, signal
 
 vnpy_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
@@ -23,7 +24,7 @@ if __name__ == "__main__":
     setting = {
         "host": host,
         "db_name": FUTURE_RENKO_DB_NAME,
-        "cache_folder": os.path.join(vnpy_root, 'ticks', 'tdx', 'future')
+        "cache_folder": os.path.join(vnpy_root, 'tick_data', 'tdx', 'future')
     }
     builder = FutureRenkoRebuilder(setting)
 

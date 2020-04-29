@@ -63,7 +63,7 @@ class PortfolioTestingEngine(BackTestingEngine):
         if vt_symbol in self.bar_df_dict:
             return True
 
-        if not os.path.exists(bar_file):
+        if bar_file is None or not os.path.exists(bar_file):
             self.write_error(u'回测时，{}对应的csv bar文件{}不存在'.format(vt_symbol, bar_file))
             return False
 

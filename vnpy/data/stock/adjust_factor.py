@@ -56,7 +56,7 @@ def get_adjust_factor(vt_symbol: str, stock_name: str = '', need_login: bool = T
     print(f'开始获取{stock_name} {bs_code}得复权因子')
     rs = bs.query_adjust_factor(
         code=bs_code,
-        start_date='2006-01-01'
+        start_date='2000-01-01'
     )
     if rs.error_code != '0':
         print(f'证券宝获取沪深A股复权因子数据，错误代码:{rs.error_code}, 错误信息:{rs.error_msg}')

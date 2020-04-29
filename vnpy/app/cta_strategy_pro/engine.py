@@ -213,7 +213,7 @@ class CtaEngine(BaseEngine):
                 all_trading = False
 
         dt = datetime.now()
-
+        # 每分钟执行的逻辑
         if self.last_minute != dt.minute:
             self.last_minute = dt.minute
 
@@ -221,8 +221,10 @@ class CtaEngine(BaseEngine):
                 # 主动获取所有策略得持仓信息
                 all_strategy_pos = self.get_all_strategy_pos()
 
-                # 比对仓位，使用上述获取得持仓信息，不用重复获取
-                self.compare_pos(strategy_pos_list=copy(all_strategy_pos))
+                # 每5分钟检查一次
+                if dt.minute % 5 == 0:
+                    # 比对仓位，使用上述获取得持仓信息，不用重复获取
+                    self.compare_pos(strategy_pos_list=copy(all_strategy_pos))
 
                 # 推送到事件
                 self.put_all_strategy_pos_event(all_strategy_pos)
@@ -1244,6 +1246,9 @@ class CtaEngine(BaseEngine):
                 elif filename.endswith(".pyd"):
                     strategy_module_name = ".".join(
                         [module_name, filename.split(".")[0]])
+                elif filename.endswith(".so"):
+                    strategy_module_name = ".".join(
+                        [module_name, filename.split(".")[0]])
                 else:
                     continue
                 self.load_strategy_class_from_module(strategy_module_name)
@@ -1313,7 +1318,7 @@ class CtaEngine(BaseEngine):
         # 兼容处理，如果strategy是None，通过name获取
         if strategy is None:
             if name not in self.strategies:
-                self.write_log(u'getStategyPos 策略实例不存在：' + name)
+                self.write_log(u'get_strategy_pos 策略实例不存在：' + name)
                 return []
             # 获取策略实例
             strategy = self.strategies[name]

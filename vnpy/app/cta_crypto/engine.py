@@ -216,8 +216,9 @@ class CtaEngine(BaseEngine):
                 # 主动获取所有策略得持仓信息
                 all_strategy_pos = self.get_all_strategy_pos()
 
-                # 比对仓位，使用上述获取得持仓信息，不用重复获取
-                self.compare_pos(strategy_pos_list=copy(all_strategy_pos))
+                if dt.minute % 5 == 0:
+                    # 比对仓位，使用上述获取得持仓信息，不用重复获取
+                    self.compare_pos(strategy_pos_list=copy(all_strategy_pos))
 
                 # 推送到事件
                 self.put_all_strategy_pos_event(all_strategy_pos)
@@ -1272,6 +1273,9 @@ class CtaEngine(BaseEngine):
                     strategy_module_name = ".".join(
                         [module_name, filename.replace(".py", "")])
                 elif filename.endswith(".pyd"):
+                    strategy_module_name = ".".join(
+                        [module_name, filename.split(".")[0]])
+                elif filename.endswith(".so"):
                     strategy_module_name = ".".join(
                         [module_name, filename.split(".")[0]])
                 else:

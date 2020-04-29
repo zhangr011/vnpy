@@ -41,6 +41,13 @@ class MongoData(object):
     def write_error(self, content):
         print(content, file=sys.stderr)
 
+    def get_collections(self, db_name):
+        """获取所有collection"""
+        if not self.db_client:
+            return []
+        db = self.db_client[db_name]
+        return db.list_collection_names()
+
     # ----------------------------------------------------------------------
     def db_insert(self, db_name, col_name, d):
         """向MongoDB中插入数据，d是具体数据"""
@@ -308,4 +315,4 @@ class MongoData(object):
 
 if __name__ == "__main__":
     m = MongoData(host='localhost', port=27017)
-    m.db_create_index('FutureRenko_Db', 'AU_5', 'datetime', 1)
+    m.db_create_index('FutureRenko', 'AU_5', 'datetime', 1)

@@ -26,35 +26,39 @@ from vnpy.trader.object import (
 )
 from vnpy.trader.utility import get_folder_path
 
-
+# 市场id <=> Exchange
 MARKET_XTP2VT: Dict[int, Exchange] = {
     1: Exchange.SZSE,
     2: Exchange.SSE
 }
 MARKET_VT2XTP: Dict[Exchange, int] = {v: k for k, v in MARKET_XTP2VT.items()}
 
+# 交易所id <=> Exchange
 EXCHANGE_XTP2VT: Dict[int, Exchange] = {
     1: Exchange.SSE,
     2: Exchange.SZSE,
 }
 EXCHANGE_VT2XTP: Dict[Exchange, int] = {v: k for k, v in EXCHANGE_XTP2VT.items()}
 
+# 方向  <=> Direction, Offset
 DIRECTION_STOCK_XTP2VT: Dict[int, Any] = {
-    1: (Direction.LONG, Offset.NONE),
-    2: (Direction.SHORT, Offset.NONE),
-    21: (Direction.LONG, Offset.OPEN),
-    22: (Direction.SHORT, Offset.OPEN),
-    24: (Direction.LONG, Offset.CLOSE),
-    23: (Direction.SHORT, Offset.CLOSE)
+    1: (Direction.LONG, Offset.NONE),    # 买
+    2: (Direction.SHORT, Offset.NONE),   # 卖
+    21: (Direction.LONG, Offset.OPEN),   # 多，开
+    22: (Direction.SHORT, Offset.OPEN),  # 空，开
+    24: (Direction.LONG, Offset.CLOSE),  # 多，平
+    23: (Direction.SHORT, Offset.CLOSE)  # 空， 平
 }
 DIRECTION_STOCK_VT2XTP: Dict[Any, int] = {v: k for k, v in DIRECTION_STOCK_XTP2VT.items()}
 
+# 期权方向 <=> Direction
 DIRECTION_OPTION_XTP2VT: Dict[int, Direction] = {
     1: Direction.LONG,
     2: Direction.SHORT
 }
 DIRECTION_OPTION_VT2XTP: Dict[Direction, int] = {v: k for k, v in DIRECTION_OPTION_XTP2VT.items()}
 
+# 持仓方向 <=> Direction
 POSITION_DIRECTION_XTP2VT = {
     0: Direction.NET,
     1: Direction.LONG,
@@ -62,17 +66,20 @@ POSITION_DIRECTION_XTP2VT = {
     3: Direction.SHORT
 }
 
+# 委托单类型
 ORDERTYPE_XTP2VT: Dict[int, OrderType] = {
     1: OrderType.LIMIT,
     2: OrderType.MARKET
 }
 ORDERTYPE_VT2XTP: Dict[OrderType, int] = {v: k for k, v in ORDERTYPE_XTP2VT.items()}
 
+# 协议类型
 PROTOCOL_VT2XTP: Dict[str, int] = {
     "TCP": 1,
     "UDP": 2
 }
 
+# 状态 <=> Status
 STATUS_XTP2VT: Dict[int, Status] = {
     0: Status.SUBMITTING,
     1: Status.ALLTRADED,
@@ -84,6 +91,7 @@ STATUS_XTP2VT: Dict[int, Status] = {
     7: Status.SUBMITTING
 }
 
+# 合约类型 <=> Product
 PRODUCT_XTP2VT: Dict[int, Product] = {
     0: Product.EQUITY,
     1: Product.INDEX,
@@ -94,6 +102,7 @@ PRODUCT_XTP2VT: Dict[int, Product] = {
     6: Product.OPTION
 }
 
+# 开平仓 <=> Offset
 OFFSET_VT2XTP: Dict[Offset, int] = {
     Offset.NONE: 0,
     Offset.OPEN: 1,
@@ -103,6 +112,7 @@ OFFSET_VT2XTP: Dict[Offset, int] = {
 }
 OFFSET_XTP2VT: Dict[int, Offset] = {v: k for k, v in OFFSET_VT2XTP.items()}
 
+# 业务类型 <=> xtp
 BUSINESS_VT2XTP: Dict[Any, int] = {
     "CASH": 0,
     Offset.NONE: 0,
@@ -112,7 +122,9 @@ BUSINESS_VT2XTP: Dict[Any, int] = {
     "OPTION": 10,
 }
 
+# 代码 <=> 中文名称
 symbol_name_map: Dict[str, str] = {}
+# 代码 <=> 交易所
 symbol_exchange_map: Dict[str, Exchange] = {}
 
 
@@ -130,11 +142,12 @@ class XtpGateway(BaseGateway):
         "授权码": ""
     }
 
+    # 接口支持得交易所清单
     exchanges: List[Exchange] = list(EXCHANGE_VT2XTP.keys())
 
-    def __init__(self, event_engine: EventEngine):
+    def __init__(self, event_engine: EventEngine, gateway_name='XTP'):
         """"""
-        super().__init__(event_engine, "XTP")
+        super().__init__(event_engine, gateway_name=gateway_name)
 
         self.md_api = XtpMdApi(self)
         self.td_api = XtpTdApi(self)
@@ -258,7 +271,7 @@ class XtpMdApi(MdApi):
         pass
 
     def onDepthMarketData(self, data: dict) -> None:
-        """"""
+        """深度行情回报"""
         timestamp = str(data["data_time"])
         dt = datetime.strptime(timestamp, "%Y%m%d%H%M%S%f")
 
@@ -266,6 +279,9 @@ class XtpMdApi(MdApi):
             symbol=data["ticker"],
             exchange=EXCHANGE_XTP2VT[data["exchange_id"]],
             datetime=dt,
+            date=dt.strftime('%Y-%m-%d'),
+            time=dt.strftime('%H:%M:%S.%f'),
+            trading_day=dt.strftime('%Y-%m-%d'),
             volume=data["qty"],
             last_price=data["last_price"],
             limit_up=data["upper_limit_price"],
@@ -334,7 +350,7 @@ class XtpMdApi(MdApi):
         pass
 
     def onQueryAllTickers(self, data: dict, error: dict, last: bool) -> None:
-        """"""
+        """合约信息回报"""
         contract = ContractData(
             symbol=data["ticker"],
             exchange=EXCHANGE_XTP2VT[data["exchange_id"]],
@@ -347,8 +363,10 @@ class XtpMdApi(MdApi):
         )
         self.gateway.on_contract(contract)
 
+        # 更新 symbol <=> 中文名称映射
         symbol_name_map[contract.vt_symbol] = contract.name
 
+        # 更新 股票代码 <=> 交易所
         if contract.product != Product.INDEX:
             symbol_exchange_map[contract.symbol] = contract.exchange
 
@@ -440,7 +458,7 @@ class XtpMdApi(MdApi):
             self.subscribeMarketData(req.symbol, 1, xtp_exchange)
 
     def query_contract(self) -> None:
-        """"""
+        """查询合约明细"""
         for exchange_id in EXCHANGE_XTP2VT.keys():
             self.queryAllTickers(exchange_id)
 
@@ -487,21 +505,24 @@ class XtpTdApi(TdApi):
         self.gateway.write_error("交易接口报错", error)
 
     def onOrderEvent(self, data: dict, error: dict, session: int) -> None:
-        """"""
+        """委托回报"""
         if error["error_id"]:
             self.gateway.write_error("交易委托失败", error)
 
         symbol = data["ticker"]
         if len(symbol) == 8:
+            # 期权
             direction = DIRECTION_OPTION_XTP2VT[data["side"]]
             offset = OFFSET_XTP2VT[data["position_effect"]]
         else:
+            # 股票
             direction, offset = DIRECTION_STOCK_XTP2VT[data["side"]]
 
         order = OrderData(
             symbol=symbol,
             exchange=MARKET_XTP2VT[data["market"]],
             orderid=str(data["order_xtp_id"]),
+            sys_orderid=str(data["order_xtp_id"]),
             type=ORDERTYPE_XTP2VT[data["price_type"]],
             direction=direction,
             offset=offset,
@@ -528,6 +549,7 @@ class XtpTdApi(TdApi):
             symbol=symbol,
             exchange=MARKET_XTP2VT[data["market"]],
             orderid=str(data["order_xtp_id"]),
+            sys_orderid=str(data["order_xtp_id"]),
             tradeid=str(data["exec_id"]),
             direction=direction,
             offset=offset,
@@ -750,7 +772,7 @@ class XtpTdApi(TdApi):
                 "market": MARKET_VT2XTP[req.exchange],
                 "price": req.price,
                 "quantity": int(req.volume),
-                "side": DIRECTION_STOCK_VT2XTP.get((req.direction, req.offset), ""),
+                "side": DIRECTION_STOCK_VT2XTP.get((req.direction, Offset.NONE), ""),
                 "price_type": ORDERTYPE_VT2XTP[req.type],
                 "business_type": BUSINESS_VT2XTP[req.offset]
             }
@@ -765,6 +787,7 @@ class XtpTdApi(TdApi):
     def cancel_order(self, req: CancelRequest) -> None:
         """"""
         self.cancelOrder(int(req.orderid), self.session_id)
+        return True
 
     def query_account(self) -> None:
         """"""
