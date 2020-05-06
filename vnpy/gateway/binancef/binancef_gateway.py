@@ -548,6 +548,8 @@ class BinancefRestApi(RestClient):
         for d in data:
             # self.gateway.write_log(d)
             volume = float(d["positionAmt"])
+            if d.get('positionSide') != 'BOTH':
+                continue
             position = PositionData(
                 accountid=self.accountid,
                 symbol=d["symbol"],
@@ -560,7 +562,8 @@ class BinancefRestApi(RestClient):
                 gateway_name=self.gateway_name,
             )
             self.gateway.on_position(position)
-
+            if position.symbol == 'BTCUSDT':
+                self.gateway.write_log(f'{position.__dict__}\n {d}')
         # self.gateway.write_log("持仓信息查询成功")
 
     def on_query_order(self, data: dict, request: Request) -> None:
@@ -879,7 +882,7 @@ class BinancefTradeWebsocketApi(WebsocketClient):
                 gateway_name=self.gateway_name,
             )
             holding_pnl += float(pos_data['up'])
-            self.gateway.on_position(position)
+            # self.gateway.on_position(position)
 
         for acc_data in packet["a"]["B"]:
             if acc_data['a'] != 'USDT':
