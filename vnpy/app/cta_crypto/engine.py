@@ -1230,14 +1230,15 @@ class CtaEngine(BaseEngine):
                 self.write_log(f'{strategy_name}返回得K线切片数据为空')
                 return
 
-            # 剩下工作：保存本地文件/数据库
-            snapshot_folder = get_folder_path(f'data/snapshots/{strategy_name}')
-            snapshot_file = snapshot_folder.joinpath('{}.pkb2'.format(datetime.now().strftime('%Y%m%d_%H%M%S')))
-            with bz2.BZ2File(str(snapshot_file), 'wb') as f:
-                pickle.dump(snapshot, f)
-                self.write_log(u'切片保存成功:{}'.format(str(snapshot_file)))
+            if self.engine_config.get('snapshot2file', False):
+                # 剩下工作：保存本地文件/数据库
+                snapshot_folder = get_folder_path(f'data/snapshots/{strategy_name}')
+                snapshot_file = snapshot_folder.joinpath('{}.pkb2'.format(datetime.now().strftime('%Y%m%d_%H%M%S')))
+                with bz2.BZ2File(str(snapshot_file), 'wb') as f:
+                    pickle.dump(snapshot, f)
+                    self.write_log(u'切片保存成功:{}'.format(str(snapshot_file)))
 
-            # 通过事件方式，传导到account_recorder
+                # 通过事件方式，传导到account_recorder
             snapshot.update({
                 'account_id': self.engine_config.get('accountid', '-'),
                 'strategy_group': self.engine_config.get('strategy_group', self.engine_name),
@@ -1469,7 +1470,7 @@ class CtaEngine(BaseEngine):
         value = getattr(strategy, parameter, None)
         return value
 
-    def compare_pos(self, strategy_pos_list=[]):
+    def compare_pos(self, strategy_pos_list=[], auto_balance=False):
         """
         对比账号&策略的持仓,不同的话则发出微信提醒
         :return:
@@ -1556,9 +1557,39 @@ class CtaEngine(BaseEngine):
                 compare_info += msg
             else:
                 pos_compare_result += '\n{}: {}'.format(vt_symbol, json.dumps(symbol_pos, indent=2, ensure_ascii=False))
-
                 self.write_error(u'{}不一致:{}'.format(vt_symbol, json.dumps(symbol_pos, indent=2, ensure_ascii=False)))
                 compare_info += u'{}不一致:{}\n'.format(vt_symbol, json.dumps(symbol_pos, indent=2, ensure_ascii=False))
+
+                diff_volume = round(symbol_pos['账号净仓'], 7) - net_symbol_pos
+                # 账号仓位> 策略仓位, sell
+                if diff_volume > 0 and auto_balance:
+                    contract = self.main_engine.get_contract(vt_symbol)
+                    req = OrderRequest(
+                        symbol=contract.symbol,
+                        exchange=contract.exchange,
+                        direction=Direction.SHORT,
+                        offset=Offset.CLOSE,
+                        type=OrderType.MARKET,
+                        price=0,
+                        volume=round(diff_volume,7)
+                    )
+                    self.write_log(f'卖出{vt_symbol} {req.volume}，平衡仓位')
+                    self.main_engine.send_order(req, contract.gateway_name)
+
+                # 账号仓位 < 策略仓位 ,buy
+                elif diff_volume < 0 and auto_balance:
+                    contract = self.main_engine.get_contract(vt_symbol)
+                    req = OrderRequest(
+                        symbol=contract.symbol,
+                        exchange=contract.exchange,
+                        direction=Direction.LONG,
+                        offset=Offset.OPEN,
+                        type=OrderType.MARKET,
+                        price=0,
+                        volume=round(-diff_volume, 7)
+                    )
+                    self.write_log(f'买入{vt_symbol} {req.volume}，平衡仓位')
+                    self.main_engine.send_order(req, contract.gateway_name)
 
         # 不匹配，输入到stdErr通道
         if pos_compare_result != '':
