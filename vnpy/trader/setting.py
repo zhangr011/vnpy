@@ -33,6 +33,8 @@ SETTINGS: Dict[str, Any] = {
     "database.user": "root",
     "database.password": "",
     "database.authentication_source": "admin",  # for mongodb
+
+    "huafu.data_source": ""  # 华富资产自建数据源
 }
 
 # Load global setting from json file.

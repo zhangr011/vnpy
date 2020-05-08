@@ -142,7 +142,7 @@ class CtaManager(QtWidgets.QWidget):
 
         if n == editor.Accepted:
             setting = editor.get_setting()
-            vt_symbol = setting.pop("vt_symbol")
+            vt_symbols = setting.pop("vt_symbols").split(",")
             strategy_name = setting.pop("strategy_name")
             auto_init = setting.pop("auto_init", False)
             auto_start = setting.pop("auto_start", False)
@@ -206,12 +206,12 @@ class StrategyManager(QtWidgets.QFrame):
         save_button.clicked.connect(self.save_strategy)
 
         strategy_name = self._data["strategy_name"]
-        vt_symbol = self._data["vt_symbol"]
+        #vt_symbol = self._data["vt_symbol"]
         class_name = self._data["class_name"]
         author = self._data["author"]
 
         label_text = (
-            f"{strategy_name}  -  {vt_symbol}  ({class_name} by {author})"
+            f"{strategy_name}  -  ({class_name} by {author})"
         )
         label = QtWidgets.QLabel(label_text)
         label.setAlignment(QtCore.Qt.AlignCenter)
@@ -411,7 +411,7 @@ class SettingEditor(QtWidgets.QDialog):
         if self.class_name:
             self.setWindowTitle(f"添加策略：{self.class_name}")
             button_text = "添加"
-            parameters = {"strategy_name": "", "vt_symbol": "", "auto_init": True, "auto_start": True}
+            parameters = {"strategy_name": "", "vt_symbols": "", "auto_init": True, "auto_start": True}
             parameters.update(self.parameters)
 
         else:

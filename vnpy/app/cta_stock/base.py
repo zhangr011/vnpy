@@ -5,7 +5,7 @@ Defines constants and objects used in CtaCrypto App.
 from dataclasses import dataclass, field
 from enum import Enum
 from datetime import timedelta
-from vnpy.trader.constant import Direction, Offset, Interval
+from vnpy.trader.constant import Direction, Offset, Interval, Exchange
 
 APP_NAME = "CtaStock"
 STOPORDER_PREFIX = "STOP"

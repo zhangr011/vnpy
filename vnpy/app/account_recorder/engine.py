@@ -327,7 +327,7 @@ class AccountRecorder(BaseEngine):
     def update_order(self, event: Event):
         """更新当日记录"""
         order = event.data
-        self.write_log(u'记录委托日志:{}'.format(order.__dict__))
+        # self.write_log(u'记录委托日志:{}'.format(order.__dict__))
         if len(order.sys_orderid) == 0:
             # 未有系统的委托编号，不做持久化
             return
@@ -441,7 +441,7 @@ class AccountRecorder(BaseEngine):
     def update_strategy_snapshot(self, event: Event):
         """更新策略切片"""
         snapshot = event.data
-        self.write_log(f"保存切片,{snapshot.get('account_id')},策略:{snapshot.get('strategy')}")
+        # self.write_log(f"保存切片,{snapshot.get('account_id')},策略:{snapshot.get('strategy')}")
         klines = snapshot.pop('klines', None)
         if klines:
             self.write_log(f"转换 =>BSON.binary.Binary")

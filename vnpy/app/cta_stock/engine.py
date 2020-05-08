@@ -1,5 +1,5 @@
 """
-数字货币CTA策略运行引擎
+股票CTA策略运行引擎
 华富资产：
 """
 
@@ -154,7 +154,7 @@ class CtaEngine(BaseEngine):
         self.load_strategy_class()
         self.load_strategy_setting()
 
-        self.write_log("CTA策略数字货币引擎初始化成功")
+        self.write_log("CTA策略股票引擎初始化成功")
 
     def close(self):
         """停止所属有的策略"""
@@ -218,8 +218,9 @@ class CtaEngine(BaseEngine):
                 # 主动获取所有策略得持仓信息
                 all_strategy_pos = self.get_all_strategy_pos()
 
-                # 比对仓位，使用上述获取得持仓信息，不用重复获取
-                self.compare_pos(strategy_pos_list=copy(all_strategy_pos))
+                if dt.minute % 5 == 0:
+                    # 比对仓位，使用上述获取得持仓信息，不用重复获取
+                    self.compare_pos(strategy_pos_list=copy(all_strategy_pos))
 
                 # 推送到事件
                 self.put_all_strategy_pos_event(all_strategy_pos)
@@ -1456,7 +1457,7 @@ class CtaEngine(BaseEngine):
         d.update(strategy.get_parameters())
         return d
 
-    def compare_pos(self):
+    def compare_pos(self,strategy_pos_list=[]):
         """
         对比账号&策略的持仓,不同的话则发出微信提醒
         :return:
@@ -1468,7 +1469,8 @@ class CtaEngine(BaseEngine):
         self.write_log(u'开始对比账号&策略的持仓')
 
         # 获取当前策略得持仓
-        strategy_pos_list = self.get_all_strategy_pos()
+        if len(strategy_pos_list) == 0:
+            strategy_pos_list = self.get_all_strategy_pos()
         self.write_log(u'策略持仓清单:{}'.format(strategy_pos_list))
 
         # 需要进行对比得合约集合（来自策略持仓/账号持仓）
@@ -1520,12 +1522,11 @@ class CtaEngine(BaseEngine):
         compare_info = ''
         for vt_symbol in sorted(vt_symbols):
             # 发送不一致得结果
-            symbol_pos = compare_pos.pop(vt_symbol)
-            d_long = {
-                'account_id': self.engine_config.get('account_id', '-'),
-                'vt_symbol': vt_symbol,
-                'direction': Direction.LONG.value,
-                'strategy_list': symbol_pos.get('多单策略', [])}
+            symbol_pos = compare_pos.pop(vt_symbol, {
+                    '账号多单': 0,
+                    '策略多单': 0,
+                    '多单策略': []
+                })
 
             # 多单都一致
             if round(symbol_pos['账号多单'], 7) == round(symbol_pos['策略多单'], 7):
@@ -1596,7 +1597,7 @@ class CtaEngine(BaseEngine):
             self.add_strategy(
                 class_name=strategy_config["class_name"],
                 strategy_name=strategy_name,
-                vt_symbol=strategy_config["vt_symbol"],
+                vt_symbols=strategy_config["vt_symbols"],
                 setting=strategy_config["setting"],
                 auto_init=strategy_config.get('auto_init', False),
                 auto_start=strategy_config.get('auto_start', False)
@@ -1612,7 +1613,7 @@ class CtaEngine(BaseEngine):
         old_config = self.strategy_setting.get('strategy_name', {})
         new_config = {
             "class_name": strategy.__class__.__name__,
-            "vt_symbol": strategy.vt_symbol,
+            "vt_symbols": strategy.vt_symbols,
             "auto_init": auto_init,
             "auto_start": auto_start,
             "setting": setting
@@ -1631,7 +1632,7 @@ class CtaEngine(BaseEngine):
         """
         if strategy_name not in self.strategy_setting:
             return
-        self.write_log(f'移除CTA数字货币引擎{strategy_name}的配置')
+        self.write_log(f'移除CTA股票引擎{strategy_name}的配置')
         self.strategy_setting.pop(strategy_name)
         save_json(self.setting_filename, self.strategy_setting)
 
@@ -1698,7 +1699,7 @@ class CtaEngine(BaseEngine):
         if strategy:
             subject = f"{strategy.strategy_name}"
         else:
-            subject = "CTA策略数字货币引擎"
+            subject = "CTA策略股票引擎"
 
         self.main_engine.send_email(subject, msg)
 
@@ -1712,6 +1713,6 @@ class CtaEngine(BaseEngine):
         if strategy:
             subject = f"{strategy.strategy_name}"
         else:
-            subject = "CTACRYPTO引擎"
+            subject = "CTASTOCK引擎"
 
         send_wx_msg(content=f'{subject}:{msg}')

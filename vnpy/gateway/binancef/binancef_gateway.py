@@ -562,8 +562,8 @@ class BinancefRestApi(RestClient):
                 gateway_name=self.gateway_name,
             )
             self.gateway.on_position(position)
-            if position.symbol == 'BTCUSDT':
-                self.gateway.write_log(f'{position.__dict__}\n {d}')
+            #if position.symbol == 'BTCUSDT':
+            #    self.gateway.write_log(f'{position.__dict__}\n {d}')
         # self.gateway.write_log("持仓信息查询成功")
 
     def on_query_order(self, data: dict, request: Request) -> None:

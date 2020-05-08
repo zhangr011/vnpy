@@ -1158,9 +1158,13 @@ class BackTestingEngine(object):
                 # 3. 则在实际中的成交价会是100而不是105，因为委托发出时市场的最优价格是100
                 if buy_cross:
                     trade_price = min(order.price, buy_best_cross_price)
-
                 else:
                     trade_price = max(order.price, sell_best_cross_price)
+
+                # renko bar较为特殊，使用委托价进行成交
+                if trade.vt_symbol.startswith('future_renko'):
+                    trade_price = order.price
+
                 trade.price = trade_price
 
                 # 记录该合约来自哪个策略实例

@@ -85,10 +85,31 @@ class PortfolioTestingEngine(BackTestingEngine):
                 "date": str,
                 "time": str
             }
+            if vt_symbol.startswith('future_renko'):
+                data_types.update({
+                    "color": str,
+                    "seconds": int,
+                    "high_seconds": int,
+                    "low_seconds": int,
+                    "height": float,
+                    "up_band": float,
+                    "down_band": float,
+                    "low_time": str,
+                    "high_time": str
+                })
             # 加载csv文件 =》 dateframe
             symbol_df = pd.read_csv(bar_file, dtype=data_types)
+            if len(symbol_df)==0:
+                self.write_error(f'回测时加载{vt_symbol} csv文件{bar_file}失败。')
+                return False
+
+            first_dt = symbol_df.iloc[0]['datetime']
+            if '.' in first_dt:
+                datetime_format = "%Y-%m-%d %H:%M:%S.%f"
+            else:
+                datetime_format = "%Y-%m-%d %H:%M:%S"
             # 转换时间，str =》 datetime
-            symbol_df["datetime"] = pd.to_datetime(symbol_df["datetime"], format="%Y-%m-%d %H:%M:%S")
+            symbol_df["datetime"] = pd.to_datetime(symbol_df["datetime"], format=datetime_format)
             # 设置时间为索引
             symbol_df = symbol_df.set_index("datetime")
 

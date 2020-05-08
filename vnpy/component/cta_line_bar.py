@@ -12,6 +12,7 @@ import sys
 import traceback
 import talib as ta
 import numpy as np
+import pandas as pd
 import csv
 
 from collections import OrderedDict
@@ -49,6 +50,14 @@ def get_cta_bar_type(bar_name: str):
             return CtaDayBar, 1
         else:
             return CtaDayBar, int(interval)
+
+    if bar_name.startswith('W'):
+        interval = bar_name.replace('W', '')
+        if len(interval) == 0:
+            return CtaWeekBar, 1
+        else:
+            return CtaWeekBar, int(interval)
+
     raise Exception(u'{}参数错误'.format(bar_name))
 
 
@@ -298,6 +307,9 @@ class CtaLineBar(object):
         self.paramList.append('para_bias2_len')
         self.paramList.append('para_bias3_len')
 
+        self.paramList.append('para_skdj_n')
+        self.paramList.append('para_skdj_m')
+
         self.paramList.append('para_bd_len')
 
         self.paramList.append('is_7x24')
@@ -403,6 +415,9 @@ class CtaLineBar(object):
         self.para_yb_ref = 1  # 趋势线参照周期
         self.para_yb_len = 10  # 趋势线观测周期
 
+        self.para_skdj_m = 0  # 3   # SKDJ NN
+        self.para_skdj_n = 0  # 9   # SKDJ MM
+
         self.para_golden_n = 0  # 黄金分割的观测周期（一般设置为60，或120）
 
         self.para_active_area = False  # 是否激活区域划分
@@ -494,12 +509,12 @@ class CtaLineBar(object):
         self.line_upper_atan = []
         self.line_middle_atan = []
         self.line_lower_atan = []
-        self._rt_upper = 0
-        self._rt_middle = 0
-        self._rt_lower = 0
-        self._rt_upper_atan = 0
-        self._rt_middle_atan = 0
-        self._rt_lower_atan = 0
+        self._rt_upper = None
+        self._rt_middle = None
+        self._rt_lower = None
+        self._rt_upper_atan = None
+        self._rt_middle_atan = None
+        self._rt_lower_atan = None
 
         self.cur_upper = 0  # 最后一根K的Boll上轨数值（与MinDiff取整）
         self.cur_middle = 0  # 最后一根K的Boll中轨数值（与MinDiff取整）
@@ -560,13 +575,19 @@ class CtaLineBar(object):
 
         # K 线的CCI计算数据
         self.line_cci = []
+        self.line_cci_ema = []
         self.cur_cci = None
+        self.cur_cci_ema = None
         self._rt_cci = None
+        self._rt_cci_ema = None
 
         # 卡尔曼过滤器
         self.kf = None
         self.line_state_mean = []  # 卡尔曼均线
+        self.line_state_upper = []  # 卡尔曼均线+2标准差
+        self.line_state_lower = [] # 卡尔曼均线-2标准差
         self.line_state_covar = []  # 方差
+        self.cur_state_std = None
 
         # SAR 抛物线
         self.cur_sar_direction = ''  # up/down
@@ -638,6 +659,12 @@ class CtaLineBar(object):
         self.cur_bd_count = 0  # 当前波段快线慢线金叉死叉， +金叉计算， - 死叉技术
         self._bd_fast = 0
         self._bd_slow = 0
+
+        # SKDJ
+        self.line_skdj_k = []
+        self.line_skdj_d = []
+        self.cur_skdj_k = 0
+        self.cur_skdj_d = 0
 
     def set_params(self, setting: dict = {}):
         """设置参数"""
@@ -816,6 +843,7 @@ class CtaLineBar(object):
         self.__count_area(bar)
         self.__count_bias()
         self.__count_bd()
+        self.__count_skdj()
         self.export_to_csv(bar)
 
         self.rt_executed = False
@@ -968,8 +996,8 @@ class CtaLineBar(object):
                                                                       round(self.line_d[-1], self.round_n),
                                                                       round(self.line_j[-1], self.round_n))
 
-        if self.para_cci_len > 0 and len(self.line_cci) > 0:
-            msg = msg + u',Cci({0}):{1}'.format(self.para_cci_len, self.line_cci[-1])
+        if self.para_cci_len > 0 and len(self.line_cci) > 0 and len(self.line_cci_ema) > 0:
+            msg = msg + u',Cci({0}):{1}, EMA(Cci):{2}'.format(self.para_cci_len, self.line_cci[-1], self.line_cci_ema[-1])
 
         if (self.para_boll_len > 0 or self.para_boll_tb_len > 0) and len(self.line_boll_upper) > 0:
             msg = msg + u',Boll({}):std:{},mid:{},up:{},low:{},Atan:[mid:{},up:{},low:{}]'. \
@@ -1246,6 +1274,33 @@ class CtaLineBar(object):
             del self.line_pre_low[0]
         self.line_pre_low.append(preLow)
 
+    def get_sar(self, direction, cur_sar, cur_af=0, sar_limit=0.2, sar_step=0.02):
+        """
+        抛物线计算方法
+        :param direction: Direction
+        :param cur_sar: 当前抛物线价格
+        :param cur_af: 当前抛物线价格
+        :param sar_limit: 最大加速范围
+        :param sar_step: 加速因子
+        :return: 新的
+        """
+        if np.isnan(self.high_array[-1]):
+            return cur_sar, cur_af
+        # 向上抛物线
+        if direction == Direction.LONG:
+            af = min(sar_limit, cur_af + sar_step)
+            ep = self.high_array[-1]
+            sar = cur_sar + af * (ep - cur_sar)
+            return sar, af
+        # 向下抛物线
+        elif direction == Direction.SHORT:
+            af = min(sar_limit, cur_af + sar_step)
+            ep = self.low_array[-1]
+            sar = cur_sar + af * (ep - cur_sar)
+            return sar, af
+        else:
+            return cur_sar, cur_af
+
     def __count_sar(self):
         """计算K线的SAR"""
 
@@ -1280,19 +1335,28 @@ class CtaLineBar(object):
                 self.cur_sar_count = 0
             self.line_sar_top.append(self.line_bar[-2].high_price)  # SAR的谷顶
             self.line_sar_buttom.append(self.line_bar[-2].low_price)  # SAR的波底
+
+        # 当前处于上升抛物线
         elif len(self.line_sar_sr_up) > 0:
+
+            # # K线low，仍然在上升抛物线上方，延续
             if self.low_array[-1] > self.line_sar_sr_up[-1]:
+
                 sr0 = self.line_sar_sr_up[-1]
                 ep0 = self.high_array[-1]  # 文华使用前一个K线的最高价
                 af0 = min(self.para_sar_limit,
                           self.line_sar_af_up[-1] + self.para_sar_step)  # 文华的af随着K线的数目增加而递增，没有判断新高
+                # 计算出新的抛物线价格
                 sr = sr0 + af0 * (ep0 - sr0)
+
                 self.line_sar_sr_up.append(sr)
                 self.line_sar_ep_up.append(ep0)
                 self.line_sar_af_up.append(af0)
                 self.line_sar.append(sr)
                 self.cur_sar_count += 1
                 # self.write_log('Up: sr0={},ep0={},af0={},sr={}'.format(sr0, ep0, af0, sr))
+
+            # K线最低，触碰上升的抛物线 =》 转为 下降抛物线
             elif self.low_array[-1] <= self.line_sar_sr_up[-1]:
                 ep0 = max(self.high_array[-len(self.line_sar_sr_up):])
                 sr0 = ep0
@@ -2982,16 +3046,45 @@ class CtaLineBar(object):
                            format(len(self.line_bar), self.para_cci_len + 2))
             return
 
-        # 计算第1根RSI曲线
+        # HIGH = self.high_array[self.high_array > 0]
+        # LOW = self.low_array[self.low_array > 0]
+        # CLOSE = self.close_array[self.close_array > 0]
+        # min_length = min([len(HIGH), len(LOW), len(CLOSE)])
+        # if min_length < (self.para_cci_len + 10):
+        #     return
+        # HIGH = HIGH[-min_length:]
+        # LOW = LOW[-min_length:]
+        # CLOSE = CLOSE[-min_length:]
+        # TP = (HIGH + LOW + CLOSE) / 3
 
-        cur_cci = ta.CCI(high=self.high_array[-2 * self.para_cci_len:], low=self.low_array[-2 * self.para_cci_len:],
-                         close=self.close_array[-2 * self.para_cci_len:], timeperiod=self.para_cci_len)[-1]
+        TP = self.mid3_array[-self.para_cci_len:]
+        # MA = pd.Series(data=TP).rolling(window=self.para_cci_len).mean().values
+        # MD = pd.Series(data=(TP - MA)).abs().rolling(window=self.para_cci_len).mean().values
+        # CCI = (TP - MA) / (0.015 * MD)
+        MA = np.mean(TP)
+        MD = np.mean(np.abs(TP - MA))
+        CCI = (TP[-1] - MA) / (0.015 * MD)
 
-        self.cur_cci = round(float(cur_cci), self.round_n)
+        self.cur_cci = round(CCI, self.round_n)
+
+        # cur_cci = ta.CCI(high=self.high_array[-2 * self.para_cci_len:], low=self.low_array[-2 * self.para_cci_len:],
+        #                  close=self.close_array[-2 * self.para_cci_len:], timeperiod=self.para_cci_len)[-1]
+
+        # self.cur_cci = round(float(cur_cci), self.round_n)
 
         if len(self.line_cci) > self.max_hold_bars:
             del self.line_cci[0]
         self.line_cci.append(self.cur_cci)
+
+        if len(self.line_cci) < 30:
+            self.cur_cci_ema = self.cur_cci
+        else:
+            self.cur_cci_ema = self.__ema(self.__ema(self.__ema(self.line_cci[-30:], 3), 2), 2)[-1]
+
+        if len(self.line_cci_ema) > self.max_hold_bars:
+            del self.line_cci_ema[0]
+        self.line_cci_ema.append(self.cur_cci_ema)
+
 
     def rt_count_cci(self):
         """实时计算CCI值"""
@@ -3004,11 +3097,19 @@ class CtaLineBar(object):
                            format(len(self.line_bar), self.para_cci_len + 2))
             return
 
-        self._rt_cci = ta.CCI(high=np.append(self.high_array[-2 * self.para_cci_len:], [self.line_bar[-1].high_price]),
-                              low=np.append(self.low_array[-2 * self.para_cci_len:], [self.line_bar[-1].low_price]),
-                              close=np.append(self.close_array[-2 * self.para_cci_len:],
-                                              [self.line_bar[-1].close_price]),
-                              timeperiod=self.para_cci_len)[-1]
+        HIGH = np.append(self.high_array[-2 * self.para_cci_len:], [self.line_bar[-1].high_price])
+        LOW = np.append(self.low_array[-2 * self.para_cci_len:], [self.line_bar[-1].low_price])
+        CLOSE = np.append(self.close_array[-2 * self.para_cci_len:],[self.line_bar[-1].close_price])
+        TP = (HIGH + LOW + CLOSE) / 3
+        TP = TP[-self.para_cci_len:]
+        MA = np.mean(TP)
+        MD = np.mean(np.abs(TP - MA))
+        CCI = (TP[-1] - MA) / (0.015 * MD)
+
+        self._rt_cci = CCI
+        rt_line_cci = np.append(self.line_cci[-30:], [CCI])
+        self._rt_cci_ema = self.__ema(self.__ema(self.__ema(rt_line_cci, 3), 2), 2)[-1]
+
 
     @property
     def rt_cci(self):
@@ -3021,7 +3122,7 @@ class CtaLineBar(object):
         """计算卡尔曼过滤器均线"""
         if not self.para_active_kf or self.kf is None:
             return
-        if self.bar_len < 2:
+        if self.bar_len < 26:
             return
 
         if len(self.line_state_mean) == 0 or len(self.line_state_covar) == 0:
@@ -3035,9 +3136,10 @@ class CtaLineBar(object):
                 self.write_log(u'导入卡尔曼过滤器失败,需先安装 pip install pykalman')
                 self.para_active_kf = False
 
-            state_means, state_covariances = self.kf.filter(self.close_array)
+            state_means, state_covariances = self.kf.filter(self.close_array[-1])
             m = state_means[-1].item()
             c = state_covariances[-1].item()
+
         else:
             m = self.line_state_mean[-1]
             c = self.line_state_covar[-1]
@@ -3047,13 +3149,22 @@ class CtaLineBar(object):
                                                                    observation=self.close_array[-1])
             m = state_means[-1].item()
             c = state_covariances[-1].item()
-
+        std_len = 26 if self.bar_len > 26 else self.bar_len
+        std = np.std(self.close_array[-std_len:], ddof=1)
+        self.cur_state_std = std
         if len(self.line_state_mean) > self.max_hold_bars:
             del self.line_state_mean[0]
         if len(self.line_state_covar) > self.max_hold_bars:
             del self.line_state_covar[0]
 
+        if len(self.line_state_upper) > self.max_hold_bars:
+            del self.line_state_upper[0]
+        if len(self.line_state_lower) > self.max_hold_bars:
+            del self.line_state_lower[0]
+
+        self.line_state_upper.append(m + 3 * std)
         self.line_state_mean.append(m)
+        self.line_state_lower.append(m - 3 * std)
         self.line_state_covar.append(c)
 
     def __count_period(self, bar):
@@ -4025,6 +4136,15 @@ class CtaLineBar(object):
             return self.line_bias3[-1]
         return self._rt_bias3
 
+    def __ema(self, data, span):
+        return pd.Series(data=data).ewm(span=span, adjust=False).mean().values
+
+    def __iema(self, this_value, prev_value, span):
+        return (2 * prev_value + (span - 1) * this_value) / (span + 1)
+
+    def __std(self, data, span):
+        return pd.Series(data=data).rolling(window=span).std().values
+
     def __count_bd(self):
         """计算波段快/慢线"""
         #
@@ -4032,18 +4152,25 @@ class CtaLineBar(object):
             # 不计算
             return
 
-        if len(self.line_bar) < 2 * self.para_bd_len:
+        # 修改 By Huang Jianwei
+        var2 = self.mid4_array
+        var2 = var2[var2 > 0]
+        if len(var2) < (5 * self.para_bd_len):
             return
+        var3 = self.__ema(var2, self.para_bd_len)
+        var4 = self.__std(var2, self.para_bd_len)
 
-        mid4_ema_array = ta.EMA(self.mid4_array, self.para_bd_len)
+        ## 检查是否有不合理的std
+        var4_mask = var4 < 1e-5  # 找出不合理的std
+        var4[var4_mask] = 1e-5   # 用一个小的正数替换
+        var5 = ((var2 - var3) / var4 * 100 + 200) / 4  # 计算var5
+        var5[var4_mask] = 0      # 把不合理的std计算的结果抹掉，用0填充
+                                 # 因为var2-var3是一种类似乖离率的东西，长期均值是接近0的，所以用0填充有合理性
 
-        mid4_std = np.std(self.mid4_array[-self.para_bd_len:], ddof=1)
-
-        mid4_ema_diff_array = self.mid4_array - mid4_ema_array
-        var5_array = (mid4_ema_diff_array / mid4_std * 100 + 200) / 4
-        var6_array = (ta.EMA(var5_array, 5) - 25) * 1.56
-        fast_array = ta.EMA(var6_array, 2) * 1.22
-        slow_array = ta.EMA(fast_array, 2)
+        var6 = (self.__ema(var5, 5) - 25) * 1.56
+        fast_array = self.__ema(var6, 2) * 1.22
+        slow_array = self.__ema(fast_array, 2)
+        # 修改完毕
 
         # 快线/慢线最后记录，追加到line_bd_fast/ list_bd_slow中
         if len(self.line_bd_fast) > self.max_hold_bars:
@@ -4069,27 +4196,29 @@ class CtaLineBar(object):
             # 不计算
             return
 
-        if len(self.line_bar) < 2 * self.para_bd_len:
+        var2 = self.close_array[self.close_array>0]
+        if len(var2) < (5 * self.para_bd_len):
             return
         bar_mid4 = (self.line_bar[-1].close_price * 2 + self.line_bar[-1].high_price + self.line_bar[-1].low_price)/4
         bar_mid4 = round(bar_mid4, self.round_n)
 
         mid4_array = np.append(self.mid4_array, [bar_mid4])
-        mid4_ema_array = ta.EMA(mid4_array, self.para_bd_len)
+        mid4_ema_array = self.__ema(mid4_array, self.para_bd_len)
 
-        mid4_std = np.std(mid4_array[-self.para_bd_len:], ddof=1)
+        mid4_std = self.__std(mid4_array, self.para_bd_len)
 
         mid4_ema_diff_array = mid4_array - mid4_ema_array
         var5_array = (mid4_ema_diff_array / mid4_std * 100 + 200) / 4
-        var6_array = (ta.EMA(var5_array, 5) - 25) * 1.56
-        fast_array = ta.EMA(var6_array, 2) * 1.22
-        slow_array = ta.EMA(fast_array, 2)
+        var6_array = (self.__ema(var5_array, 5) - 25) * 1.56
+        fast_array = self.__ema(var6_array, 2) * 1.22
+        slow_array = self.__ema(fast_array, 2)
 
         self._bd_fast = fast_array[-1]
         self._bd_slow = slow_array[-1]
 
     @property
     def rt_bd_fast(self):
+        """波段快线（实时值）"""
         self.check_rt_funcs(self.rt_count_bd)
         if self._bd_fast is None and len(self.para_bd_len) > 0:
             return self.line_bd_fast[-1]
@@ -4097,11 +4226,45 @@ class CtaLineBar(object):
 
     @property
     def rt_bd_slow(self):
+        """波段慢线(实时值）"""
         self.check_rt_funcs(self.rt_count_bd)
         if self._bd_slow is None and len(self.para_bd_len) > 0:
             return self.line_bd_slow[-1]
         return self._bd_slow
 
+
+    def __count_skdj(self):
+        """计算波段快/慢线"""
+        #
+        if self.para_skdj_m <= 0 or self.para_skdj_n <= 0:
+            # 不计算
+            return
+
+        if len(self.line_bar) < 5 * min(self.para_skdj_m, self.para_skdj_n):
+            return
+
+        NN = self.para_skdj_n
+        MM = self.para_skdj_m
+
+        LOWV = pd.Series(data=self.low_array).rolling(window=NN).min().values
+        HIGHV = pd.Series(data=self.high_array).rolling(window=NN).max().values
+        CLOSE = self.close_array
+        RSV = self.__ema((CLOSE-LOWV)/(HIGHV-LOWV)*100, MM)
+        K = self.__ema(RSV, MM)
+        D = pd.Series(data=K).rolling(window=MM).mean().values
+
+
+        if len(self.line_skdj_k) > self.max_hold_bars:
+            self.line_skdj_k.pop(0)
+        if not np.isnan(K[-1]):
+            self.line_skdj_k.append(K[-1])
+            self.cur_skdj_k = K[-1]
+
+        if len(self.line_skdj_d) > self.max_hold_bars:
+            self.line_skdj_d.pop(0)
+        if not np.isnan(D[-1]):
+            self.line_skdj_d.append(D[-1])
+            self.cur_skdj_d = D[-1]
 
     def write_log(self, content):
         """记录CTA日志"""

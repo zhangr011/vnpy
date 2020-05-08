@@ -75,7 +75,6 @@ class TdxStockData(object):
 
         self.strategy = strategy
         self.best_ip = None
-        self.symbol_exchange_dict = {}  # tdx合约与vn交易所的字典
         self.symbol_market_dict = {}  # tdx合约与tdx市场的字典
 
         self.config = get_cache_config(TDX_STOCK_CONFIG)
@@ -211,12 +210,10 @@ class TdxStockData(object):
             tdx_code, market_str = symbol.split('.')
             # 1, 上交所 ， 0， 深交所
             market_id = 1 if market_str.upper() in ['XSHG', Exchange.SSE.value] else 0
-            self.symbol_exchange_dict.update({tdx_code: symbol})  # tdx合约与vn交易所的字典
             self.symbol_market_dict.update({tdx_code: market_id})  # tdx合约与tdx市场的字典
         else:
             market_id = get_tdx_market_code(symbol)
             tdx_code = symbol
-            self.symbol_exchange_dict.update({symbol: symbol})  # tdx合约与vn交易所的字典
             self.symbol_market_dict.update({symbol: market_id})  # tdx合约与tdx市场的字典
         name = self.get_name(tdx_code, market_id)
 
@@ -416,12 +413,10 @@ class TdxStockData(object):
         if '.' in symbol:
             tdx_code, market_str = symbol.split('.')
             market_code = 1 if market_str.upper() in ['XSHG', Exchange.SSE.value] else 0
-            self.symbol_exchange_dict.update({tdx_code: symbol})  # tdx合约与vn交易所的字典
             self.symbol_market_dict.update({tdx_code: market_code})  # tdx合约与tdx市场的字典
         else:
             market_code = get_tdx_market_code(symbol)
             tdx_code = symbol
-            self.symbol_exchange_dict.update({symbol: symbol})  # tdx合约与vn交易所的字典
             self.symbol_market_dict.update({symbol: market_code})  # tdx合约与tdx市场的字典
 
         symbol_config = self.symbol_dict.get(f'{tdx_code}_{market_code}', {})
