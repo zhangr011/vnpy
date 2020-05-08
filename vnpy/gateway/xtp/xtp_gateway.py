@@ -517,7 +517,8 @@ class XtpTdApi(TdApi):
         else:
             # 股票
             direction, offset = DIRECTION_STOCK_XTP2VT[data["side"]]
-
+        insert_time = str(data["insert_time"])
+        dt = datetime.strptime(insert_time, '%Y%m%d%H%M%S%f')
         order = OrderData(
             symbol=symbol,
             exchange=MARKET_XTP2VT[data["market"]],
@@ -530,7 +531,8 @@ class XtpTdApi(TdApi):
             volume=data["quantity"],
             traded=data["qty_traded"],
             status=STATUS_XTP2VT[data["order_status"]],
-            time=data["insert_time"],
+            datetime=dt,
+            time=dt.strftime('%H:%M:%S'),
             gateway_name=self.gateway_name
         )
 
@@ -545,6 +547,9 @@ class XtpTdApi(TdApi):
         else:
             direction, offset = DIRECTION_STOCK_XTP2VT[data["side"]]
 
+        trade_time = str(data["trade_time"])
+        dt = datetime.strptime(trade_time,'%Y%m%d%H%M%S%f')
+
         trade = TradeData(
             symbol=symbol,
             exchange=MARKET_XTP2VT[data["market"]],
@@ -555,7 +560,8 @@ class XtpTdApi(TdApi):
             offset=offset,
             price=data["price"],
             volume=data["quantity"],
-            time=data["trade_time"],
+            datetime=dt,
+            time=dt.strftime('%H:%M:%S'),
             gateway_name=self.gateway_name
         )
 
@@ -767,12 +773,13 @@ class XtpTdApi(TdApi):
 
         # stock type
         else:
+            req.offset = Offset.NONE
             xtp_req = {
                 "ticker": req.symbol,
                 "market": MARKET_VT2XTP[req.exchange],
                 "price": req.price,
                 "quantity": int(req.volume),
-                "side": DIRECTION_STOCK_VT2XTP.get((req.direction, Offset.NONE), ""),
+                "side": DIRECTION_STOCK_VT2XTP.get((req.direction,req.offset), ""),
                 "price_type": ORDERTYPE_VT2XTP[req.type],
                 "business_type": BUSINESS_VT2XTP[req.offset]
             }

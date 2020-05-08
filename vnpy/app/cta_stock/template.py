@@ -462,6 +462,16 @@ class CtaStockTemplate(CtaTemplate):
             if name in setting:
                 setattr(self, name, setting[name])
 
+    def sync_data(self):
+        """同步更新数据"""
+        if not self.backtesting:
+            self.write_log(u'保存k线缓存数据')
+            self.save_klines_to_cache()
+
+        if self.inited and self.trading:
+            self.write_log(u'保存policy数据')
+            self.policy.save()
+
     def save_klines_to_cache(self, kline_names: list = []):
         """
         保存K线数据到缓存
@@ -573,7 +583,7 @@ class CtaStockTemplate(CtaTemplate):
                 for lg in long_grids:
                     if len(lg.order_ids) > 0:
                         self.write_log(f'清除委托单：{lg.order_ids}')
-                        [self.cta_engine.cancel_order(vt_orderid) for vt_orderid in lg.order_ids]
+                        [self.cta_engine.cancel_order(self, vt_orderid) for vt_orderid in lg.order_ids]
                         lg.order_ids = []
                     if lg.open_status:
                         pos = self.get_position(lg.vt_symbol)
@@ -1041,6 +1051,10 @@ class CtaStockTemplate(CtaTemplate):
             return
         vt_symbol = ordering_grid.vt_symbol
         cur_price = self.cta_engine.get_price(vt_symbol)
+        if cur_price is None:
+            self.write_error(f'暂时不能获取{vt_symbol}最新价格')
+            return
+
         buy_volume = ordering_grid.volume - ordering_grid.traded_volume
         min_trade_volume = self.cta_engine.get_volume_tick(vt_symbol)
         if availiable < buy_volume * cur_price:
