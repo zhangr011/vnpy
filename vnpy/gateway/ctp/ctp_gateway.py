@@ -1583,6 +1583,10 @@ class SubMdApi():
         try:
             str_tick = body.decode('utf-8')
             d = json.loads(str_tick)
+            d.pop('rawData', None)
+
+            d = self.conver_update(d)
+
             symbol = d.pop('symbol', None)
             str_datetime = d.pop('datetime', None)
             if symbol not in self.registed_symbol_set or str_datetime is None:
@@ -1592,14 +1596,12 @@ class SubMdApi():
             else:
                 dt = datetime.strptime(str_datetime, '%Y-%m-%d %H:%M:%S')
 
-            d.pop('rawData', None)
             tick = TickData(gateway_name=self.gateway_name,
                             exchange=Exchange(d.get('exchange')),
                             symbol=d.get('symbol'),
                             datetime=dt)
             d.pop('exchange', None)
             d.pop('symbol', None)
-            d.pop()
             tick.__dict__.update(d)
 
             self.symbol_tick_dict[symbol] = tick
@@ -1609,6 +1611,62 @@ class SubMdApi():
         except Exception as ex:
             self.gateway.write_error(u'RabbitMQ on_message 异常:{}'.format(str(ex)))
             self.gateway.write_error(traceback.format_exc())
+
+    def conver_update(self, d):
+        """转换dict， vnpy1 tick dict => vnpy2 tick dict"""
+        if 'vtSymbol' not in d:
+            return d
+        symbol= d.get('symbol')
+        exchange = d.get('exchange')
+        vtSymbol = d.pop('vtSymbol', symbol)
+        if '.' not in symbol:
+            d.update({'vt_symbol': f'{symbol}.{exchange}'})
+        else:
+            d.update({'vt_symbol': f'{symbol}.{Exchange.LOCAL.value}'})
+
+        # 成交数据
+        d.update({'last_price': d.pop('lastPrice',0.0)})  # 最新成交价
+        d.update({'last_volume': d.pop('lastVolume', 0)}) # 最新成交量
+
+        d.update({'open_interest': d.pop('openInterest', 0)})  #  昨持仓量
+
+        d.update({'open_interest': d.pop('tradingDay', get_trading_date())})
+
+
+        # 常规行情
+        d.update({'open_price': d.pop('openPrice', 0)})        # 今日开盘价
+        d.update({'high_price': d.pop('highPrice', 0)})  # 今日最高价
+        d.update({'low_price': d.pop('lowPrice', 0)})  # 今日最低价
+        d.update({'pre_close': d.pop('preClosePrice', 0)})  # 昨收盘价
+        d.update({'limit_up': d.pop('upperLimit', 0)}) # 涨停价
+        d.update({'limit_down': d.pop('lowerLimit', 0)})  # 跌停价
+
+        # 五档行情
+        d.update({'bid_price_1': d.pop('bidPrice1', 0.0)})
+        d.update({'bid_price_2': d.pop('bidPrice2', 0.0)})
+        d.update({'bid_price_3': d.pop('bidPrice3', 0.0)})
+        d.update({'bid_price_4': d.pop('bidPrice4', 0.0)})
+        d.update({'bid_price_5': d.pop('bidPrice5', 0.0)})
+
+        d.update({'ask_price_1': d.pop('askPrice1', 0.0)})
+        d.update({'ask_price_2': d.pop('askPrice2', 0.0)})
+        d.update({'ask_price_3': d.pop('askPrice3', 0.0)})
+        d.update({'ask_price_4': d.pop('askPrice4', 0.0)})
+        d.update({'ask_price_5': d.pop('askPrice5', 0.0)})
+
+        d.update({'bid_volume_1': d.pop('bidVolume1', 0.0)})
+        d.update({'bid_volume_2': d.pop('bidVolume2', 0.0)})
+        d.update({'bid_volume_3': d.pop('bidVolume3', 0.0)})
+        d.update({'bid_volume_4': d.pop('bidVolume4', 0.0)})
+        d.update({'bid_volume_5': d.pop('bidVolume5', 0.0)})
+
+        d.update({'ask_volume_1': d.pop('askVolume1', 0.0)})
+        d.update({'ask_volume_2': d.pop('askVolume2', 0.0)})
+        d.update({'ask_volume_3': d.pop('askVolume3', 0.0)})
+        d.update({'ask_volume_4': d.pop('askVolume4', 0.0)})
+        d.update({'ask_volume_5': d.pop('askVolume5', 0.0)})
+
+        return d
 
     def close(self):
         """退出API"""

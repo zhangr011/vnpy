@@ -366,16 +366,16 @@ class TdxStockData(object):
                    cache_date: str):
         """加载缓存数据"""
         if not os.path.exists(cache_folder):
-            self.write_error('缓存目录:{}不存在,不能读取'.format(cache_folder))
+            #self.write_error('缓存目录:{}不存在,不能读取'.format(cache_folder))
             return None
         cache_folder_year_month = os.path.join(cache_folder, cache_date[:6])
         if not os.path.exists(cache_folder_year_month):
-            self.write_error('缓存目录:{}不存在,不能读取'.format(cache_folder_year_month))
+            #self.write_error('缓存目录:{}不存在,不能读取'.format(cache_folder_year_month))
             return None
 
         cache_file = os.path.join(cache_folder_year_month, '{}_{}.pkb2'.format(cache_symbol, cache_date))
         if not os.path.isfile(cache_file):
-            self.write_error('缓存文件:{}不存在,不能读取'.format(cache_file))
+            #self.write_error('缓存文件:{}不存在,不能读取'.format(cache_file))
             return None
         with bz2.BZ2File(cache_file, 'rb') as f:
             data = pickle.load(f)

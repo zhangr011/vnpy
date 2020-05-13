@@ -598,7 +598,8 @@ class BackTestingEngine(object):
             adj_factor = adj_factor / adj_factor.iloc[0]  # 保证第一个复权因子是1
 
         # 把raw_data的第一个日期，插入复权因子df，使用后填充
-        adj_factor.loc[raw_data.index[0]] = np.nan
+        if adj_factor.index[0] != raw_data.index[0]:
+            adj_factor.loc[raw_data.index[0]] = np.nan
         adj_factor.sort_index(inplace=True)
         adj_factor = adj_factor.ffill()
 

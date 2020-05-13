@@ -1211,7 +1211,7 @@ class CtaEngine(BaseEngine):
             # 通过事件方式，传导到account_recorder
             snapshot.update({
                 'account_id': self.engine_config.get('accountid', '-'),
-                'strategy_group':  self.engine_config.get('strategy_group', self.engine_name),
+                'strategy_group': self.engine_config.get('strategy_group', self.engine_name),
                 'guid': str(uuid1())
             })
             event = Event(EVENT_STRATEGY_SNAPSHOT, snapshot)
@@ -1474,7 +1474,7 @@ class CtaEngine(BaseEngine):
         d.update(strategy.get_parameters())
         return d
 
-    def get_strategy_value(self, strategy_name: str, parameter:str):
+    def get_strategy_value(self, strategy_name: str, parameter: str):
         """获取策略的某个参数值"""
         strategy = self.strategies.get(strategy_name)
         if not strategy:
@@ -1483,7 +1483,24 @@ class CtaEngine(BaseEngine):
         value = getattr(strategy, parameter, None)
         return value
 
-    def compare_pos(self, strategy_pos_list=[]):
+    def get_none_strategy_pos_list(self):
+        """获取非策略持有的仓位"""
+        # 格式 [  'strategy_name':'account', 'pos': [{'vt_symbol': '', 'direction': 'xxx', 'volume':xxx }] } ]
+        none_strategy_pos_file = os.path.abspath(os.path.join(os.getcwd(), 'data', 'none_strategy_pos.json'))
+        if not os.path.exists(none_strategy_pos_file):
+            return []
+        try:
+            with open(none_strategy_pos_file, encoding='utf8') as f:
+                pos_list = json.load(f)
+                if isinstance(pos_list, list):
+                    return pos_list
+
+            return []
+        except Exception as ex:
+            self.write_error(u'未能读取或解释{}'.format(none_strategy_pos_file))
+            return []
+
+    def compare_pos(self, strategy_pos_list=[], auto_balance=False):
         """
         对比账号&策略的持仓,不同的话则发出微信提醒
         :return:
@@ -1498,6 +1515,10 @@ class CtaEngine(BaseEngine):
         if len(strategy_pos_list) == 0:
             strategy_pos_list = self.get_all_strategy_pos()
         self.write_log(u'策略持仓清单:{}'.format(strategy_pos_list))
+
+        none_strategy_pos = self.get_none_strategy_pos_list()
+        if len(none_strategy_pos) > 0:
+            strategy_pos_list.extend(none_strategy_pos)
 
         # 需要进行对比得合约集合（来自策略持仓/账号持仓）
         vt_symbols = set()
@@ -1584,8 +1605,9 @@ class CtaEngine(BaseEngine):
                 compare_info += msg
             else:
                 pos_compare_result += '\n{}: '.format(vt_symbol)
-                # 多单不一致
-                if round(symbol_pos['策略多单'], 7) != round(symbol_pos['账号多单'], 7):
+                # 判断是多单不一致？
+                diff_long_volume = round(symbol_pos['账号多单'], 7) - round(symbol_pos['策略多单'], 7)
+                if diff_long_volume != 0:
                     msg = '{}多单[账号({}), 策略{},共({})], ' \
                         .format(vt_symbol,
                                 symbol_pos['账号多单'],
@@ -1595,8 +1617,13 @@ class CtaEngine(BaseEngine):
                     pos_compare_result += msg
                     self.write_error(u'{}不一致:{}'.format(vt_symbol, msg))
                     compare_info += u'{}不一致:{}\n'.format(vt_symbol, msg)
-                # 空单不一致
-                if round(symbol_pos['策略空单'], 7) != round(symbol_pos['账号空单'], 7):
+                    if auto_balance:
+                        self.balance_pos(vt_symbol, Direction.LONG, diff_long_volume)
+
+                # 判断是空单不一致:
+                diff_short_volume = round(symbol_pos['账号空单'], 7) - round(symbol_pos['策略空单'], 7)
+
+                if diff_short_volume != 0:
                     msg = '{}空单[账号({}), 策略{},共({})], ' \
                         .format(vt_symbol,
                                 symbol_pos['账号空单'],
@@ -1605,6 +1632,8 @@ class CtaEngine(BaseEngine):
                     pos_compare_result += msg
                     self.write_error(u'{}不一致:{}'.format(vt_symbol, msg))
                     compare_info += u'{}不一致:{}\n'.format(vt_symbol, msg)
+                    if auto_balance:
+                        self.balance_pos(vt_symbol, Direction.SHORT, diff_short_volume)
 
         # 不匹配，输入到stdErr通道
         if pos_compare_result != '':
@@ -1614,7 +1643,7 @@ class CtaEngine(BaseEngine):
             try:
                 from vnpy.trader.util_wechat import send_wx_msg
                 send_wx_msg(content=msg)
-            except Exception as ex: # noqa
+            except Exception as ex:  # noqa
                 pass
             ret_msg = u'持仓不匹配: {}' \
                 .format(pos_compare_result)
@@ -1623,6 +1652,51 @@ class CtaEngine(BaseEngine):
         else:
             self.write_log(u'账户持仓与策略一致')
             return True, compare_info
+
+    def balance_pos(self, vt_symbol, direction, volume):
+        """
+        平衡仓位
+        :param vt_symbol: 需要平衡得合约
+        :param direction: 合约原始方向
+        :param volume: 合约需要调整得数量（正数，需要平仓， 负数，需要开仓）
+        :return:
+        """
+        tick = self.get_tick(vt_symbol)
+        if tick is None:
+            gateway_names = self.main_engine.get_all_gateway_names()
+            gateway_name = gateway_names[0] if len(gateway_names) > 0 else ""
+            symbol, exchange = extract_vt_symbol(vt_symbol)
+            self.main_engine.subscribe(req=SubscribeRequest(symbol=symbol, exchange=exchange), gateway_name=gateway_name)
+        if volume > 0 and tick:
+            contract = self.main_engine.get_contract(vt_symbol)
+            req = OrderRequest(
+                symbol=contract.symbol,
+                exchange=contract.exchange,
+                direction=Direction.SHORT if direction == Direction.LONG else Direction.LONG,
+                offset=Offset.CLOSE,
+                type=OrderType.FAK,
+                price=tick.ask_price_1 if direction == Direction.SHORT else tick.bid_price_1,
+                volume=round(volume, 7)
+            )
+            reqs = self.offset_converter.convert_order_request(req=req, lock=False)
+            self.write_log(f'平衡仓位，减少 {vt_symbol}，方向:{direction}，数量:{req.volume} ')
+            for req in reqs:
+                self.main_engine.send_order(req, contract.gateway_name)
+        elif volume < 0 and tick:
+            contract = self.main_engine.get_contract(vt_symbol)
+            req = OrderRequest(
+                symbol=contract.symbol,
+                exchange=contract.exchange,
+                direction=direction,
+                offset=Offset.OPEN,
+                type=OrderType.FAK,
+                price=tick.ask_price_1 if direction == Direction.LONG else tick.bid_price_1,
+                volume=round(abs(volume), 7)
+            )
+            reqs = self.offset_converter.convert_order_request(req=req, lock=False)
+            self.write_log(f'平衡仓位， 增加{vt_symbol}， 方向:{direction}, 数量: {req.volume}')
+            for req in reqs:
+                self.main_engine.send_order(req, contract.gateway_name)
 
     def init_all_strategies(self):
         """

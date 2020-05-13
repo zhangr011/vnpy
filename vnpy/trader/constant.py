@@ -158,3 +158,13 @@ class Interval(Enum):
     DAILY = "d"
     WEEKLY = "w"
     RENKO = 'renko'
+
+class StockType(Enum):
+    """股票类型（tdx）"""
+    STOCK = 'stock_cn'   # 股票
+    STOCKB = 'stockB_cn' # 深圳B股票（特别）
+    INDEX = 'index_cn'   # 指数
+    BOND = 'bond_cn'     # 企业债券
+    ETF = 'etf_cn'       # ETF
+    CB = 'cb_cn'         # 可转债
+    UNDEFINED = 'undefined' # 未定义

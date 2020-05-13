@@ -3774,7 +3774,7 @@ class CtaLineBar(object):
         if runtime:
             # 兼容写法，如果老策略没有配置实时运行，又用到实时数据，就添加
             if self.rt_count_skd not in self.rt_funcs:
-                self.write_log(u'skd_is_high_dead_cross(),添加rt_countSkd到实时函数中')
+                self.write_log(u'rt_count_skd(),添加rt_countSkd到实时函数中')
                 self.rt_funcs.add(self.rt_count_skd)
                 self.rt_count_sk_sd()
             if self._rt_sk is None or self._rt_sd is None:

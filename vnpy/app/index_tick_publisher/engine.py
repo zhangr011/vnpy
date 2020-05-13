@@ -26,7 +26,7 @@ from vnpy.component.base import (
 
 from vnpy.amqp.producer import publisher
 
-APP_NAME = 'INDEXDATAPUBLISHER'
+APP_NAME = 'Idx_Publisher'
 
 
 class IndexTickPublisher(BaseEngine):
@@ -472,6 +472,6 @@ class IndexTickPublisher(BaseEngine):
                 d = copy.copy(tick.__dict__)
                 if isinstance(tick.datetime, datetime):
                     d.update({'datetime': tick.datetime.strftime('%Y-%m-%d %H:%M:%S.%f')})
-                d.update({'exchange': tick.exchange.value()})
+                d.update({'exchange': tick.exchange.value})
                 d = json.dumps(d)
                 self.pub.pub(d)

@@ -628,6 +628,8 @@ class CtaProTemplate(CtaTemplate):
         if self.idx_symbol is None:
             symbol, exchange = extract_vt_symbol(self.vt_symbol)
             self.idx_symbol = get_underlying_symbol(symbol).upper() + '99.' + exchange.value
+        self.cta_engine.subscribe_symbol(strategy_name=self.strategy_name, vt_symbol=self.idx_symbol)
+
         if self.vt_symbol != self.idx_symbol:
             self.write_log(f'指数合约:{self.idx_symbol}, 主力合约:{self.vt_symbol}')
         self.price_tick = self.cta_engine.get_price_tick(self.vt_symbol)
