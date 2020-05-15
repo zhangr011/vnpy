@@ -497,9 +497,11 @@ class CtpMdApi(MdApi):
         exchange = symbol_exchange_map.get(symbol, "")
         if not exchange:
             return
-
-        timestamp = f"{data['ActionDay']} {data['UpdateTime']}.{int(data['UpdateMillisec'] / 100)}"
-        dt = datetime.strptime(timestamp, "%Y%m%d %H:%M:%S.%f")
+        # 取当前时间
+        dt = datetime.now()
+        s_date = dt.strftime('%Y-%m-%d')
+        timestamp = f"{s_date} {data['UpdateTime']}.{int(data['UpdateMillisec'] / 100)}"
+        dt = datetime.strptime(timestamp, "%Y-%m-%d %H:%M:%S.%f")
 
         # 不处理开盘前的tick数据
         if dt.hour in [8, 20] and dt.minute < 59:
@@ -511,7 +513,7 @@ class CtpMdApi(MdApi):
             symbol=symbol,
             exchange=exchange,
             datetime=dt,
-            date=dt.strftime('%Y-%m-%d'),
+            date=s_date,
             time=dt.strftime('%H:%M:%S.%f'),
             trading_day=get_trading_date(dt),
             name=symbol_name_map[symbol],
@@ -640,7 +642,7 @@ class CtpTdApi(TdApi):
         self.sysid_orderid_map = {}
         self.future_contract_changed = False
 
-        self.accountid = ""
+        self.accountid = self.userid
 
     def onFrontConnected(self):
         """"""
@@ -804,7 +806,7 @@ class CtpTdApi(TdApi):
         """"""
         if "AccountID" not in data:
             return
-        if not self.accountid:
+        if len(self.accountid)== 0:
             self.accountid = data['AccountID']
 
         account = AccountData(
@@ -941,10 +943,11 @@ class CtpTdApi(TdApi):
             order_type = OrderType.MARKET
 
         order = OrderData(
+            accountid=self.accountid,
             symbol=symbol,
             exchange=exchange,
             orderid=orderid,
-            sys_orderid=data.get('OrderSysID', ""),
+            sys_orderid=data.get('OrderSysID', orderid),
             type=order_type,
             direction=DIRECTION_CTP2VT[data["Direction"]],
             offset=OFFSET_CTP2VT[data["CombOffsetFlag"]],
@@ -976,13 +979,14 @@ class CtpTdApi(TdApi):
             trade_date = trade_date[0:4] + '-' + trade_date[4:6] + '-' + trade_date[6:8]
         trade_time = data['TradeTime']
         trade_datetime = datetime.strptime(f'{trade_date} {trade_time}', '%Y-%m-%d %H:%M:%S')
-
+        tradeid = data["TradeID"]
         trade = TradeData(
+            accountid=self.accountid,
             symbol=symbol,
             exchange=exchange,
             orderid=orderid,
-            sys_orderid=data.get("OrderSysID", ""),
-            tradeid=data["TradeID"],
+            sys_orderid=data.get("OrderSysID", orderid),
+            tradeid=tradeid.replace(' ',''),
             direction=DIRECTION_CTP2VT[data["Direction"]],
             offset=OFFSET_CTP2VT[data["OffsetFlag"]],
             price=data["Price"],
@@ -1057,7 +1061,7 @@ class CtpTdApi(TdApi):
             "BrokerID": self.brokerid,
             "AppID": self.appid
         }
-
+        self.accountid = copy(self.userid)
         if self.product_info:
             req["UserProductInfo"] = self.product_info
 
@@ -1109,6 +1113,8 @@ class CtpTdApi(TdApi):
 
         orderid = f"{self.frontid}_{self.sessionid}_{self.order_ref}"
         order = req.create_order_data(orderid, self.gateway_name)
+        order.accountid = self.accountid
+        order.vt_accountid = f"{self.gateway_name}.{self.accountid}"
         self.gateway.on_order(order)
 
         return order.vt_orderid
