@@ -147,7 +147,7 @@ class CtaManager(QtWidgets.QWidget):
             auto_init = setting.pop("auto_init", False)
             auto_start = setting.pop("auto_start", False)
             self.cta_engine.add_strategy(
-                class_name, strategy_name, vt_symbol, setting, auto_init, auto_start
+                class_name, strategy_name, vt_symbols, setting, auto_init, auto_start
             )
 
     def clear_log(self):

@@ -16,7 +16,7 @@ from vnpy.trader.constant import Interval, Direction, Offset, Status, OrderType,
 from vnpy.trader.object import BarData, TickData, OrderData, TradeData, PositionData
 from vnpy.trader.utility import virtual, append_data, extract_vt_symbol, get_underlying_symbol, round_to
 
-from .base import StopOrder
+from .base import StopOrder,EngineType
 from vnpy.component.cta_grid_trade import CtaGrid, CtaGridTrade
 from vnpy.component.cta_position import CtaPosition
 from vnpy.component.cta_policy import CtaPolicy
@@ -403,6 +403,7 @@ class StockPolicy(CtaPolicy):
         j['singlals'] = d
         return j
 
+
 class CtaStockTemplate(CtaTemplate):
     """
     股票增强模板
@@ -439,7 +440,7 @@ class CtaStockTemplate(CtaTemplate):
         self.max_invest_margin = 0  # 资金上限 0，不限制
 
         # 是否回测状态
-        backtesting = False
+        self.backtesting = False
 
         self.cur_datetime: datetime = None  # 当前Tick时间
         self.last_minute = None  # 最后的分钟,用于on_tick内每分钟处理的逻辑
@@ -1293,3 +1294,4 @@ class CtaStockTemplate(CtaTemplate):
         if self.backtesting:
             return
         self.cta_engine.send_wechat(msg=msg, strategy=self)
+
