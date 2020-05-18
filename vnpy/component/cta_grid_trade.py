@@ -595,7 +595,7 @@ class CtaGridTrade(CtaComponent):
                 x.type = type  # 网格类型标签
                 # self.open_prices = {}  # 套利使用，开仓价格，symbol:price
 
-    def rebuild_grids(self, direction: Direction,
+    def rebuild_grids(self, directions: list = [],
                       upper_line: float = 0.0,
                       down_line: float = 0.0,
                       middle_line: float = 0.0,
@@ -608,7 +608,7 @@ class CtaGridTrade(CtaComponent):
         upRate , 上轨网格高度比率
         dnRate， 下轨网格高度比率
         """
-        self.write_log(u'重新拉网:direction:{},upline:{},dnline:{}'.format(direction, upper_line, down_line))
+        self.write_log(u'重新拉网:direction:{},upline:{},dnline:{}'.format(directions, upper_line, down_line))
 
         # 检查上下网格的高度比率，不能低于0.5
         if upper_rate < 0.5 or down_rate < 0.5:
@@ -616,7 +616,7 @@ class CtaGridTrade(CtaComponent):
             down_rate = max(0.5, down_rate)
 
         # 重建下网格(移除未挂单、保留开仓得网格、在最低价之下才增加网格
-        if direction == Direction.LONG:
+        if len(directions) == 0 or Direction.LONG in directions:
             min_long_price = middle_line
             remove_grids = []
             opened_grids = []
@@ -636,8 +636,8 @@ class CtaGridTrade(CtaComponent):
                 self.write_log(u'保留下网格[{}]'.format(opened_grids))
 
             # 需要重建的剩余网格数量
-            remainLots = len(self.dn_grids)
-            lots = self.max_lots - remainLots
+            remain_lots = len(self.dn_grids)
+            lots = self.max_lots - remain_lots
 
             down_line = min(down_line, min_long_price - self.grid_height * down_rate)
             self.write_log(u'需要重建的网格数量:{0},起点:{1}'.format(lots, down_line))
@@ -651,13 +651,13 @@ class CtaGridTrade(CtaComponent):
                     grid = CtaGrid(direction=Direction.LONG,
                                    open_price=open_price,
                                    close_price=close_price,
-                                   volume=self.volume * self.get_volume_rate(remainLots + i))
+                                   volume=self.volume * self.get_volume_rate(remain_lots + i))
                     grid.reuse_count = reuse_count
                     self.dn_grids.append(grid)
                 self.write_log(u'重新拉下网格:[{0}==>{1}]'.format(down_line, down_line - lots * self.grid_height * down_rate))
 
         # 重建上网格(移除未挂单、保留开仓得网格、在最高价之上才增加网格
-        if direction == Direction.SHORT:
+        if len(directions) == 0 or Direction.SHORT in directions:
             max_short_price = middle_line  # 最高开空价
             remove_grids = []  # 移除的网格列表
             opened_grids = []  # 已开仓的网格列表
@@ -678,8 +678,8 @@ class CtaGridTrade(CtaComponent):
                 self.write_log(u'保留上网格[{}]'.format(opened_grids))
 
             # 需要重建的剩余网格数量
-            remainLots = len(self.up_grids)
-            lots = self.max_lots - remainLots
+            remain_lots = len(self.up_grids)
+            lots = self.max_lots - remain_lots
             upper_line = max(upper_line, max_short_price + self.grid_height * upper_rate)
             self.write_log(u'需要重建的网格数量:{0},起点:{1}'.format(lots, upper_line))
 
@@ -692,7 +692,7 @@ class CtaGridTrade(CtaComponent):
                     grid = CtaGrid(direction=Direction.SHORT,
                                    open_price=open_price,
                                    close_price=close_price,
-                                   volume=self.volume * self.get_volume_rate(remainLots + i))
+                                   volume=self.volume * self.get_volume_rate(remain_lots + i))
                     grid.reuse_count = reuse_count
                     self.up_grids.append(grid)
 

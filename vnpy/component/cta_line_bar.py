@@ -178,13 +178,20 @@ class CtaLineBar(object):
 
         # (实时运行时，或者addbar小于bar得周期时，不包含最后一根Bar）
         self.open_array = np.zeros(self.max_hold_bars)  # 与lineBar一致得开仓价清单
+        self.open_array[:] = np.nan
         self.high_array = np.zeros(self.max_hold_bars)  # 与lineBar一致得最高价清单
+        self.high_array[:] = np.nan
         self.low_array = np.zeros(self.max_hold_bars)  # 与lineBar一致得最低价清单
+        self.low_array[:] = np.nan
         self.close_array = np.zeros(self.max_hold_bars)  # 与lineBar一致得收盘价清单
+        self.close_array[:] = np.nan
 
         self.mid3_array = np.zeros(self.max_hold_bars)  # 收盘价/最高/最低价 的平均价
+        self.mid3_array[:] = np.nan
         self.mid4_array = np.zeros(self.max_hold_bars)  # 收盘价*2/最高/最低价 的平均价
+        self.mid4_array[:] = np.nan
         self.mid5_array = np.zeros(self.max_hold_bars)  # 收盘价*2/开仓价/最高/最低价 的平均价
+        self.mid5_array[:] = np.nan
 
         self.export_filename = None
         self.export_fields = []
@@ -1263,7 +1270,8 @@ class CtaLineBar(object):
         # 2.计算前inputPreLen周期内(不包含当前周期）的Bar高点和低点
         preHigh = max(self.high_array[-count_len:])
         preLow = min(self.low_array[-count_len:])
-
+        if np.isnan(preHigh) or np.isnan(preLow):
+            return
         # 保存
         if len(self.line_pre_high) > self.max_hold_bars:
             del self.line_pre_high[0]
@@ -1452,6 +1460,8 @@ class CtaLineBar(object):
             count_len = min(self.para_ma1_len, self.bar_len)
 
             barMa1 = ta.MA(self.close_array[-count_len:], count_len)[-1]
+            if np.isnan(barMa1):
+                return
             barMa1 = round(barMa1, self.round_n)
 
             if len(self.line_ma1) > self.max_hold_bars:
@@ -1470,6 +1480,8 @@ class CtaLineBar(object):
         if self.para_ma2_len > 0:
             count_len = min(self.para_ma2_len, self.bar_len)
             barMa2 = ta.MA(self.close_array[-count_len:], count_len)[-1]
+            if np.isnan(barMa2):
+                return
             barMa2 = round(barMa2, self.round_n)
 
             if len(self.line_ma2) > self.max_hold_bars:
@@ -1488,6 +1500,8 @@ class CtaLineBar(object):
         if self.para_ma3_len > 0:
             count_len = min(self.para_ma3_len, self.bar_len)
             barMa3 = ta.MA(self.close_array[-count_len:], count_len)[-1]
+            if np.isnan(barMa3):
+                return
             barMa3 = round(barMa3, self.round_n)
 
             if len(self.line_ma3) > self.max_hold_bars:
@@ -1685,6 +1699,8 @@ class CtaLineBar(object):
 
             # 3、获取前InputN周期(不包含当前周期）的K线
             barEma1 = ta.EMA(self.close_array[-ema1_data_len:], count_len)[-1]
+            if np.isnan(barEma1):
+                return
             barEma1 = round(float(barEma1), self.round_n)
 
             if len(self.line_ema1) > self.max_hold_bars:
@@ -1698,7 +1714,8 @@ class CtaLineBar(object):
             # 3、获取前InputN周期(不包含当前周期）的自适应均线
 
             barEma2 = ta.EMA(self.close_array[-ema2_data_len:], count_len)[-1]
-
+            if np.isnan(barEma2):
+                return
             barEma2 = round(float(barEma2), self.round_n)
 
             if len(self.line_ema2) > self.max_hold_bars:
@@ -1711,6 +1728,8 @@ class CtaLineBar(object):
 
             # 3、获取前InputN周期(不包含当前周期）的自适应均线
             barEma3 = ta.EMA(self.close_array[-ema3_data_len:], count_len)[-1]
+            if np.isnan(barEma3):
+                return
             barEma3 = round(float(barEma3), self.round_n)
 
             if len(self.line_ema3) > self.max_hold_bars:
@@ -1737,6 +1756,8 @@ class CtaLineBar(object):
 
             # 3、获取前InputN周期(不包含当前周期）的K线
             barEma1 = ta.EMA(np.append(self.close_array[-ema1_data_len:], [self.cur_price]), count_len)[-1]
+            if np.isnan(barEma1):
+                return
             self._rt_ema1 = round(float(barEma1), self.round_n)
 
         # 计算第二条EMA均线
@@ -1746,7 +1767,8 @@ class CtaLineBar(object):
             # 3、获取前InputN周期(不包含当前周期）的自适应均线
 
             barEma2 = ta.EMA(np.append(self.close_array[-ema2_data_len:], [self.cur_price]), count_len)[-1]
-
+            if np.isnan(barEma2):
+                return
             self._rt_ema2 = round(float(barEma2), self.round_n)
 
         # 计算第三条EMA均线
@@ -1755,6 +1777,8 @@ class CtaLineBar(object):
 
             # 3、获取前InputN周期(不包含当前周期）的自适应均线
             barEma3 = ta.EMA(np.append(self.close_array[-ema3_data_len:], [self.cur_price]), count_len)[-1]
+            if np.isnan(barEma3):
+                return
             self._rt_ema3 = round(float(barEma3), self.round_n)
 
     @property
@@ -2076,7 +2100,7 @@ class CtaLineBar(object):
             return
 
         if self.para_boll_len > 0:
-            if self.bar_len < min(7, self.para_boll_len):
+            if self.bar_len < min(20, self.para_boll_len):
                 self.write_log(u'数据未充分,当前Bar数据数量：{0}，计算Boll需要：{1}'.
                                format(len(self.line_bar), min(14, self.para_boll_len) + 1))
             else:
@@ -2086,6 +2110,9 @@ class CtaLineBar(object):
                 upper_list, middle_list, lower_list = ta.BBANDS(self.close_array,
                                                                 timeperiod=bollLen, nbdevup=self.para_boll_std_rate,
                                                                 nbdevdn=self.para_boll_std_rate, matype=0)
+                if np.isnan(upper_list[-1]):
+                    return
+
                 if len(self.line_boll_upper) > self.max_hold_bars:
                     del self.line_boll_upper[0]
                 if len(self.line_boll_middle) > self.max_hold_bars:
@@ -2144,6 +2171,8 @@ class CtaLineBar(object):
                 upper_list, middle_list, lower_list = ta.BBANDS(self.close_array,
                                                                 timeperiod=boll2Len, nbdevup=self.para_boll2_std_rate,
                                                                 nbdevdn=self.para_boll2_std_rate, matype=0)
+                if np.isnan(upper_list[-1]):
+                    return
                 if len(self.line_boll2_upper) > self.max_hold_bars:
                     del self.line_boll2_upper[0]
                 if len(self.line_boll2_middle) > self.max_hold_bars:
@@ -2510,14 +2539,19 @@ class CtaLineBar(object):
 
         hhv = max(self.high_array[-inputKdjLen:])
         llv = min(self.low_array[-inputKdjLen:])
-
+        if np.isnan(hhv) or np.isnan(llv):
+            return
         if len(self.line_k) > 0:
             lastK = self.line_k[-1]
+            if np.isnan(lastK):
+                lastK  = 0
         else:
             lastK = 0
 
         if len(self.line_d) > 0:
             lastD = self.line_d[-1]
+            if np.isnan(lastD):
+                lastD = 0
         else:
             lastD = 0
 
@@ -2620,14 +2654,20 @@ class CtaLineBar(object):
 
         hhv = max(self.high_array[-data_len:])
         llv = min(self.low_array[-data_len:])
+        if np.isnan(hhv) or np.isnan(llv):
+            return
 
         if len(self.line_k) > 0:
             lastK = self.line_k[-1]
+            if np.isnan(lastK):
+                lastK = 0
         else:
             lastK = 0
 
         if len(self.line_d) > 0:
             lastD = self.line_d[-1]
+            if np.isnan(lastD):
+                lastD = 0
         else:
             lastD = 0
 
@@ -2747,7 +2787,8 @@ class CtaLineBar(object):
         dif_list, dea_list, macd_list = ta.MACD(self.close_array[-2 * maxLen:], fastperiod=self.para_macd_fast_len,
                                                 slowperiod=self.para_macd_slow_len,
                                                 signalperiod=self.para_macd_signal_len)
-
+        if np.isnan(dif_list[-1]) or np.isnan(dea_list[-1]) or np.isnan(macd_list[-1]):
+            return
         # dif, dea, macd = ta.MACDEXT(np.array(listClose, dtype=float),
         #                            fastperiod=self.inputMacdFastPeriodLen, fastmatype=1,
         #                            slowperiod=self.inputMacdSlowPeriodLen, slowmatype=1,
@@ -2867,6 +2908,9 @@ class CtaLineBar(object):
         dif, dea, macd = ta.MACD(np.append(self.close_array[-maxLen:], [self.line_bar[-1].close]),
                                  fastperiod=self.para_macd_fast_len,
                                  slowperiod=self.para_macd_slow_len, signalperiod=self.para_macd_signal_len)
+
+        if np.isnan(dif[-1]) or np.isnan(dea[-1]) or np.isnan(macd[-1]):
+            return
 
         self._rt_dif = round(dif[-1], self.round_n) if len(dif) > 0 else None
         self._rt_dea = round(dea[-1], self.round_n) if len(dea) > 0 else None
@@ -3957,6 +4001,9 @@ class CtaLineBar(object):
 
         hhv = max(self.high_array[-bar_len:])
         llv = min(self.low_array[-bar_len:])
+
+        if np.isnan(hhv) or np.isnan(llv):
+            return
 
         self.cur_p192 = hhv - (hhv - llv) * 0.192
         self.cur_p382 = hhv - (hhv - llv) * 0.382

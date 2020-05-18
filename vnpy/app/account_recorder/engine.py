@@ -330,10 +330,13 @@ class AccountRecorder(BaseEngine):
         # self.write_log(u'记录委托日志:{}'.format(order.__dict__))
         if len(order.sys_orderid) == 0:
             # 未有系统的委托编号，不做持久化
-            return
+            order.sys_orderid = order.orderid
         dt = getattr(order, 'datetime')
         if not dt:
             order_date = datetime.now().strftime('%Y-%m-%d')
+            if len(order.time) > 0 and '.' not in order.time:
+                dt = datetime.strptime(f'{order_date} {order.time}', '%Y-%m-%d %H:%M:%S')
+                order.datetime = dt
         else:
             order_date = dt.strftime('%Y-%m-%d')
 

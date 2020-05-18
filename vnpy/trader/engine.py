@@ -25,6 +25,7 @@ from .event import (
 )
 from .gateway import BaseGateway
 from .object import (
+    Direction,
     Exchange,
     CancelRequest,
     LogData,
@@ -214,7 +215,7 @@ class MainEngine:
         """
         # 自定义套利合约，交给算法引擎处理
         if self.algo_engine and req.exchange == Exchange.SPD:
-            return self.algo_engine.send_algo_order(
+            return self.algo_engine.send_spd_order(
                 req=req,
                 gateway_name=gateway_name)
 
@@ -228,6 +229,11 @@ class MainEngine:
         """
         Send cancel order request to a specific gateway.
         """
+        # 自定义套利合约，交给算法引擎处理
+        if self.algo_engine and req.exchange == Exchange.SPD:
+            return self.algo_engine.cancel_spd_order(
+                req=req)
+
         gateway = self.get_gateway(gateway_name)
         if gateway:
             return gateway.cancel_order(req)
@@ -422,13 +428,19 @@ class OmsEngine(BaseEngine):
         self.accounts: Dict[str, AccountData] = {}
         self.contracts: Dict[str, ContractData] = {}
         self.today_contracts: Dict[str, ContractData] = {}
-        self.custom_contracts = {}
+
+        # 自定义合约
+        self.custom_contracts = {}   # vt_symbol: ContractData
+        self.custom_settings = {}    # symbol: dict
+        self.symbol_spd_maping = {}  # symbol: [spd_symbol]
+
         self.prices = {}
 
         self.active_orders: Dict[str, OrderData] = {}
 
         self.add_function()
         self.register_event()
+        self.load_contracts()
 
     def __del__(self):
         """保存缓存"""
@@ -444,6 +456,30 @@ class OmsEngine(BaseEngine):
         with bz2.BZ2File(contract_file_name, 'rb') as f:
             self.contracts = pickle.load(f)
             self.write_log(f'加载缓存合约字典:{contract_file_name}')
+
+        # 更新自定义合约
+        custom_contracts = self.get_all_custom_contracts()
+        for contract in custom_contracts.values():
+
+            # 更新合约缓存
+            self.contracts.update({contract.symbol: contract})
+            self.contracts.update({contract.vt_symbol: contract})
+            self.today_contracts[contract.vt_symbol] = contract
+            self.today_contracts[contract.symbol] = contract
+
+            # 获取自定义合约的主动腿/被动腿
+            setting = self.custom_settings.get(contract.symbol, {})
+            leg1_symbol = setting.get('leg1_symbol')
+            leg2_symbol = setting.get('leg2_symbol')
+
+            # 构建映射关系
+            for symbol in [leg1_symbol, leg2_symbol]:
+                spd_mapping_list = self.symbol_spd_maping.get(symbol, [])
+
+                # 更新映射 symbol => spd_symbol
+                if contract.symbol not in spd_mapping_list:
+                    spd_mapping_list.append(contract.symbol)
+                    self.symbol_spd_maping.update({symbol: spd_mapping_list})
 
     def save_contracts(self) -> None:
         """持久化合约对象到缓存文件"""
@@ -474,6 +510,7 @@ class OmsEngine(BaseEngine):
         self.main_engine.get_all_contracts = self.get_all_contracts
         self.main_engine.get_all_active_orders = self.get_all_active_orders
         self.main_engine.get_all_custom_contracts = self.get_all_custom_contracts
+        self.main_engine.get_mapping_spd = self.get_mapping_spd
         self.main_engine.save_contracts = self.save_contracts
 
     def register_event(self) -> None:
@@ -514,6 +551,76 @@ class OmsEngine(BaseEngine):
         """"""
         position = event.data
         self.positions[position.vt_positionid] = position
+
+    def reverse_direction(self, direction):
+        """返回反向持仓"""
+        if direction == Direction.LONG:
+            return Direction.SHORT
+        elif direction == Direction.SHORT:
+            return Direction.LONG
+        return direction
+
+    def create_spd_position_event(self, symbol, direction ):
+        """创建自定义品种对持仓信息"""
+        spd_symbols = self.symbol_spd_maping.get(symbol, [])
+        if not spd_symbols:
+            return
+        for spd_symbol in spd_symbols:
+            spd_setting = self.custom_settings.get(spd_symbol, None)
+            if not spd_setting:
+                continue
+
+            leg1_symbol = spd_setting.get('leg1_symbol')
+            leg2_symbol = spd_setting.get('leg2_symbol')
+            leg1_contract = self.contracts.get(leg1_symbol)
+            leg2_contract = self.contracts.get(leg2_symbol)
+            spd_contract = self.contracts.get(spd_symbol)
+
+            if leg1_contract is None or leg2_contract is None:
+                continue
+            leg1_ratio = spd_setting.get('leg1_ratio', 1)
+            leg2_ratio = spd_setting.get('leg2_ratio', 1)
+
+            # 找出leg1，leg2的持仓，并判断出spd的方向
+            if leg1_symbol == symbol:
+                k1 = f"{leg1_contract.gateway_name}.{leg1_contract.vt_symbol}.{direction.value}"
+                leg1_pos = self.positions.get(k1)
+                k2 = f"{leg2_contract.gateway_name}.{leg2_contract.vt_symbol}.{self.reverse_direction(direction).value}"
+                leg2_pos = self.positions.get(k2)
+                spd_direction = direction
+            elif leg2_symbol == symbol:
+                k1 = f"{leg1_contract.gateway_name}.{leg1_contract.vt_symbol}.{self.reverse_direction(direction).value}"
+                leg1_pos = self.positions.get(k1)
+                k2 = f"{leg2_contract.gateway_name}.{leg2_contract.vt_symbol}.{direction.value}"
+                leg2_pos = self.positions.get(k2)
+                spd_direction = self.reverse_direction(direction)
+            else:
+                continue
+
+            if leg1_pos is None or leg2_pos is None or leg1_pos.volume ==0 or leg2_pos.volume == 0:
+                continue
+
+            # 根据leg1/leg2的volume ratio，计算出最小spd_volume
+            spd_volume = min(int(leg1_pos.volume/leg1_ratio), int(leg2_pos.volume/leg2_ratio))
+            if spd_volume <= 0:
+                continue
+            if spd_setting.get('is_ratio', False) and leg2_pos.price > 0:
+                spd_price = 100 * (leg2_pos.price * leg1_ratio) / (leg2_pos.price * leg2_ratio)
+            elif spd_setting.get('is_spread', False):
+                spd_price = leg1_pos.price * leg1_ratio - leg2_pos.price * leg2_ratio
+            else:
+                spd_price = 0
+
+            spd_pos = PositionData(
+                gateway_name=spd_contract.gateway_name,
+                symbol=spd_symbol,
+                exchange=Exchange.SPD,
+                direction=spd_direction,
+                volume=spd_volume,
+                price=spd_price
+            )
+            event = Event(EVENT_POSITION, data=spd_pos)
+            self.event_engine.put(event)
 
     def process_account_event(self, event: Event) -> None:
         """"""
@@ -624,16 +731,25 @@ class OmsEngine(BaseEngine):
             ]
             return active_orders
 
-    def get_all_custom_contracts(self):
+    def get_all_custom_contracts(self, rtn_setting=False):
         """
         获取所有自定义合约
         :return:
         """
+        if rtn_setting:
+            if len(self.custom_settings) == 0:
+                c = CustomContract()
+                self.custom_settings = c.get_config()
+            return self.custom_settings
+
         if len(self.custom_contracts) == 0:
             c = CustomContract()
             self.custom_contracts = c.get_contracts()
         return self.custom_contracts
 
+    def get_mapping_spd(self, symbol):
+        """根据主动腿/被动腿symbol，获取自定义套利对的symbol list"""
+        return self.symbol_spd_maping.get(symbol, [])
 
 class CustomContract(object):
     """
@@ -668,6 +784,7 @@ class CustomContract(object):
                 exchange=vn_exchange,
                 name=setting.get('name', symbol),
                 size=setting.get('size', 100),
+                product=None,
                 pricetick=setting.get('price_tick', 0.01),
                 margin_rate=setting.get('margin_rate', 0.1)
             )

@@ -333,8 +333,8 @@ class BackTestingEngine(object):
             self.fix_commission.update({vt_symbol: rate})
 
     def get_commission_rate(self, vt_symbol: str):
-        """ 获取保证金比例，缺省万分之一"""
-        return self.commission_rate.get(vt_symbol, float(0.00001))
+        """ 获取保证金比例，缺省千分之2"""
+        return self.commission_rate.get(vt_symbol, float(0.0004))
 
     def get_fix_commission(self, vt_symbol: str):
         return self.fix_commission.get(vt_symbol, 0)
@@ -561,7 +561,7 @@ class BackTestingEngine(object):
             margin_rate = symbol_data.get('margin_rate', 0.1)
             self.set_margin_rate(symbol, margin_rate)
 
-            self.set_commission_rate(symbol, symbol_data.get('commission_rate', float(0.0001)))
+            self.set_commission_rate(symbol, symbol_data.get('commission_rate', float(0.0004)))
 
             self.set_contract(
                 symbol=symbol,
@@ -2232,7 +2232,7 @@ class TradingResult(object):
         self.volume = volume  # 交易数量（+/-代表方向）
         self.group_id = group_id  # 主交易ID（针对多手平仓）
 
-        self.turnover = (self.open_price + self.exit_price) * abs(volume) * margin_rate  # 成交金额(实际保证金金额）
+        self.turnover = (self.open_price + self.exit_price) * abs(volume)  # 成交金额(实际保证金金额）
         if fix_commission > 0:
             self.commission = fix_commission * abs(self.volume)
         else:

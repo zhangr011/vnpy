@@ -6,11 +6,12 @@ from functools import lru_cache
 from vnpy.event import EventEngine, Event
 from vnpy.trader.engine import BaseEngine, MainEngine
 from vnpy.trader.event import (
-    EVENT_TICK, EVENT_TIMER, EVENT_ORDER, EVENT_TRADE)
+    EVENT_TICK, EVENT_TIMER, EVENT_ORDER, EVENT_TRADE, EVENT_POSITION)
 from vnpy.trader.constant import (Direction, Offset, OrderType, Status)
 from vnpy.trader.object import (SubscribeRequest, OrderRequest, LogData, CancelRequest)
-from vnpy.trader.utility import load_json, save_json, round_to, get_folder_path
+from vnpy.trader.utility import load_json, save_json, round_to, get_folder_path,print_dict
 from vnpy.trader.util_logger import setup_logger, logging
+from vnpy.trader.converter import OffsetConverter
 
 from .template import AlgoTemplate
 
@@ -35,13 +36,13 @@ class AlgoEngine(BaseEngine):
         self.symbol_algo_map = {}
         self.orderid_algo_map = {}
 
-        self.algo_vtorderid_order_map = {}  # 记录外部发起的算法交易委托编号，便于通过算法引擎撤单
+        self.spd_orders = {}  # 记录外部发起的算法交易委托编号，便于通过算法引擎撤单
 
         self.algo_templates = {}
         self.algo_settings = {}
 
         self.algo_loggers = {}  # algo_name: logger
-
+        self.offset_converter = OffsetConverter(self.main_engine)
         self.load_algo_template()
         self.register_event()
 
@@ -60,6 +61,7 @@ class AlgoEngine(BaseEngine):
         from .algos.grid_algo import GridAlgo
         from .algos.dma_algo import DmaAlgo
         from .algos.arbitrage_algo import ArbitrageAlgo
+        from .algos.spread_algo_v2 import SpreadAlgoV2
 
         self.add_algo_template(TwapAlgo)
         self.add_algo_template(IcebergAlgo)
@@ -69,6 +71,7 @@ class AlgoEngine(BaseEngine):
         self.add_algo_template(GridAlgo)
         self.add_algo_template(DmaAlgo)
         self.add_algo_template(ArbitrageAlgo)
+        self.add_algo_template(SpreadAlgoV2)
 
     def add_algo_template(self, template: AlgoTemplate):
         """"""
@@ -93,6 +96,7 @@ class AlgoEngine(BaseEngine):
         self.event_engine.register(EVENT_TIMER, self.process_timer_event)
         self.event_engine.register(EVENT_ORDER, self.process_order_event)
         self.event_engine.register(EVENT_TRADE, self.process_trade_event)
+        self.event_engine.register(EVENT_POSITION, self.process_position_event)
 
     def process_tick_event(self, event: Event):
         """"""
@@ -114,7 +118,7 @@ class AlgoEngine(BaseEngine):
     def process_trade_event(self, event: Event):
         """"""
         trade = event.data
-
+        self.offset_converter.update_trade(trade)
         algo = self.orderid_algo_map.get(trade.vt_orderid, None)
         if algo:
             algo.update_trade(trade)
@@ -122,10 +126,16 @@ class AlgoEngine(BaseEngine):
     def process_order_event(self, event: Event):
         """"""
         order = event.data
-
+        self.offset_converter.update_order(order)
         algo = self.orderid_algo_map.get(order.vt_orderid, None)
         if algo:
             algo.update_order(order)
+
+    def process_position_event(self, event: Event):
+        """"""
+        position = event.data
+
+        self.offset_converter.update_position(position)
 
     def start_algo(self, setting: dict):
         """"""
@@ -144,6 +154,7 @@ class AlgoEngine(BaseEngine):
         if algo:
             algo.stop()
             self.algos.pop(algo_name)
+            return True
 
     def stop_all(self):
         """"""
@@ -154,7 +165,7 @@ class AlgoEngine(BaseEngine):
         """"""
         contract = self.main_engine.get_contract(vt_symbol)
         if not contract:
-            self.write_log(f'订阅行情失败，找不到合约：{vt_symbol}', algo)
+            self.write_log(msg=f'订阅行情失败，找不到合约：{vt_symbol}', algo_name=algo.algo_name)
             return
 
         algos = self.symbol_algo_map.setdefault(vt_symbol, set())
@@ -186,9 +197,9 @@ class AlgoEngine(BaseEngine):
 
         volume = round_to(volume, contract.min_volume)
         if not volume:
-            return ""
+            return []
 
-        req = OrderRequest(
+        original_req = OrderRequest(
             symbol=contract.symbol,
             exchange=contract.exchange,
             direction=direction,
@@ -197,83 +208,88 @@ class AlgoEngine(BaseEngine):
             price=price,
             offset=offset
         )
-        vt_orderid = self.main_engine.send_order(req, contract.gateway_name)
+        req_list = self.offset_converter.convert_order_request(req=original_req, lock=False, gateway_name=contract.gateway_name)
+        vt_orderids = []
+        for req in req_list:
+            vt_orderid = self.main_engine.send_order(req, contract.gateway_name)
+            if not vt_orderid:
+                continue
 
-        self.orderid_algo_map[vt_orderid] = algo
-        return vt_orderid
+            vt_orderids.append(vt_orderid)
+
+            self.offset_converter.update_order_request(req, vt_orderid, contract.gateway_name)
+
+            self.orderid_algo_map[vt_orderid] = algo
+
+        return vt_orderids
 
     def cancel_order(self, algo: AlgoTemplate, vt_orderid: str):
         """"""
         order = self.main_engine.get_order(vt_orderid)
 
         if not order:
-            self.write_log(f"委托撤单失败，找不到委托：{vt_orderid}", algo)
-            return
+            self.write_log(msg=f"委托撤单失败，找不到委托：{vt_orderid}", algo_name=algo.algo_name)
+            return False
 
         req = order.create_cancel_request()
-        self.main_engine.cancel_order(req, order.gateway_name)
+        return self.main_engine.cancel_order(req, order.gateway_name)
 
-    def send_algo_order(self, req: OrderRequest, gateway_name: str):
-        """发送算法交易指令"""
-        self.write_log(u'创建算法交易,gateway_name:{},strategy_name:{},vt_symbol:{},price:{},volume:{}'
+    def send_spd_order(self, req: OrderRequest, gateway_name: str):
+        """发送SPD算法交易指令"""
+        self.write_log(u'[SPD算法交易],gateway_name:{},strategy_name:{},vt_symbol:{},price:{},volume:{}'
                        .format(gateway_name, req.strategy_name, req.vt_symbol, req.price, req.volume))
 
         # 创建算法实例，由算法引擎启动
-        trade_command = ''
-        if req.direction == Direction.LONG and req.offset == Offset.OPEN:
-            trade_command = 'Buy'
-        elif req.direction == Direction.SHORT and req.offset == Offset.OPEN:
-            trade_command = 'Short'
-        elif req.direction == Direction.SHORT and req.offset != Offset.OPEN:
-            trade_command = 'Sell'
-        elif req.direction == Direction.LONG and req.offset != Offset.OPEN:
-            trade_command = 'Cover'
-
-        all_custom_contracts = self.main_engine.get_all_custom_contracts()
-        contract_setting = all_custom_contracts.get(req.vt_symbol, {})
-        algo_setting = {
-            'templateName': u'SpreadTrading套利',
+        custom_settings = self.main_engine.get_all_custom_contracts(rtn_setting=True)
+        contract = custom_settings.get(req.symbol, {})
+        setting = {
+            'template_name': u'SpreadAlgoV2',
             'order_vt_symbol': req.vt_symbol,
-            'order_command': trade_command,
+            'order_direction':  req.direction,
+            'order_offset': req.offset,
             'order_price': req.price,
             'order_volume': req.volume,
             'timer_interval': 60 * 60 * 24,
             'strategy_name': req.strategy_name,
             'gateway_name': gateway_name
         }
-        algo_setting.update(contract_setting)
+        # 更新算法配置
+        setting.update(contract)
 
         # 算法引擎
-        algo_name = self.start_algo(algo_setting)
-        self.write_log(u'send_algo_order(): start_algo {}={}'.format(algo_name, str(algo_setting)))
+        algo_name = self.start_algo(setting)
+        self.write_log(f'[SPD算法交易]: 实例id: {algo_name}, 配置:{print_dict(setting)}')
 
-        # 创建一个Order事件
+        # 创建一个Order事件, 正在提交
         order = req.create_order_data(orderid=algo_name, gateway_name=gateway_name)
-        order.orderTime = datetime.now().strftime('%H:%M:%S.%f')
+        order.datetime = datetime.now()
+        order.time = order.datetime.strftime('%H:%M:%S.%f')
         order.status = Status.SUBMITTING
-
         event1 = Event(type=EVENT_ORDER, data=order)
         self.event_engine.put(event1)
 
         # 登记在本地的算法委托字典中
-        self.algo_vtorderid_order_map.update({order.vt_orderid: order})
+        self.spd_orders.update({order.orderid: order})
 
         return order.vt_orderid
 
-    def is_algo_order(self, req: CancelRequest, gateway_name: str):
+    def get_spd_order(self, orderid):
+        """返回spd委托单"""
+        return self.spd_orders.get(orderid, None)
+
+    def is_spd_order(self, req: CancelRequest):
         """是否为外部算法委托单"""
-        vt_orderid = '.'.join([req.orderid, gateway_name])
-        if vt_orderid in self.algo_vtorderid_order_map:
+        if req.orderid in self.spd_orders:
             return True
         else:
             return False
 
-    def cancel_algo_order(self, req: CancelRequest, gateway_name: str):
+    def cancel_spd_order(self, req: CancelRequest):
         """外部算法单撤单"""
-        vt_orderid = '.'.join([req.orderid, gateway_name])
-        order = self.algo_vtorderid_order_map.get(vt_orderid, None)
+
+        order = self.spd_orders.get(req.orderid, None)
         if not order:
-            self.write_error(f'{vt_orderid}不在算法引擎中,撤单失败')
+            self.write_error(f'{req.orderid}不在算法引擎中,撤单失败')
             return False
 
         algo = self.algos.get(req.orderid, None)
@@ -367,6 +383,19 @@ class AlgoEngine(BaseEngine):
             self.write_log(msg=f"查询合约失败，找不到合约：{vt_symbol}", algo_name=algo.algo_name)
 
         return contract
+
+    def get_position(self, vt_symbol: str, direction: Direction, gateway_name: str = ''):
+        """ 查询合约在账号的持仓,需要指定方向"""
+        if len(gateway_name) == 0:
+            contract = self.main_engine.get_contract(vt_symbol)
+            if contract and contract.gateway_name:
+                gateway_name = contract.gateway_name
+        vt_position_id = f"{gateway_name}.{vt_symbol}.{direction.value}"
+        return self.main_engine.get_position(vt_position_id)
+
+    def get_position_holding(self, vt_symbol: str, gateway_name: str = ''):
+        """ 查询合约在账号的持仓（包含多空）"""
+        return self.offset_converter.get_position_holding(vt_symbol, gateway_name)
 
     def write_log(self, msg: str, algo_name: str = None, level: int = logging.INFO):
         """增强版写日志"""

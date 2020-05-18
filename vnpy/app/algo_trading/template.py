@@ -154,7 +154,7 @@ class AlgoTemplate:
 
     def cancel_order(self, vt_orderid: str):
         """"""
-        self.algo_engine.cancel_order(self, vt_orderid)
+        return self.algo_engine.cancel_order(self, vt_orderid)
 
     def cancel_all(self):
         """"""

@@ -42,6 +42,7 @@ from vnpy.trader.event import (
 )
 from vnpy.trader.constant import (
     Direction,
+    Exchange,
     OrderType,
     Offset,
     Status
@@ -349,11 +350,26 @@ class CtaEngine(BaseEngine):
         # Update GUI
         self.put_strategy_event(strategy)
 
+        if self.engine_config.get('trade_2_wx', False):
+            accountid = self.engine_config.get('accountid', '-')
+            d = {
+                'account': accountid,
+                'strategy': strategy_name,
+                'symbol': trade.symbol,
+                'action': f'{trade.direction.value} {trade.offset.value}',
+                'price': str(trade.price),
+                'volume': trade.volume,
+                'remark': f'{accountid}:{strategy_name}',
+                'timestamp': trade.time
+            }
+            send_wx_msg(content=d, target=accountid)
+
     def process_position_event(self, event: Event):
         """"""
         position = event.data
 
         self.offset_converter.update_position(position)
+
 
     def check_unsubscribed_symbols(self):
         """检查未订阅合约"""
@@ -1666,7 +1682,8 @@ class CtaEngine(BaseEngine):
             gateway_names = self.main_engine.get_all_gateway_names()
             gateway_name = gateway_names[0] if len(gateway_names) > 0 else ""
             symbol, exchange = extract_vt_symbol(vt_symbol)
-            self.main_engine.subscribe(req=SubscribeRequest(symbol=symbol, exchange=exchange), gateway_name=gateway_name)
+            self.main_engine.subscribe(req=SubscribeRequest(symbol=symbol, exchange=exchange),
+                                       gateway_name=gateway_name)
         if volume > 0 and tick:
             contract = self.main_engine.get_contract(vt_symbol)
             req = OrderRequest(
@@ -1821,9 +1838,13 @@ class CtaEngine(BaseEngine):
         if level in [logging.CRITICAL, logging.ERROR, logging.WARNING]:
             print(f"{strategy_name}: {msg}" if strategy_name else msg, file=sys.stderr)
 
-    def write_error(self, msg: str, strategy_name: str = ''):
+        if level in [logging.CRITICAL, logging.WARN, logging.WARNING]:
+            send_wx_msg(content=f"{strategy_name}: {msg}" if strategy_name else msg)
+
+    def write_error(self, msg: str, strategy_name: str = '', level: int = logging.ERROR):
         """写入错误日志"""
-        self.write_log(msg=msg, strategy_name=strategy_name, level=logging.ERROR)
+        self.write_log(msg=msg, strategy_name=strategy_name, level=level)
+
 
     def send_email(self, msg: str, strategy: CtaTemplate = None):
         """
