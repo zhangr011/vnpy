@@ -96,6 +96,8 @@ class BaseGateway(ABC):
         self.klines = {}
         self.status = {'name': gateway_name, 'con': False}
 
+        self.prices: Dict[str, float] = {}  # vt_symbol, last_price
+
         self.query_functions = []
 
     def create_logger(self):
