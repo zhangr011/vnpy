@@ -1,5 +1,6 @@
 from typing import Any, Dict, List
 from datetime import datetime
+from functools import lru_cache
 
 from vnpy.api.xtp import MdApi, TdApi
 from vnpy.event import EventEngine
@@ -127,6 +128,9 @@ symbol_name_map: Dict[str, str] = {}
 # 代码 <=> 交易所
 symbol_exchange_map: Dict[str, Exchange] = {}
 
+@lru_cache()
+def get_vt_symbol_name(vt_symbol):
+    return symbol_name_map.get(vt_symbol, vt_symbol.split('.')[0])
 
 class XtpGateway(BaseGateway):
 
@@ -238,6 +242,7 @@ class XtpMdApi(MdApi):
         self.connect_status: bool = False
         self.login_status: bool = False
 
+
     def onDisconnected(self, reason: int) -> None:
         """"""
         self.connect_status = False
@@ -298,7 +303,7 @@ class XtpMdApi(MdApi):
         tick.bid_volume_1, tick.bid_volume_2, tick.bid_volume_3, tick.bid_volume_4, tick.bid_volume_5 = data["bid_qty"][0:5]
         tick.ask_volume_1, tick.ask_volume_2, tick.ask_volume_3, tick.ask_volume_4, tick.ask_volume_5 = data["ask_qty"][0:5]
 
-        tick.name = symbol_name_map.get(tick.vt_symbol, tick.symbol)
+        tick.name = get_vt_symbol_name(tick.vt_symbol)
         self.gateway.prices.update({tick.vt_symbol: tick.last_price})
         self.gateway.on_tick(tick)
 
@@ -540,6 +545,7 @@ class XtpTdApi(TdApi):
         insert_time = str(data["insert_time"])
         dt = datetime.strptime(insert_time, '%Y%m%d%H%M%S%f')
         order = OrderData(
+            accountid=self.userid,
             symbol=symbol,
             exchange=MARKET_XTP2VT[data["market"]],
             orderid=str(data["order_xtp_id"]),
@@ -571,6 +577,7 @@ class XtpTdApi(TdApi):
         dt = datetime.strptime(trade_time,'%Y%m%d%H%M%S%f')
 
         trade = TradeData(
+            accountid=self.userid,
             symbol=symbol,
             exchange=MARKET_XTP2VT[data["market"]],
             orderid=str(data["order_xtp_id"]),
@@ -615,19 +622,23 @@ class XtpTdApi(TdApi):
 
         if data["market"] == 0:
             return
-
+        vt_symbol = '{}.{}'.format(data["ticker"], MARKET_XTP2VT[data["market"]].value)
         position = PositionData(
+            accountid=self.userid,
             symbol=data["ticker"],
             exchange=MARKET_XTP2VT[data["market"]],
+            name=data["ticker_name"],
             direction=POSITION_DIRECTION_XTP2VT[data["position_direction"]],
             volume=data["total_qty"],
             frozen=data["locked_position"],
             price=data["avg_price"],
             pnl=data["unrealized_pnl"],
             yd_volume=data["yesterday_position"],
-            gateway_name=self.gateway_name
+            gateway_name=self.gateway_name,
+            cur_price=self.gateway.prices.get(vt_symbol,0)
         )
-        vt_symbol = position.vt_symbol
+        if position.volume > 0 and position.cur_price > 0:
+            position.pnl = round(position.volume * (position.cur_price - position.price),2)
         self.gateway.on_position(position)
 
         # 如果持仓>0 获取持仓对应的当前最新价
@@ -684,7 +695,8 @@ class XtpTdApi(TdApi):
                 balance=balance,      # 总资产
                 margin=self.security_asset,    # 证券资产
                 frozen=data["withholding_amount"],
-                gateway_name=self.gateway_name
+                gateway_name=self.gateway_name,
+                trading_day=datetime.now().strftime('%Y-%m-%d')
             )
             # AccountData缺省的available 计算方法有误，这里直接取可用资金
             account.available = cash_asset
@@ -745,10 +757,12 @@ class XtpTdApi(TdApi):
             position = self.short_positions.get(symbol, None)
             if not position:
                 position = PositionData(
+                    accountid=self.userid,
                     symbol=symbol,
                     exchange=exchange,
                     direction=Direction.SHORT,
-                    gateway_name=self.gateway_name
+                    gateway_name=self.gateway_name,
+                    cur_price=self.gateway.prices.get(f'{symbol}.{exchange.value}',0.0)
                 )
                 self.short_positions[symbol] = position
 
@@ -855,6 +869,10 @@ class XtpTdApi(TdApi):
         orderid = self.insertOrder(xtp_req, self.session_id)
 
         order = req.create_order_data(str(orderid), self.gateway_name)
+        order.accountid = self.userid
+        if order.datetime is None:
+            order.datetime = datetime.now()
+            order.time = order.datetime.strftime('%H:%M:%S.%f')
         self.gateway.on_order(order)
 
         return order.vt_orderid

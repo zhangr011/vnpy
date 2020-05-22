@@ -460,6 +460,7 @@ class PositionMonitor(BaseMonitor):
     sorting = True
 
     headers = {
+        "name": {"display": "名称", "cell": BaseCell, "update": False},
         "symbol": {"display": "代码", "cell": BaseCell, "update": False},
         "exchange": {"display": "交易所", "cell": EnumCell, "update": False},
         "direction": {"display": "方向", "cell": DirectionCell, "update": False},

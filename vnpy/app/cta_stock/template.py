@@ -371,7 +371,7 @@ class StockPolicy(CtaPolicy):
         super().from_json(json_data)
 
         self.cur_trading_date = json_data.get('cur_trading_date', None)
-        self.sub_tns = json_data.get('sub_tns')
+        self.sub_tns = json_data.get('sub_tns',{})
         signals = json_data.get('signals', {})
         for kline_name, signal in signals:
             last_signal = signal.get('last_signal', "")
@@ -872,7 +872,7 @@ class CtaStockTemplate(CtaTemplate):
                 continue
 
             cur_price = self.cta_engine.get_price(lg.vt_symbol)
-            if not lg.stop_price and lg.stop_price > cur_price > 0:
+            if lg.stop_price != 0 and lg.stop_price > cur_price > 0:
                 # 调用平仓模块
                 self.write_log(u'{} {}当前价:{} 触发止损线{},开仓价:{},v：{}'.
                                format(self.cur_datetime,

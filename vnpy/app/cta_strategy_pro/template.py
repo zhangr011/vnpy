@@ -636,7 +636,6 @@ class CtaProTemplate(CtaTemplate):
         self.symbol_size = self.cta_engine.get_size(self.vt_symbol)
         self.margin_rate = self.cta_engine.get_margin_rate(self.vt_symbol)
 
-
     def sync_data(self):
         """同步更新数据"""
         if not self.backtesting:
@@ -1111,7 +1110,6 @@ class CtaProFutureTemplate(CtaProTemplate):
         self.trading = True
         self.put_event()
 
-    # ----------------------------------------------------------------------
     def on_stop(self):
         """停止策略（必须由用户继承实现）"""
         self.active_orders.clear()
@@ -1289,7 +1287,6 @@ class CtaProFutureTemplate(CtaProTemplate):
         old_order['traded'] = order.traded
         order_vt_symbol = copy(old_order['vt_symbol'])
         order_volume = old_order['volume'] - old_order['traded']
-
 
         order_price = old_order['price']
         order_type = old_order.get('order_type', OrderType.LIMIT)
@@ -1470,7 +1467,6 @@ class CtaProFutureTemplate(CtaProTemplate):
             self.write_log(u'活动订单移除:{}'.format(order.vt_orderid))
             self.active_orders.pop(order.vt_orderid, None)
             return
-
 
         if order_retry > 20:
             msg = u'{} 平仓撤单 {}/{}手， 重试平仓次数{}>20' \

@@ -91,11 +91,13 @@ def get_tdx_marketid(symbol):
 class TdxFutureData(object):
 
     # ----------------------------------------------------------------------
-    def __init__(self, strategy=None, best_ip={}):
+    def __init__(self, strategy=None, best_ip={}, proxy_ip="", proxy_port=0):
         """
         构造函数
         :param strategy: 上层策略，主要用与使用write_log（）
         """
+        self.proxy_ip = proxy_ip
+        self.proxy_port = proxy_port
         self.api = None
         self.connection_status = False  # 连接状态
         self.best_ip = best_ip
@@ -145,7 +147,14 @@ class TdxFutureData(object):
                 if len(self.best_ip) == 0:
                     self.best_ip = self.select_best_ip()
 
-                self.api.connect(self.best_ip['ip'], self.best_ip['port'])
+                # 如果配置proxy5，使用vnpy项目下的pytdx
+                if len(self.proxy_ip) > 0 and self.proxy_port > 0:
+                    self.api.connect(ip=self.best_ip['ip'], port=self.best_ip['port'],
+                                     proxy_ip=self.proxy_ip, proxy_port=self.proxy_port)
+                else:
+                    # 使用pip install pytdx
+                    self.api.connect(ip=self.best_ip['ip'], port=self.best_ip['port'])
+
                 # 尝试获取市场合约统计
                 c = self.api.get_instrument_count()
                 if c < 10:
@@ -176,7 +185,7 @@ class TdxFutureData(object):
         apix = TdxExHq_API()
         __time1 = datetime.now()
         try:
-            with apix.connect(ip, port):
+            with apix.connect(ip=ip, port=port, proxy_ip=self.proxy_ip, proxy_port=self.proxy_port):
                 if apix.get_instrument_count() > 10000:
                     _timestamp = datetime.now() - __time1
                     self.write_log(f'服务器{ip}:{port},耗时:{_timestamp}')
@@ -534,6 +543,8 @@ class TdxFutureData(object):
             # 查询的是指数合约
             symbol = symbol.replace('99', 'L9')
             tdx_index_symbol = symbol
+        elif symbol.endswith('L9'):
+            tdx_index_symbol = symbol
         else:
             # 查询的是普通合约
             tdx_index_symbol = get_underlying_symbol(symbol).upper() + 'L9'
@@ -543,8 +554,8 @@ class TdxFutureData(object):
         q_size = QSIZE * 5
         # 每秒 2个， 10小时
         max_data_size = 1000000
-
-        self.write_log(u'开始下载{}当日分笔数据'.format(symbol))
+        market_id = INIT_TDX_MARKET_MAP.get(tdx_index_symbol, 0)
+        self.write_log(u'开始下载{}=>{}, market_id={} 当日分笔数据'.format(symbol,tdx_index_symbol, market_id))
 
         try:
             _datas = []
@@ -552,7 +563,7 @@ class TdxFutureData(object):
 
             while True:
                 _res = self.api.get_transaction_data(
-                    market=self.symbol_market_dict.get(tdx_index_symbol, 0),
+                    market=market_id,
                     code=symbol,
                     start=_pos,
                     count=q_size)
@@ -666,6 +677,8 @@ class TdxFutureData(object):
         if '99' in symbol:
             # 查询的是指数合约
             symbol = symbol.replace('99', 'L9')
+            tdx_index_symbol = symbol
+        elif symbol.endswith('L9'):
             tdx_index_symbol = symbol
         else:
             # 查询的是普通合约

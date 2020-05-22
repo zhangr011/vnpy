@@ -55,7 +55,8 @@ from vnpy.trader.utility import (
     TRADER_DIR,
     get_folder_path,
     get_underlying_symbol,
-    append_data)
+    append_data,
+    import_module_by_str)
 
 from vnpy.trader.util_logger import setup_logger, logging
 from vnpy.trader.util_wechat import send_wx_msg
@@ -351,7 +352,7 @@ class CtaEngine(BaseEngine):
         self.put_strategy_event(strategy)
 
         if self.engine_config.get('trade_2_wx', False):
-            accountid = self.engine_config.get('accountid', '-')
+            accountid = self.engine_config.get('accountid', 'XXX')
             d = {
                 'account': accountid,
                 'strategy': strategy_name,
@@ -362,7 +363,7 @@ class CtaEngine(BaseEngine):
                 'remark': f'{accountid}:{strategy_name}',
                 'timestamp': trade.time
             }
-            send_wx_msg(content=d, target=accountid)
+            send_wx_msg(content=d, target=accountid, msg_type='TRADE')
 
     def process_position_event(self, event: Event):
         """"""
@@ -829,6 +830,9 @@ class CtaEngine(BaseEngine):
 
         return None
 
+    def get_contract(self, vt_symbol):
+        return self.main_engine.get_contract(vt_symbol)
+
     def get_account(self, vt_accountid: str = ""):
         """ 查询账号的资金"""
         # 如果启动风控，则使用风控中的最大仓位
@@ -1115,10 +1119,22 @@ class CtaEngine(BaseEngine):
 
         module_name = self.class_module_map[class_name]
         # 重新load class module
-        if not self.load_strategy_class_from_module(module_name):
-            err_msg = f'不能加载模块:{module_name}'
-            self.write_error(err_msg)
-            return False, err_msg
+        #if not self.load_strategy_class_from_module(module_name):
+        #    err_msg = f'不能加载模块:{module_name}'
+        #    self.write_error(err_msg)
+        #    return False, err_msg
+        if module_name:
+            new_class_name = module_name + '.' + class_name
+            self.write_log(u'转换策略为全路径:{}'.format(new_class_name))
+
+            strategy_class = import_module_by_str(new_class_name)
+            if strategy_class is None:
+                err_msg = u'加载策略模块失败:{}'.format(new_class_name)
+                self.write_error(err_msg)
+                return False, err_msg
+
+            self.write_log(f'重新加载模块成功，使用新模块:{new_class_name}')
+            self.classes[class_name] = strategy_class
 
         # 停止当前策略实例的运行，撤单
         self.stop_strategy(strategy_name)
@@ -1839,7 +1855,7 @@ class CtaEngine(BaseEngine):
             print(f"{strategy_name}: {msg}" if strategy_name else msg, file=sys.stderr)
 
         if level in [logging.CRITICAL, logging.WARN, logging.WARNING]:
-            send_wx_msg(content=f"{strategy_name}: {msg}" if strategy_name else msg)
+            send_wx_msg(content=f"{strategy_name}: {msg}" if strategy_name else msg, target=self.engine_config.get('accountid', 'XXX'))
 
     def write_error(self, msg: str, strategy_name: str = '', level: int = logging.ERROR):
         """写入错误日志"""
