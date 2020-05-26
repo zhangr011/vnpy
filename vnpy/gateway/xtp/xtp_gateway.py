@@ -242,14 +242,18 @@ class XtpMdApi(MdApi):
         self.connect_status: bool = False
         self.login_status: bool = False
 
-
     def onDisconnected(self, reason: int) -> None:
         """"""
         self.connect_status = False
         self.login_status = False
         self.gateway.write_log(f"行情服务器连接断开, 原因{reason}")
 
-        n = self.login()
+        n = self.login(
+            self.server_ip,
+            self.server_port,
+            self.userid,
+            self.password,
+            self.protocol)
 
         if n:
             self.session_id = n

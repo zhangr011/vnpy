@@ -1190,6 +1190,25 @@ class CtaEngine(BaseEngine):
             self.write_error(u'保存策略{}数据异常:'.format(strategy_name, str(ex)))
             self.write_error(traceback.format_exc())
 
+    def get_strategy_snapshot(self, strategy_name):
+        """实时获取策略的K线切片（比较耗性能）"""
+        strategy = self.strategies.get(strategy_name, None)
+        if strategy is None:
+            return None
+
+        try:
+            # 5.保存策略切片
+            snapshot = strategy.get_klines_snapshot()
+            if not snapshot:
+                self.write_log(f'{strategy_name}返回得K线切片数据为空')
+                return None
+            return snapshot
+
+        except Exception as ex:
+            self.write_error(u'获取策略{}切片数据异常:'.format(strategy_name, str(ex)))
+            self.write_error(traceback.format_exc())
+            return None
+
     def save_strategy_snapshot(self, select_name: str = 'ALL'):
         """
         保存策略K线切片数据
@@ -1566,6 +1585,10 @@ class CtaEngine(BaseEngine):
             vt_symbols.add(vt_symbol)
             holding = self.offset_converter.holdings.get(holding_key, None)
             if holding is None:
+                continue
+            if holding.exchange == Exchange.SPD:
+                continue
+            if '&' in holding.vt_symbol and (holding.vt_symbol.startswith('SP') or holding.vt_symbol.startswith('STG')):
                 continue
 
             compare_pos[vt_symbol] = OrderedDict(

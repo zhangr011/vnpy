@@ -21,15 +21,15 @@ class UiSnapshot(object):
 
         pass
 
-    def show(self, snapshot_file: str):
+    def show(self, snapshot_file: str, d=None):
 
-        if not os.path.exists(snapshot_file):
-            print(f'{snapshot_file}不存在', file=sys.stderr)
-            return
+        if d is None:
+            if not os.path.exists(snapshot_file):
+                print(f'{snapshot_file}不存在', file=sys.stderr)
+                return
 
-        d = None
-        with bz2.BZ2File(snapshot_file, 'rb') as f:
-             d = pickle.load(f)
+            with bz2.BZ2File(snapshot_file, 'rb') as f:
+                 d = pickle.load(f)
 
         use_zlib = d.get('zlib', False)
         klines = d.pop('klines', None)

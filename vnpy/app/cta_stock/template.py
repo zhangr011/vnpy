@@ -414,8 +414,9 @@ class CtaStockTemplate(CtaTemplate):
     cancel_seconds = 120  # 撤单时间(秒)
 
     # 资金相关
-    max_invest_rate = 0.1  # 最大仓位(0~1)
-    max_invest_margin = 0  # 资金上限 0，不限制
+    max_invest_rate = 0.1  # 策略使用账号的最大仓位(0~1)
+    max_invest_margin = 0  # 策略资金上限， 0，不限制
+    max_single_margin = 0  # 策略内，各只股票使用的资金上限
 
     # 是否回测状态
     backtesting = False
