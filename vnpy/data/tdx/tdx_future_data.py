@@ -130,25 +130,37 @@ class TdxFutureData(object):
                 self.write_log(u'开始连接通达信行情服务器')
                 self.api = TdxExHq_API(heartbeat=True, auto_retry=True, raise_exception=True)
 
+                exclude_ips = []
                 # 选取最佳服务器
                 if is_reconnect or len(self.best_ip) == 0:
                     self.best_ip = get_cache_json(TDX_FUTURE_CONFIG)
-                    last_datetime_str = self.best_ip.get('datetime', None)
-                    if last_datetime_str:
-                        try:
-                            last_datetime = datetime.strptime(last_datetime_str, '%Y-%m-%d %H:%M:%S')
-                            if (datetime.now() - last_datetime).total_seconds() > 60 * 60 * 2:
-                                self.best_ip = {}
-                        except Exception as ex: # noqa
-                            self.best_ip = {}
-                    else:
+
+                    if is_reconnect:
+                        if is_reconnect:
+                            exclude_ips.append(self.best_ip.get('ip'))
                         self.best_ip = {}
+                    else:
+                        # 超时的话，重新选择
+                        last_datetime_str = self.best_ip.get('datetime', None)
+                        if last_datetime_str:
+                            try:
+                                last_datetime = datetime.strptime(last_datetime_str, '%Y-%m-%d %H:%M:%S')
+                                if (datetime.now() - last_datetime).total_seconds() > 60 * 60 * 2:
+                                    self.best_ip = {}
+                            except Exception as ex: # noqa
+                                self.best_ip = {}
+                        else:
+                            self.best_ip = {}
 
                 if len(self.best_ip) == 0:
-                    self.best_ip = self.select_best_ip()
+                    self.best_ip = self.select_best_ip(exclude_ips)
+                    self.write_log(f'选取服务器:{self.best_ip}')
+                else:
+                    self.write_log(f'使用缓存服务器:{self.best_ip}')
 
                 # 如果配置proxy5，使用vnpy项目下的pytdx
                 if len(self.proxy_ip) > 0 and self.proxy_port > 0:
+                    self.write_log(f'使用proxy5代理 {self.proxy_ip}:{self.proxy_port}')
                     self.api.connect(ip=self.best_ip['ip'], port=self.best_ip['port'],
                                      proxy_ip=self.proxy_ip, proxy_port=self.proxy_port)
                 else:
@@ -198,14 +210,14 @@ class TdxFutureData(object):
             return timedelta(9, 9, 0)
 
     # ----------------------------------------------------------------------
-    def select_best_ip(self):
+    def select_best_ip(self, exclude_ips=[]):
         """
         选择行情服务器
         :return:
         """
         self.write_log(u'选择通达信行情服务器')
 
-        data_future = [self.ping(x['ip'], x['port']) for x in TDX_FUTURE_HOSTS]
+        data_future = [self.ping(x['ip'], x['port']) for x in TDX_FUTURE_HOSTS if x['ip'] not in exclude_ips]
 
         best_future_ip = TDX_FUTURE_HOSTS[data_future.index(min(data_future))]
 
@@ -478,14 +490,20 @@ class TdxFutureData(object):
         index = 0
         count = 100
         results = []
-        while (True):
-            print(u'查询{}下：{}~{}个合约'.format(exchange, index, index + count))
-            result = self.api.get_instrument_quote_list(int(market_id), 3, index, count)
-            results.extend(result)
-            index += count
-            if len(result) < count:
-                break
-        return results
+        try:
+            while (True):
+                print(u'查询{}下：{}~{}个合约'.format(exchange, index, index + count))
+                result = self.api.get_instrument_quote_list(int(market_id), 3, index, count)
+                results.extend(result)
+                index += count
+                if len(result) < count:
+                    break
+            return results
+        except Exception as ex:
+            print(f'接口查询异常:{str(ex)}')
+            self.connect(is_reconnect=True)
+            return results
+
 
     def get_mi_contracts2(self):
         """ 获取主力合约"""
