@@ -1427,12 +1427,13 @@ class GridKline(QtWidgets.QWidget):
         self.kline_names = list(self.kline_settings.keys())
         self.kline_dict = {}
 
+        self.grid_layout = QtWidgets.QGridLayout()
+        self.setLayout(self.grid_layout)
+
         self.init_ui()
 
     def init_ui(self):
         """"""
-        gridLayout = QtWidgets.QGridLayout()
-        self.setLayout(gridLayout)
 
         for kline_name, kline_setting in self.kline_settings.items():
             canvas = KLineWidget(display_vol=False, display_sub=True)
@@ -1463,7 +1464,7 @@ class GridKline(QtWidgets.QWidget):
                 kline_name = kline_names.pop(0)
                 kline_layout = QtWidgets.QVBoxLayout()
                 kline_layout.addWidget(self.kline_dict[kline_name])
-                gridLayout.addLayout(kline_layout, row, column)
+                self.grid_layout.addLayout(kline_layout, row, column)
                 if len(kline_names) == 0:
                     break
             row += 1
@@ -1542,8 +1543,8 @@ class GridKline(QtWidgets.QWidget):
                 if canvas is not None:
                     canvas.relocate(window_id, t_value, count_k)
             except Exception as ex:
+                print(f'onRelocate exception:{str(ex)}')
                 traceback.print_exc()
-
 
 def display_multi_grid(kline_settings={}):
     """显示多图"""
