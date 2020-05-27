@@ -1427,10 +1427,12 @@ class GridKline(QtWidgets.QWidget):
         self.kline_names = list(self.kline_settings.keys())
         self.kline_dict = {}
 
-        self.initUI()
+        self.init_ui()
 
-    def initUI(self):
+    def init_ui(self):
+        """"""
         gridLayout = QtWidgets.QGridLayout()
+        self.setLayout(gridLayout)
 
         for kline_name, kline_setting in self.kline_settings.items():
             canvas = KLineWidget(display_vol=False, display_sub=True)
@@ -1459,12 +1461,12 @@ class GridKline(QtWidgets.QWidget):
                 if len(kline_names) == 0:
                     break
                 kline_name = kline_names.pop(0)
-                gridLayout.addWidget(self.kline_dict[kline_name], row, column)
+                kline_layout = QtWidgets.QVBoxLayout()
+                kline_layout.addWidget(self.kline_dict[kline_name])
+                gridLayout.addLayout(kline_layout, row, column)
                 if len(kline_names) == 0:
                     break
             row += 1
-
-        self.setLayout(gridLayout)
 
         self.show()
 
