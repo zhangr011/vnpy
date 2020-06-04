@@ -200,7 +200,7 @@ class XtpGateway(BaseGateway):
     def process_timer_event(self, event) -> None:
         """"""
         self.count += 1
-        if self.count < 2:
+        if self.count < 5:
             return
         self.count = 0
 
@@ -371,6 +371,8 @@ class XtpMdApi(MdApi):
             min_volume=data["buy_qty_unit"],
             gateway_name=self.gateway_name
         )
+        #if contract.symbol.startswith('1230'):
+        #    self.gateway.write_log(msg=f'合约信息:{contract.__dict__}')
         self.gateway.on_contract(contract)
 
         # 更新最新价

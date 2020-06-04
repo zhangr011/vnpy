@@ -1041,7 +1041,7 @@ class ContractManager(QtWidgets.QWidget):
         all_contracts = self.main_engine.get_all_contracts()
         if flt:
             contracts = [
-                contract for contract in all_contracts if flt in contract.vt_symbol
+                contract for contract in all_contracts if flt in contract.vt_symbol.lower()
             ]
         else:
             contracts = all_contracts

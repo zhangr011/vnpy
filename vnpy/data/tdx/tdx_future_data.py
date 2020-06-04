@@ -262,7 +262,6 @@ class TdxFutureData(object):
                 self.symbol_exchange_dict.update({tdx_symbol: Tdx_Vn_Exchange_Map.get(str(tdx_market_id))})
                 self.symbol_market_dict.update({tdx_symbol: tdx_market_id})
 
-
     # ----------------------------------------------------------------------
     def get_bars(self,
                  symbol: str,

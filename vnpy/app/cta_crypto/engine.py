@@ -799,11 +799,18 @@ class CtaEngine(BaseEngine):
 
     def get_price(self, vt_symbol: str):
         """查询合约的最新价格"""
+        price = self.main_engine.get_price(vt_symbol)
+        if price:
+            return price
+
         tick = self.main_engine.get_tick(vt_symbol)
         if tick:
             return tick.last_price
 
         return None
+
+    def get_contract(self, vt_symbol):
+        return self.main_engine.get_contract(vt_symbol)
 
     def get_account(self, vt_accountid: str = ""):
         """ 查询账号的资金"""
@@ -1199,6 +1206,25 @@ class CtaEngine(BaseEngine):
         except Exception as ex:
             self.write_error(u'保存策略{}数据异常:'.format(strategy_name, str(ex)))
             self.write_error(traceback.format_exc())
+
+    def get_strategy_snapshot(self, strategy_name):
+        """实时获取策略的K线切片（比较耗性能）"""
+        strategy = self.strategies.get(strategy_name, None)
+        if strategy is None:
+            return None
+
+        try:
+            # 5.保存策略切片
+            snapshot = strategy.get_klines_snapshot()
+            if not snapshot:
+                self.write_log(f'{strategy_name}返回得K线切片数据为空')
+                return None
+            return snapshot
+
+        except Exception as ex:
+            self.write_error(u'获取策略{}切片数据异常:'.format(strategy_name, str(ex)))
+            self.write_error(traceback.format_exc())
+            return None
 
     def save_strategy_snapshot(self, select_name: str = 'ALL'):
         """

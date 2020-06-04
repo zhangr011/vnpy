@@ -849,6 +849,7 @@ class CtaProTemplate(CtaTemplate):
 
         for vt_orderid in list(self.active_orders.keys()):
             order_info = self.active_orders.get(vt_orderid)
+            order_grid = order_info.get('grid',None)
             if order_info.get('status', None) in [Status.CANCELLED, Status.REJECTED]:
                 self.active_orders.pop(vt_orderid, None)
                 continue
@@ -863,6 +864,11 @@ class CtaProTemplate(CtaTemplate):
                     order_info.update({'status': Status.CANCELLING})
                 else:
                     order_info.update({'status': Status.CANCELLED})
+                    if order_grid:
+                        if vt_orderid in order_grid.order_ids:
+                            order_grid.order_ids.remove(vt_orderid)
+                        if len(order_grid.order_ids) == 0:
+                            order_grid.order_status = False
 
         if len(self.active_orders) < 1:
             self.entrust = 0

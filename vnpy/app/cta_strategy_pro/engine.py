@@ -1108,14 +1108,23 @@ class CtaEngine(BaseEngine):
         if len(setting) == 0:
             strategies_setting = load_json(self.setting_filename)
             old_strategy_config = strategies_setting.get(strategy_name, {})
+            self.write_log(f'使用配置文件的配置:{old_strategy_config}')
         else:
             old_strategy_config = copy(self.strategy_setting[strategy_name])
+            self.write_log(f'使用已经运行的配置:{old_strategy_config}')
 
         class_name = old_strategy_config.get('class_name')
+        self.write_log(f'使用策略类名:{class_name}')
+
+        # 没有配置vt_symbol时，使用配置文件/旧配置中的vt_symbol
         if len(vt_symbol) == 0:
             vt_symbol = old_strategy_config.get('vt_symbol')
+            self.write_log(f'使用配置文件/已运行配置的vt_symbol:{vt_symbol}')
+
+        # 没有新配置时，使用配置文件/旧配置中的setting
         if len(setting) == 0:
             setting = old_strategy_config.get('setting')
+            self.write_log(f'没有新策略参数，使用配置文件/旧配置中的setting:{setting}')
 
         module_name = self.class_module_map[class_name]
         # 重新load class module
@@ -1639,15 +1648,17 @@ class CtaEngine(BaseEngine):
         compare_info = ''
         for vt_symbol in sorted(vt_symbols):
             # 发送不一致得结果
-            symbol_pos = compare_pos.pop(vt_symbol)
+            symbol_pos = compare_pos.pop(vt_symbol, None)
+            if symbol_pos is None:
+                continue
             d_long = {
-                'account_id': self.engine_config.get('account_id', '-'),
+                'account_id': self.engine_config.get('accountid', '-'),
                 'vt_symbol': vt_symbol,
                 'direction': Direction.LONG.value,
                 'strategy_list': symbol_pos.get('多单策略', [])}
 
             d_short = {
-                'account_id': self.engine_config.get('account_id', '-'),
+                'account_id': self.engine_config.get('accountid', '-'),
                 'vt_symbol': vt_symbol,
                 'direction': Direction.SHORT.value,
                 'strategy_list': symbol_pos.get('空单策略', [])}
@@ -1693,7 +1704,7 @@ class CtaEngine(BaseEngine):
         # 不匹配，输入到stdErr通道
         if pos_compare_result != '':
             msg = u'账户{}持仓不匹配: {}' \
-                .format(self.engine_config.get('account_id', '-'),
+                .format(self.engine_config.get('accountid', '-'),
                         pos_compare_result)
             try:
                 from vnpy.trader.util_wechat import send_wx_msg

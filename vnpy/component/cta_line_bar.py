@@ -2935,7 +2935,7 @@ class CtaLineBar(object):
         if self.bar_len < maxLen:
             return
 
-        dif, dea, macd = ta.MACD(np.append(self.close_array[-maxLen:], [self.line_bar[-1].close]),
+        dif, dea, macd = ta.MACD(np.append(self.close_array[-maxLen:], [self.line_bar[-1].close_price]),
                                  fastperiod=self.para_macd_fast_len,
                                  slowperiod=self.para_macd_slow_len, signalperiod=self.para_macd_signal_len)
 
@@ -4008,7 +4008,7 @@ class CtaLineBar(object):
             return
         # 3、获取前InputN周期(包含当前周期）的K线
         last_bar_mid3 = (self.line_bar[-1].close_price + self.line_bar[-1].high_price + self.line_bar[-1].low_price) / 3
-        bar_mid3_ema10 = ta.EMA(np.append(self.mid3_array[-ema_len * 3:], [last_bar_mid3]), ema_len)[-1]
+        bar_mid3_ema10 = ta.EMA(np.append(self.mid3_array[-ema_len * 4:], [last_bar_mid3]), ema_len)[-1]
         self._rt_yb = round(float(bar_mid3_ema10), self.round_n)
 
     @property
