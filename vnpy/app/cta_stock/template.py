@@ -587,17 +587,19 @@ class CtaStockTemplate(CtaTemplate):
                         self.write_log(f'清除委托单：{lg.order_ids}')
                         [self.cta_engine.cancel_order(self, vt_orderid) for vt_orderid in lg.order_ids]
                         lg.order_ids = []
-                    if lg.open_status and not lg.close_status and not lg.open_status:
+                    if lg.open_status and not lg.close_status and not lg.order_status:
                         pos = self.get_position(lg.vt_symbol)
                         pos.volume += lg.volume
                         lg.traded_volume = 0
                         self.write_log(u'持仓状态，加载持仓多单[{},价格:{},数量:{}手, 开仓时间:{}'
                                        .format(lg.vt_symbol, lg.open_price, lg.volume, lg.open_time))
+                        self.positions.update({lg.vt_symbol: pos})
                     elif lg.order_status and not lg.open_status and not lg.close_status and lg.traded_volume > 0:
                         pos = self.get_position(lg.vt_symbol)
                         pos.volume += lg.traded_volume
                         self.write_log(u'开仓状态，加载部分持仓多单[{},价格:{},数量:{}手, 开仓时间:{}'
                                        .format(lg.vt_symbol, lg.open_price, lg.traded_volume, lg.open_time))
+                        self.positions.update({lg.vt_symbol: pos})
                     elif lg.order_status and lg.open_status and lg.close_status:
                         if lg.traded_volume > 0:
                             old_volume = lg.volume
@@ -609,6 +611,9 @@ class CtaStockTemplate(CtaTemplate):
                         pos.volume += lg.volume
                         self.write_log(u'卖出状态，加载持仓多单[{},价格:{},数量:{}手, 开仓时间:{}'
                                        .format(lg.vt_symbol, lg.open_price, lg.volume, lg.open_time))
+
+                        self.positions.update({lg.vt_symbol: pos})
+
         self.gt.save()
         self.display_grids()
 
