@@ -1611,7 +1611,7 @@ class SubMdApi():
 
             tick = TickData(gateway_name=self.gateway_name,
                             exchange=Exchange(d.get('exchange')),
-                            symbol=d.get('symbol'),
+                            symbol=symbol,
                             datetime=dt)
             d.pop('exchange', None)
             d.pop('symbol', None)
