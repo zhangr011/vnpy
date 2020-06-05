@@ -1,9 +1,12 @@
 <p align="center">
-  <img src ="https://github.com/msincenselee/vnpy/blob/master/huafu_on_premise.jpg"/>
+  <img src ="blob/master/huafu_on_premise.jpg"/>
 </p>
 
 
 # “当你想放弃时，想想你为什么开始。埃隆·马斯克”
+
+github 链接： https://github.com/msincenselee/vnpy
+gitee  链接： https://gitee.com/vnpy2/vnpy
 
 ###Fork版本主要改进如下
 1、 事件引擎，增加运行效率调试功能
@@ -82,6 +85,7 @@
     - 独立的CTA引擎 cta_crypto，运行数字货币时，替代原版cta_strategy引擎。
     - 支持bar方式回测/组合回测
     - 增强期货交易模板
+    - 修正vnpy.gateway.binance现货网关，恢复position
   
 13、 增加App: cta_stock, 包括：
     
@@ -95,6 +99,11 @@
     - 支持可转债日内交易回测，支持动态前复权。
     - 支持盘前复权信息事件【待更新】
     
+14、GUI界面增强
+    
+    - 交易界面，恢复部分v1版本的快捷功能，如快速平仓
+    - 策略运行界面，增加'保存’,'K线' 按钮，保存策略内部数据，保存切片，查看最新切片K线。
+    - K线切片,支持同一策略内多周期、多品种K线。    
     
     
 大佳

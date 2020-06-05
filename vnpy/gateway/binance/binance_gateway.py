@@ -27,6 +27,7 @@ from vnpy.trader.object import (
     OrderData,
     TradeData,
     AccountData,
+    PositionData,
     ContractData,
     BarData,
     OrderRequest,
@@ -184,6 +185,9 @@ class BinanceRestApi(RestClient):
         self.order_count = 1_000_000
         self.order_count_lock = Lock()
         self.connect_time = 0
+
+        self.assets = {}    # 币资产的合约信息， symbol: contract
+        self.positions = {}  # 币持仓信息， symbol: position
 
     def sign(self, request):
         """
@@ -419,16 +423,34 @@ class BinanceRestApi(RestClient):
 
     def on_query_account(self, data, request):
         """"""
+        # ==》 account event
+        account = AccountData(
+            accountid=self.gateway_name,
+            balance=0,
+            frozen=0,
+            gateway_name=self.gateway_name
+        )
+        self.gateway.on_account(account)
+
+        # ==> position event
         for account_data in data["balances"]:
-            account = AccountData(
-                accountid=account_data["asset"],
-                balance=float(account_data["free"]) + float(account_data["locked"]),
+            pos = PositionData(
+                accountid=self.gateway_name,
+                symbol=account_data["asset"],
+                exchange=Exchange.BINANCE,
+                direction=Direction.NET,
+                name='{}现货'.format(account_data["asset"]),
+                volume=float(account_data["free"]) + float(account_data["locked"]),
+                yd_volume=float(account_data["free"]) + float(account_data["locked"]),
                 frozen=float(account_data["locked"]),
                 gateway_name=self.gateway_name
             )
 
-            if account.balance:
-                self.gateway.on_account(account)
+            #
+            if pos.volume > 0 or (pos.volume == 0 and pos.symbol in self.positions):
+                # 判断是否在本地缓存持仓中
+                self.positions.update({pos.symbol: pos})
+                self.gateway.on_position(copy(pos))
 
         self.gateway.write_log("账户资金查询成功")
 
@@ -483,6 +505,22 @@ class BinanceRestApi(RestClient):
                 gateway_name=self.gateway_name,
             )
             self.gateway.on_contract(contract)
+
+            for symbol in [d.get("baseAsset"), d.get("quoteAsset")]:
+                if symbol and symbol not in self.assets:
+                    asset_contract = ContractData(
+                        symbol=symbol,
+                        exchange=Exchange.BINANCE,
+                        name="{}现货".format(symbol),
+                        pricetick=0.000001,
+                        size=1,
+                        min_volume=0.00001,
+                        product=Product.SPOT,
+                        history_data=True,
+                        gateway_name=self.gateway_name,
+                    )
+                    self.assets.update({symbol: asset_contract})
+                    self.gateway.on_contract(copy(asset_contract))
 
             symbol_name_map[contract.symbol] = contract.name
 
