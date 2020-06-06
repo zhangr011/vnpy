@@ -36,8 +36,8 @@ gitee  链接： https://gitee.com/vnpy2/vnpy
 
 
     - 提供cta_line_bar k线组件，支持国内文华/交易师/TB等分钟/小时的计算模式，支持任意秒/分钟/小时/天/周等周期，支持k线数据实时生成。
-    - 提供cta_renko_bar k线组件，支持x跳动/千分比跳动 【特定开源对象】
-    - 提供cta_fund_kline 资金曲线组件，策略实例/账号基本的实时资金曲线 【特定开源对象】
+    - 提供cta_renko_bar k线组件，支持x跳动/千分比跳动 
+    - 提供cta_fund_kline 资金曲线组件，策略实例/账号基本的实时资金曲线 
     - 提供cta_position 组件，支持多/空/净仓位记录，支持套利
     - 提供cta_policy 组件，持久化复杂的策略执行逻辑
     - 提供cta_period 组件，支持策略中‘周期’的逻辑

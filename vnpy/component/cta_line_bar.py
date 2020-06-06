@@ -1294,7 +1294,7 @@ class CtaLineBar(object):
 
         if self.para_pre_len <= 0:  # 不计算
             return
-        count_len = min(self.para_pre_len, self.bar_len)
+        count_len = min(self.para_pre_len, self.bar_len - 1)
 
         # 2.计算前self.para_pre_len周期内的Bar高点和低点(不包含当前周期，因为当前正在合成的bar
         # 还未触发on_bar，不会存入开高低收序列）
@@ -1487,7 +1487,7 @@ class CtaLineBar(object):
 
         # 计算第一条MA均线
         if self.para_ma1_len > 0:
-            count_len = min(self.para_ma1_len, self.bar_len)
+            count_len = min(self.para_ma1_len, self.bar_len - 1)
 
             barMa1 = ta.MA(self.close_array[-count_len:], count_len)[-1]
             if np.isnan(barMa1):
@@ -1508,7 +1508,7 @@ class CtaLineBar(object):
 
         # 计算第二条MA均线
         if self.para_ma2_len > 0:
-            count_len = min(self.para_ma2_len, self.bar_len)
+            count_len = min(self.para_ma2_len, self.bar_len - 1)
             barMa2 = ta.MA(self.close_array[-count_len:], count_len)[-1]
             if np.isnan(barMa2):
                 return
@@ -1528,7 +1528,7 @@ class CtaLineBar(object):
 
         # 计算第三条MA均线
         if self.para_ma3_len > 0:
-            count_len = min(self.para_ma3_len, self.bar_len)
+            count_len = min(self.para_ma3_len, self.bar_len - 1)
             barMa3 = ta.MA(self.close_array[-count_len:], count_len)[-1]
             if np.isnan(barMa3):
                 return
@@ -1725,7 +1725,7 @@ class CtaLineBar(object):
 
         # 计算第一条EMA均线
         if self.para_ema1_len > 0:
-            count_len = min(self.para_ema1_len, self.bar_len)
+            count_len = min(self.para_ema1_len, self.bar_len - 1)
 
             # 3、获取前InputN周期(不包含当前周期）的K线
             barEma1 = ta.EMA(self.close_array[-ema1_data_len:], count_len)[-1]
@@ -1739,7 +1739,7 @@ class CtaLineBar(object):
 
         # 计算第二条EMA均线
         if self.para_ema2_len > 0:
-            count_len = min(self.bar_len, self.para_ema2_len)
+            count_len = min(self.bar_len - 1, self.para_ema2_len)
 
             # 3、获取前InputN周期(不包含当前周期）的自适应均线
 
@@ -1754,7 +1754,7 @@ class CtaLineBar(object):
 
         # 计算第三条EMA均线
         if self.para_ema3_len > 0:
-            count_len = min(self.bar_len, self.para_ema3_len)
+            count_len = min(self.bar_len - 1, self.para_ema3_len)
 
             # 3、获取前InputN周期(不包含当前周期）的自适应均线
             barEma3 = ta.EMA(self.close_array[-ema3_data_len:], count_len)[-1]
@@ -1982,7 +1982,7 @@ class CtaLineBar(object):
 
         # 计算 ATR
         if self.para_atr1_len > 0:
-            count_len = min(self.bar_len, self.para_atr1_len)
+            count_len = min(self.bar_len - 1, self.para_atr1_len)
             cur_atr1 = ta.ATR(self.high_array[-count_len * 2:], self.low_array[-count_len * 2:],
                               self.close_array[-count_len * 2:], count_len)
             self.cur_atr1 = round(cur_atr1[-1], self.round_n)
@@ -1991,7 +1991,7 @@ class CtaLineBar(object):
             self.line_atr1.append(self.cur_atr1)
 
         if self.para_atr2_len > 0:
-            count_len = min(self.bar_len, self.para_atr2_len)
+            count_len = min(self.bar_len - 1, self.para_atr2_len)
             cur_atr2 = ta.ATR(self.high_array[-count_len * 2:], self.low_array[-count_len * 2:],
                               self.close_array[-count_len * 2:], count_len)
             self.cur_atr2 = round(cur_atr2[-1], self.round_n)
@@ -2000,7 +2000,7 @@ class CtaLineBar(object):
             self.line_atr2.append(self.cur_atr2)
 
         if self.para_atr3_len > 0:
-            count_len = min(self.bar_len, self.para_atr3_len)
+            count_len = min(self.bar_len - 1, self.para_atr3_len)
             cur_atr3 = ta.ATR(self.high_array[-count_len * 2:], self.low_array[-count_len * 2:],
                               self.close_array[-count_len * 2:], count_len)
             self.cur_atr3 = round(cur_atr3[-1], self.round_n)
@@ -2017,8 +2017,8 @@ class CtaLineBar(object):
         if self.para_vol_len <= 0:  # 不计算
             return
 
-        bar_len = min(self.bar_len, self.para_vol_len)
-        sumVol = sum([x.volume for x in self.line_bar[-bar_len:]])
+        bar_len = min(self.bar_len - 1, self.para_vol_len)
+        sumVol = sum([x.volume for x in self.line_bar[-bar_len - 1:-1]])
         avgVol = round(sumVol / bar_len, 0)
 
         if len(self.line_vol_ma) > self.max_hold_bars:
@@ -2134,7 +2134,7 @@ class CtaLineBar(object):
                 self.write_log(u'数据未充分,当前Bar数据数量：{0}，计算Boll需要：{1}'.
                                format(len(self.line_bar), min(14, self.para_boll_len) + 1))
             else:
-                bollLen = min(self.bar_len, self.para_boll_len)
+                bollLen = min(self.bar_len - 1, self.para_boll_len)
 
                 # 不包含当前最新的Bar
                 upper_list, middle_list, lower_list = ta.BBANDS(self.close_array,
@@ -2195,7 +2195,7 @@ class CtaLineBar(object):
                 self.write_log(u'数据未充分,当前Bar数据数量：{0}，计算Boll2需要：{1}'.
                                format(len(self.line_bar), min(14, self.para_boll2_len) + 1))
             else:
-                boll2Len = min(self.bar_len, self.para_boll2_len)
+                boll2Len = min(self.bar_len - 1, self.para_boll2_len)
 
                 # 不包含当前最新的Bar
                 upper_list, middle_list, lower_list = ta.BBANDS(self.close_array,
@@ -2256,7 +2256,7 @@ class CtaLineBar(object):
                 self.write_log(u'数据未充分,当前Bar数据数量：{0}，计算Boll需要：{1}'.
                                format(len(self.line_bar), min(14, self.para_boll_tb_len) + 1))
             else:
-                bollLen = min(self.bar_len, self.para_boll_tb_len)
+                bollLen = min(self.bar_len - 1, self.para_boll_tb_len)
 
                 # 不包含当前最新的Bar
 
@@ -2312,7 +2312,7 @@ class CtaLineBar(object):
                 self.write_log(u'数据未充分,当前Bar数据数量：{0}，计算Boll2需要：{1}'.
                                format(len(self.line_bar), min(14, self.para_boll2_tb_len) + 1))
             else:
-                boll2Len = min(self.bar_len, self.para_boll2_tb_len)
+                boll2Len = min(self.bar_len - 1, self.para_boll2_tb_len)
 
                 if len(self.line_boll2_upper) > self.max_hold_bars:
                     del self.line_boll2_upper[0]
@@ -2565,7 +2565,7 @@ class CtaLineBar(object):
         if self.para_kdj_smooth_len == 0:
             self.para_kdj_smooth_len = 3
 
-        inputKdjLen = min(self.para_kdj_len, self.bar_len)
+        inputKdjLen = min(self.para_kdj_len, self.bar_len - 1)
 
         hhv = max(self.high_array[-inputKdjLen:])
         llv = min(self.low_array[-inputKdjLen:])
@@ -2680,7 +2680,7 @@ class CtaLineBar(object):
         if self.bar_len < 3:
             return
 
-        data_len = min(self.bar_len, self.para_kdj_tb_len)
+        data_len = min(self.bar_len - 1, self.para_kdj_tb_len)
 
         hhv = max(self.high_array[-data_len:])
         llv = min(self.low_array[-data_len:])
@@ -2808,13 +2808,13 @@ class CtaLineBar(object):
 
         maxLen = max(self.para_macd_fast_len, self.para_macd_slow_len) + self.para_macd_signal_len
 
-        maxLen = maxLen * 3  # 注：数据长度需要足够，才能准确。测试过，3倍长度才可以与国内的文华等软件一致
+        # maxLen = maxLen * 3  # 注：数据长度需要足够，才能准确。测试过，3倍长度才可以与国内的文华等软件一致
 
-        if self.bar_len < maxLen:
-            self.write_log(u'数据未充分,当前Bar数据数量：{0}，计算MACD需要：{1}'.format(len(self.line_bar), maxLen))
+        if self.bar_len - 1 < maxLen:
+            self.write_log(u'数据未充分,当前Bar数据数量：{0}，计算MACD需要：{1}'.format(self.bar_len - 1, maxLen))
             return
 
-        dif_list, dea_list, macd_list = ta.MACD(self.close_array[-2 * maxLen:], fastperiod=self.para_macd_fast_len,
+        dif_list, dea_list, macd_list = ta.MACD(self.close_array, fastperiod=self.para_macd_fast_len,
                                                 slowperiod=self.para_macd_slow_len,
                                                 signalperiod=self.para_macd_signal_len)
         if np.isnan(dif_list[-1]) or np.isnan(dea_list[-1]) or np.isnan(macd_list[-1]):
@@ -3223,7 +3223,7 @@ class CtaLineBar(object):
                                                                    observation=self.close_array[-1])
             m = state_means[-1].item()
             c = state_covariances[-1].item()
-        std_len = 26 if self.bar_len > 26 else self.bar_len
+        std_len = 26 if self.bar_len - 1 > 26 else self.bar_len - 1
         std = np.std(self.close_array[-std_len:], ddof=1)
         self.cur_state_std = std
         if len(self.line_state_mean) > self.max_hold_bars:
@@ -3503,7 +3503,7 @@ class CtaLineBar(object):
             return
 
         data_len = max(self.para_skd_fast_len * 2, self.para_skd_fast_len + 20)
-        if self.bar_len < data_len:
+        if self.bar_len - 1 < data_len:
             return
 
         # 计算最后一根Bar的RSI指标
@@ -3966,7 +3966,7 @@ class CtaLineBar(object):
         #                     format(len(self.lineBar), 4 * self.inputYbLen))
         #    return
 
-        ema_len = min(self.bar_len, self.para_yb_len)
+        ema_len = min(self.bar_len - 1, self.para_yb_len)
         if ema_len < 3:
             self.write_log(u'数据未充分,当前Bar数据数量：{0}'.
                            format(len(self.line_bar)))
@@ -4027,7 +4027,7 @@ class CtaLineBar(object):
             return
         if self.bar_len < 2:
             return
-        bar_len = min(self.para_golden_n, self.bar_len)
+        bar_len = min(self.para_golden_n, self.bar_len - 1)
 
         hhv = max(self.high_array[-bar_len:])
         llv = min(self.low_array[-bar_len:])
@@ -4117,7 +4117,7 @@ class CtaLineBar(object):
                                format(len(self.line_bar), min(14, self.para_bias_len) + 1))
             else:
 
-                BiasLen = min(self.para_bias_len, self.bar_len)
+                BiasLen = min(self.para_bias_len, self.bar_len - 1)
 
                 # 计算BIAS
                 m = np.mean(self.close_array[-BiasLen:])
@@ -4133,7 +4133,7 @@ class CtaLineBar(object):
                 self.write_log(u'数据未充分,当前Bar数据数量：{0}，计算Bias2需要：{1}'.
                                format(len(self.line_bar), min(14, self.para_bias2_len) + 1))
             else:
-                Bias2Len = min(self.bar_len, self.para_bias2_len)
+                Bias2Len = min(self.bar_len - 1, self.para_bias2_len)
                 # 计算BIAS2
                 m = np.mean(self.close_array[-Bias2Len:])
                 bias2 = (self.close_array[-1] - m) / m * 100
@@ -4147,7 +4147,7 @@ class CtaLineBar(object):
                 self.write_log(u'数据未充分,当前Bar数据数量：{0}，计算Bias3需要：{1}'.
                                format(len(self.line_bar), min(14, self.para_bias3_len) + 1))
             else:
-                Bias3Len = min(self.bar_len, self.para_bias3_len)
+                Bias3Len = min(self.bar_len - 1, self.para_bias3_len)
                 # 计算BIAS3
                 m = np.mean(self.close_array[-Bias3Len:])
                 bias3 = (self.close_array[-1] - m) / m * 100
