@@ -102,7 +102,7 @@ class BinanceGateway(BaseGateway):
     def __init__(self, event_engine, gateway_name="BINANCE"):
         """Constructor"""
         super().__init__(event_engine, gateway_name)
-
+        self.count = 0
         self.trade_ws_api = BinanceTradeWebsocketApi(self)
         self.market_ws_api = BinanceDataWebsocketApi(self)
         self.rest_api = BinanceRestApi(self)
@@ -159,6 +159,14 @@ class BinanceGateway(BaseGateway):
                 and self.status.get('mdws_con', False):
             self.status.update({'con': True})
 
+        self.count += 1
+        if self.count < 2:
+            return
+        self.count = 0
+        if len(self.query_functions) > 0:
+            func = self.query_functions.pop(0)
+            func()
+            self.query_functions.append(func)
 
 class BinanceRestApi(RestClient):
     """
@@ -268,6 +276,9 @@ class BinanceRestApi(RestClient):
         self.query_contract()
         self.start_user_stream()
 
+        # 添加到定时查询队列中
+        self.gateway.query_functions = [self.query_account]
+
     def query_time(self):
         """"""
         data = {
@@ -345,6 +356,10 @@ class BinanceRestApi(RestClient):
             "newClientOrderId": orderid,
             "newOrderRespType": "ACK"
         }
+
+        if req.type == OrderType.MARKET:
+            params.pop('timeInForce', None)
+            params.pop('price', None)
 
         self.add_request(
             method="POST",
