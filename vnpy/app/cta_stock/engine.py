@@ -349,6 +349,20 @@ class CtaEngine(BaseEngine):
         # Update GUI
         self.put_strategy_event(strategy)
 
+        if self.engine_config.get('trade_2_wx', False):
+            accountid = self.engine_config.get('accountid', 'XXX')
+            d = {
+                'account': accountid,
+                'strategy': strategy_name,
+                'symbol': trade.symbol,
+                'action': f'{trade.direction.value} {trade.offset.value}',
+                'price': str(trade.price),
+                'volume': trade.volume,
+                'remark': f'{accountid}:{strategy_name}',
+                'timestamp': trade.time
+            }
+            send_wx_msg(content=d, target=accountid, msg_type='TRADE')
+
     def process_position_event(self, event: Event):
         """"""
         position = event.data

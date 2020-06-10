@@ -546,6 +546,7 @@ class CtaStockTemplate(CtaTemplate):
     def get_klines_snapshot(self):
         """返回当前klines的切片数据"""
         try:
+            self.write_log(f'获取{self.strategy_name}的切片数据')
             d = {
                 'strategy': self.strategy_name,
                 'datetime': datetime.now()}
@@ -878,11 +879,44 @@ class CtaStockTemplate(CtaTemplate):
                 continue
 
             cur_price = self.cta_engine.get_price(lg.vt_symbol)
-            if lg.stop_price != 0 and lg.stop_price > cur_price > 0:
+
+            # 主动止盈
+            if 0 < lg.close_price <= cur_price:
+                cn_name = self.cta_engine.get_name(lg.vt_symbol)
                 # 调用平仓模块
-                self.write_log(u'{} {}当前价:{} 触发止损线{},开仓价:{},v：{}'.
+                self.write_log(u'{} {}[{}] 当前价:{} 触发止盈{},开仓价:{},v：{}'.
                                format(self.cur_datetime,
                                       lg.vt_symbol,
+                                      cn_name,
+                                      cur_price,
+                                      lg.close_price,
+                                      lg.open_price,
+                                      lg.volume))
+
+                if lg.traded_volume > 0:
+                    lg.volume -= lg.traded_volume
+                    lg.traded_volume = 0
+                if lg.volume <= 0:
+                    remove_gids.append(lg.id)
+                    lg.open_status = False
+                    lg.order_status = False
+                    lg.close_status = False
+                    continue
+
+                lg.order_status = True
+                lg.close_status = True
+                self.write_log(f'{lg.vt_symbol}[{cn_name}] 数量:{lg.volume}，准备卖出')
+                continue
+
+            # 止损
+            if lg.stop_price != 0 and lg.stop_price > cur_price > 0:
+                cn_name = self.cta_engine.get_name(lg.vt_symbol)
+
+                # 调用平仓模块
+                self.write_log(u'{} {}[{}] 当前价:{} 触发止损线{},开仓价:{},v：{}'.
+                               format(self.cur_datetime,
+                                      lg.vt_symbol,
+                                      cn_name,
                                       cur_price,
                                       lg.stop_price,
                                       lg.open_price,
@@ -900,13 +934,13 @@ class CtaStockTemplate(CtaTemplate):
 
                 lg.order_status = True
                 lg.close_status = True
-                self.write_log(f'{lg.vt_symbol} 数量:{lg.volume}，准备卖出')
+                self.write_log(f'{lg.vt_symbol}[{cn_name}] 数量:{lg.volume}，准备卖出')
 
         if len(remove_gids) > 0:
             self.gt.remove_grids_by_ids(direction=Direction.LONG, ids=remove_gids)
             self.gt.save()
 
-    def tns_excute_sell_grids(self):
+    def tns_excute_sell_grids(self, vt_symbol=None):
         """
         事务执行卖出网格
          1、找出所有order_status=True,open_status=Talse, close_status=True的网格。
@@ -926,6 +960,10 @@ class CtaStockTemplate(CtaTemplate):
 
         ordering_grid = None
         for grid in self.gt.dn_grids:
+            # 只扫描vt_symbol 匹配的网格
+            if vt_symbol and vt_symbol != grid.vt_symbol:
+                continue
+
             # 排除: 未开仓/非平仓/非委托的网格
             if not grid.open_status or not grid.close_status or not grid.open_status:
                 continue
@@ -1031,7 +1069,7 @@ class CtaStockTemplate(CtaTemplate):
         self.gt.save()
         self.policy.save()
 
-    def tns_execute_buy_grids(self):
+    def tns_execute_buy_grids(self, vt_symbol=None):
         """
         事务执行买入网格
         :return:
@@ -1048,6 +1086,11 @@ class CtaStockTemplate(CtaTemplate):
 
         ordering_grid = None
         for grid in self.gt.dn_grids:
+
+            # 只扫描vt_symbol 匹配的网格
+            if vt_symbol and vt_symbol != vt_symbol:
+                continue
+
             # 排除已经执行完毕(处于开仓状态）的网格， 或者处于平仓状态的网格
             if grid.open_status or grid.close_status:
                 continue
