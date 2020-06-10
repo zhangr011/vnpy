@@ -398,7 +398,7 @@ class TdxFutureData(object):
                         add_bar.low_price = float(row['low'])
                         add_bar.close_price = float(row['close'])
                         add_bar.volume = float(row['volume'])
-                        add_bar.openInterest = float(row['open_interest'])
+                        add_bar.open_interest = float(row['open_interest'])
                     except Exception as ex:
                         self.write_error(
                             'error when convert bar:{},ex:{},t:{}'.format(row, str(ex), traceback.format_exc()))

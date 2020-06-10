@@ -74,7 +74,7 @@ def get_underlying_symbol(symbol: str):
     p = re.compile(r"([A-Z]+)[0-9]+", re.I)
     underlying_symbol = p.match(symbol)
 
-    if underlying_symbol is None:
+    if underlying_symbol is None or len(underlying_symbol) == 0:
         return symbol
 
     return underlying_symbol.group(1)

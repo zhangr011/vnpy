@@ -28,7 +28,10 @@ from vnpy.trader.object import (
     SubscribeRequest,
     LogData,
     TickData,
-    ContractData
+    ContractData,
+    HistoryRequest,
+    Interval,
+    BarData
 )
 from vnpy.trader.event import (
     EVENT_TIMER,
@@ -351,6 +354,7 @@ class CtaEngine(BaseEngine):
         # Update GUI
         self.put_strategy_event(strategy)
 
+        # 如果配置文件 cta_stock_config.json中，有trade_2_wx的设置项，则发送微信通知
         if self.engine_config.get('trade_2_wx', False):
             accountid = self.engine_config.get('accountid', 'XXX')
             d = {
@@ -370,7 +374,6 @@ class CtaEngine(BaseEngine):
         position = event.data
 
         self.offset_converter.update_position(position)
-
 
     def check_unsubscribed_symbols(self):
         """检查未订阅合约"""
@@ -809,10 +812,21 @@ class CtaEngine(BaseEngine):
         """查询价格最小跳动"""
         contract = self.main_engine.get_contract(vt_symbol)
         if contract is None:
-            self.write_error(f'查询不到{vt_symbol}合约信息')
+            self.write_error(f'查询不到{vt_symbol}合约信息，缺省使用0.1作为价格跳动')
             return 0.1
 
         return contract.pricetick
+
+    @lru_cache()
+    def get_volume_tick(self, vt_symbol: str):
+        """查询合约的最小成交数量"""
+        contract = self.main_engine.get_contract(vt_symbol)
+        if contract is None:
+            self.write_error(f'查询不到{vt_symbol}合约信息,缺省使用1作为最小成交数量')
+            return 1
+
+        return contract.min_volume
+
 
     def get_tick(self, vt_symbol: str):
         """获取合约得最新tick"""
@@ -877,6 +891,40 @@ class CtaEngine(BaseEngine):
     def get_logs_path(self):
         log_path = os.path.abspath(os.path.join(TRADER_DIR, 'log'))
         return log_path
+
+    def load_bar(
+            self,
+            vt_symbol: str,
+            days: int,
+            interval: Interval,
+            callback: Callable[[BarData], None],
+            interval_num: int = 1
+    ):
+        """获取历史记录"""
+        symbol, exchange = extract_vt_symbol(vt_symbol)
+        end = datetime.now()
+        start = end - timedelta(days)
+        bars = []
+
+        # Query bars from gateway if available
+        contract = self.main_engine.get_contract(vt_symbol)
+
+        if contract and contract.history_data:
+            req = HistoryRequest(
+                symbol=symbol,
+                exchange=exchange,
+                interval=interval,
+                interval_num=interval_num,
+                start=start,
+                end=end
+            )
+            bars = self.main_engine.query_history(req, contract.gateway_name)
+
+        for bar in bars:
+            if bar.trading_day:
+                bar.trading_day = bar.datetime.strftime('%Y-%m-%d')
+
+            callback(bar)
 
     def call_strategy_func(
             self, strategy: CtaTemplate, func: Callable, params: Any = None
