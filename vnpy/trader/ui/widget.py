@@ -1036,7 +1036,7 @@ class ContractManager(QtWidgets.QWidget):
         """
         Show contracts by symbol
         """
-        flt = str(self.filter_line.text())
+        flt = str(self.filter_line.text()).lower()
 
         all_contracts = self.main_engine.get_all_contracts()
         if flt:
