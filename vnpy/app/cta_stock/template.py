@@ -434,7 +434,7 @@ class CtaStockTemplate(CtaTemplate):
         self.klines = {}  # K线组件字典: kline_name: kline
         self.positions = {}     # 策略内持仓记录，  vt_symbol: PositionData
         self.order_type = OrderType.LIMIT
-        self.cancel_seconds = 10  # 撤单时间(秒)
+        self.cancel_seconds = 120  # 撤单时间(秒)
 
         # 资金相关
         self.max_invest_rate = 0.1  # 最大仓位(0~1)
@@ -781,6 +781,7 @@ class CtaStockTemplate(CtaTemplate):
             self.gt.save()
 
         # 在策略得活动订单中，移除
+        self.write_log(f'移除活动订单:{order.vt_orderid}')
         self.active_orders.pop(order.vt_orderid, None)
 
     def on_order_open_canceled(self, order: OrderData):
@@ -1142,7 +1143,7 @@ class CtaStockTemplate(CtaTemplate):
             buy_volume = max_buy_volume
 
         # 实盘运行时，要加入市场买卖量的判断
-        if not self.backtesting:
+        if not self.backtesting and 'market' in ordering_grid.snapshot:
             symbol_tick = self.cta_engine.get_tick(vt_symbol)
             # 根据市场计算，前5档买单数量
             if all([symbol_tick.ask_volume_1, symbol_tick.ask_volume_2, symbol_tick.ask_volume_3,
@@ -1156,7 +1157,7 @@ class CtaStockTemplate(CtaTemplate):
                     buy_volume = min(market_bid_volumes / 4, market_ask_volumes / 4, buy_volume)
                     buy_volume = max(buy_volume - buy_volume % min_trade_volume, min_trade_volume)
 
-        buy_price = cur_price + self.cta_engine.get_price_tick(vt_symbol)
+        buy_price = cur_price + self.cta_engine.get_price_tick(vt_symbol) * 10
 
         vt_orderids = self.buy(
             vt_symbol=vt_symbol,
@@ -1168,7 +1169,7 @@ class CtaStockTemplate(CtaTemplate):
             self.write_error(f'委托买入失败，{vt_symbol} 委托价:{buy_price} 数量:{buy_volume}')
             return
         else:
-            self.write_error(f'已委托买入，{vt_symbol} 委托价:{buy_price} 数量:{buy_volume}')
+            self.write_error(f'{vt_orderids},已委托买入，{vt_symbol} 委托价:{buy_price} 数量:{buy_volume}')
 
     def tns_finish_buy_grid(self, grid):
         """

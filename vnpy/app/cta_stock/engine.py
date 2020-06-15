@@ -144,7 +144,9 @@ class CtaEngine(BaseEngine):
 
         self.positions = {}
 
-        self.last_minute = None
+        self.last_minute = datetime.now().strftime('%H%M')
+
+        self.health_status = {}
 
     def init_engine(self):
         """
@@ -203,19 +205,17 @@ class CtaEngine(BaseEngine):
 
     def process_timer_event(self, event: Event):
         """ 处理定时器事件"""
-        all_trading = True
-        # 触发每个策略的定时接口
-        for strategy in list(self.strategies.values()):
-            strategy.on_timer()
-            if not strategy.trading:
-                all_trading = False
 
         dt = datetime.now()
         # 每分钟执行的逻辑
-        if self.last_minute != dt.minute:
-            self.last_minute = dt.minute
+        if self.last_minute != dt.strftime('%H%M'):
+            self.last_minute = dt.strftime('%H%M')
 
-            if all_trading:
+            # 检测策略的交易情况
+            self.health_check()
+
+            # 在国内股市开盘期间做检查
+            if '0930' < self.last_minute < '1530':
                 # 主动获取所有策略得持仓信息
                 all_strategy_pos = self.get_all_strategy_pos()
 
@@ -724,6 +724,9 @@ class CtaEngine(BaseEngine):
     def cancel_order(self, strategy: CtaTemplate, vt_orderid: str):
         """
         """
+        if vt_orderid is None or len(vt_orderid) == 0:
+            return False
+
         if vt_orderid.startswith(STOPORDER_PREFIX):
             return self.cancel_local_stop_order(strategy, vt_orderid)
         else:
@@ -1630,6 +1633,29 @@ class CtaEngine(BaseEngine):
         else:
             self.write_log(u'账户持仓与策略一致')
             return True, compare_info
+
+    def health_check(self):
+        """策略健康检查"""
+        for strategy_name in list(self.strategies.keys()):
+            # 获取策略
+            strategy = self.strategies.get(strategy_name)
+            if not strategy:
+                continue
+
+            health_count = self.health_status.get(strategy_name, 0)
+
+            # 取消计数器
+            if health_count > 0 and strategy.trading:
+                self.health_status.pop(strategy_name, None)
+                continue
+
+            # 增加计数器，如果超时十次，发出告警信息
+            if not strategy.trading:
+                health_count += 1
+                if health_count > 10:
+                    self.send_wechat(f'{strategy_name}交易状态停止超过10次检查周期,请检查')
+                    health_count = 0
+                    self.health_status.update({strategy_name: health_count})
 
     def init_all_strategies(self):
         """
