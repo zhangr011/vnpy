@@ -104,6 +104,8 @@ class TdxFutureData(object):
         self.symbol_exchange_dict = {}  # tdx合约与vn交易所的字典
         self.symbol_market_dict = copy.copy(INIT_TDX_MARKET_MAP)  # tdx合约与tdx市场的字典
         self.strategy = strategy
+
+        # 所有期货合约的本地缓存
         self.future_contracts = get_future_contracts()
 
     def write_log(self, content):
@@ -503,17 +505,21 @@ class TdxFutureData(object):
             self.connect(is_reconnect=True)
             return results
 
-
     def get_mi_contracts2(self):
         """ 获取主力合约"""
         self.connect()
         contracts = []
         for exchange in Vn_Tdx_Exchange_Map.keys():
+            self.write_log(f'查询{exchange.value}')
             contracts.extend(self.get_mi_contracts_from_exchange(exchange))
+
+        # 合约的持仓、主力合约清单发生变化，需要更新
+        save_future_contracts(self.future_contracts)
 
         return contracts
 
     def get_mi_contracts_from_exchange(self, exchange):
+        """获取主力合约"""
         contracts = self.get_contracts(exchange)
 
         if len(contracts) == 0:
@@ -529,16 +535,70 @@ class TdxFutureData(object):
             code = contract.get('code')
             if code[-2:] in ['L9', 'L8', 'L0', 'L1', 'L2', 'L3', '50'] or \
                     (exchange == Exchange.CFFEX and code[-3:] in ['300', '500']):
+                #self.write_log(f'过滤:{exchange.value}:{code}')
                 continue
             short_symbol = get_underlying_symbol(code).upper()
             contract_list = short_contract_dict.get(short_symbol, [])
             contract_list.append(contract)
             short_contract_dict.update({short_symbol: contract_list})
 
+        # { 短合约: [合约的最新quote行情] }
         for k, v in short_contract_dict.items():
-            sorted_list = sorted(v, key=lambda c: c['ZongLiang'])
+            if len(v) == 0:
+                self.write_error(f'{k}合约对应的所有合约为空')
+                continue
 
-            mi_contracts.append(sorted_list[-1])
+            # 缓存的期货合约配置
+            cache_info = self.future_contracts.get(k, {})
+            # 缓存的所有当前合约清单
+            cache_symbols = cache_info.get('symbols', [])
+            new_symbols = sorted([c.get('code') for c in v])
+
+            # 检查交易所是否一致
+            cache_exchange = cache_info.get('exchange', '')
+            if len(cache_exchange) > 0 and cache_exchange != exchange.value:
+                if not (cache_exchange == 'INE' and exchange == Exchange.SHFE):
+                    continue
+
+            # 判断前置条件1：缓存的清单数量，
+            if len(cache_symbols) > 0:
+                if len(new_symbols) < len(cache_symbols) * 0.8:
+                    self.write_error(f'查询的期货合约{new_symbols} 总数小于 缓存 {cache_symbols} 的80%数量，不做处理')
+                    continue
+
+            # 判断前置条件2：
+            cache_mi_symbol = cache_info.get('full_symbol')
+            # 之前的主力合约不在当前所有合约清单中
+            if cache_mi_symbol and cache_mi_symbol not in new_symbols:
+                # 之前的主力合约，必须小于所有的合约
+                if not all([cache_mi_symbol<symbol for symbol in new_symbols]):
+                    self.write_error(f'前期主力合约{cache_mi_symbol}不在当前合约清单{new_symbols}中，又不是早期合约,不做处理')
+                    continue
+
+            # 判断前置条件3
+            cache_oi = cache_info.get('open_interesting', 0)
+            # 根据总量排序
+            sorted_list = sorted(v, key=lambda c: c['ZongLiang'])
+            select_data = sorted_list[-1]
+            new_mi_symbol = select_data.get('code')
+            new_oi = select_data.get('ZongLiang', 0)
+
+            if new_oi <= 0:
+                self.write_error(f'{new_mi_symbol}合约总量为0， 不做处理')
+                continue
+
+            if 0 < new_oi < cache_oi / 50 and new_mi_symbol != cache_mi_symbol:
+                self.write_error(f"新合约{new_mi_symbol}总量:{select_data.get('ZongLiang', 0)} 不到旧合约{cache_mi_symbol}持仓总量:{cache_oi}的一半，不处理")
+                continue
+
+            cache_info.update({'open_interesting': new_oi})
+            if len(new_symbols) > 0:
+                cache_info.update({'symbols': new_symbols})
+
+            self.future_contracts.update({k: cache_info})
+            # 更新
+            mi_contracts.append(select_data)
+
 
         return mi_contracts
 

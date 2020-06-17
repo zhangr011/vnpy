@@ -875,11 +875,14 @@ class CtaStockTemplate(CtaTemplate):
         # 多单网格逐一止损/止盈检查：
         long_grids = self.gt.get_opened_grids(direction=Direction.LONG)
         for lg in long_grids:
-
             if lg.close_status or lg.order_status or not lg.open_status:
                 continue
 
             cur_price = self.cta_engine.get_price(lg.vt_symbol)
+            if cur_price is None:
+                self.write_log(f'没有获取到{lg.vt_symbol}的当前价格，提交订阅')
+                self.cta_engine.subscribe_symbol(strategy_name=self.strategy_name, vt_symbol=lg.vt_symbol)
+                continue
 
             # 主动止盈
             if 0 < lg.close_price <= cur_price:
@@ -1004,6 +1007,11 @@ class CtaStockTemplate(CtaTemplate):
         # 实盘运行时，要加入市场买卖量的判断
         if not self.backtesting:
             symbol_tick = self.cta_engine.get_tick(vt_symbol)
+            if symbol_tick is None:
+                self.cta_engine.subscribe_symbol(strategy_name=self.strategy_name, vt_symbol=vt_symbol)
+                self.write_log(f'获取不到{vt_symbol}得tick,无法根据市场深度进行计算')
+                return
+
             symbol_volume_tick = self.cta_engine.get_volume_tick(vt_symbol)
             # 根据市场计算，前5档买单数量
             if all([symbol_tick.ask_volume_1, symbol_tick.ask_volume_2, symbol_tick.ask_volume_3,

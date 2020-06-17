@@ -342,7 +342,7 @@ class FundKline(object):
         return all_holding_profit, holded
 
     def on_bar(self, *args, **kwargs):
-        if self.onbar_callback and len(args) > 0:
+        if self.onbar_callback and (len(args) > 0 or len(kwargs) > 0):
             try:
                 self.onbar_callback(*args, **kwargs)
             except Exception as ex:

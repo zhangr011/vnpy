@@ -123,6 +123,7 @@ class Exchange(Enum):
     TOCOM = "TOCOM"         # Tokyo Commodity Exchange
     EUNX = "EUNX"           # Euronext Exchange
     KRX = "KRX"             # Korean Exchange
+    AMEX = "AMEX"           # NESE American
 
     OANDA = "OANDA"         # oanda.com
 

@@ -220,9 +220,10 @@ class CtaEngine(BaseEngine):
                 all_strategy_pos = self.get_all_strategy_pos()
 
                 # 每5分钟检查一次
-                if dt.minute % 5 == 0:
+                if dt.minute % 10 == 0:
                     # 比对仓位，使用上述获取得持仓信息，不用重复获取
-                    self.compare_pos(strategy_pos_list=copy(all_strategy_pos))
+                    #self.compare_pos(strategy_pos_list=copy(all_strategy_pos))
+                    pass
 
                 # 推送到事件
                 self.put_all_strategy_pos_event(all_strategy_pos)
@@ -1777,8 +1778,10 @@ class CtaEngine(BaseEngine):
                 self.logger.log(level, msg)
 
         # 如果日志数据异常，错误和告警，输出至sys.stderr
-        if level in [logging.CRITICAL, logging.ERROR, logging.WARNING]:
-            print(f"{strategy_name}: {msg}" if strategy_name else msg, file=sys.stderr)
+        if level in [logging.CRITICAL]:
+            log_msg = f"{strategy_name}: {msg}" if strategy_name else msg
+            print(log_msg, file=sys.stderr)
+            send_wx_msg(log_msg)
 
     def write_error(self, msg: str, strategy_name: str = ''):
         """写入错误日志"""

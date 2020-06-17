@@ -920,6 +920,10 @@ class CtaEngine(BaseEngine):
             )
             bars = self.main_engine.query_history(req, contract.gateway_name)
 
+            if bars is None:
+                self.write_error(f'获取不到历史K线:{req.__dict__}')
+                return
+
         for bar in bars:
             if bar.trading_day:
                 bar.trading_day = bar.datetime.strftime('%Y-%m-%d')

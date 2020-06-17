@@ -1610,8 +1610,10 @@ class CtaRenkoBar(object):
         """
         if self.para_ma1_len <=0 and self.para_ma2_len <=0 and self.para_ma3_len <= 0:
             return
-
-        rt_close_array = np.append(self.close_array, [self.cur_bar.close_price])
+        if self.cur_bar:
+            rt_close_array = np.append(self.close_array, [self.cur_bar.close_price])
+        else:
+            rt_close_array = self.close_array
 
         if self.para_ma1_len > 0:
             count_len = min(self.bar_len, self.para_ma1_len)

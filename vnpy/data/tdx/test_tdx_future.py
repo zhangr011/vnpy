@@ -53,7 +53,7 @@ api_01.qry_instrument()
 # 获取历史分钟线
 """
 ret,bars = api_01.get_bars('I2001', period='1min', callback=t1.display_bar, start_dt=datetime.now().replace(hour=0,minute=0,second=0,microsecond=0))
-line_close_oi = [{'close':x.close,'oi':x.openInterest} for x in bars]
+line_close_oi = [{'close':x.close_price,'oi':x.open_interest} for x in bars]
 import pandas as pd
 df = pd.DataFrame(line_close_oi)
 corr = df.corr()

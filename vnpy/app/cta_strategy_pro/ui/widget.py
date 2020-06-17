@@ -1,3 +1,4 @@
+import os
 from vnpy.event import Event, EventEngine
 from vnpy.trader.engine import MainEngine
 from vnpy.trader.ui import QtCore, QtGui, QtWidgets
@@ -295,7 +296,9 @@ class StrategyManager(QtWidgets.QFrame):
         if snapshot is None:
             return
         ui_snapshot = UiSnapshot()
-        ui_snapshot.show(snapshot_file="", d=snapshot)
+        trade_csv = os.path.abspath(os.path.join(self.cta_engine.get_data_path(), f'{self.strategy_name}_trade.csv'))
+        tns_csv = os.path.abspath(os.path.join(self.cta_engine.get_data_path(), f'{self.strategy_name}_tns.csv'))
+        ui_snapshot.show(snapshot_file="", d=snapshot, trade_file=trade_csv, tns_file=tns_csv)
 
 class DataMonitor(QtWidgets.QTableWidget):
     """

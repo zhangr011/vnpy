@@ -264,6 +264,7 @@ class MainEngine:
         if gateway:
             return gateway.query_history(req)
         else:
+            self.write_log(f'网关为空，请检查合约得网关是否与连接得网关一致')
             return None
 
     def close(self) -> None:

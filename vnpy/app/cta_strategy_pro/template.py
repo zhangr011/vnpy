@@ -1512,6 +1512,14 @@ class CtaProFutureTemplate(CtaProTemplate):
                 self.write_log(u'{}涨停，不做cover'.format(order_vt_symbol))
                 return
 
+            pos = self.cta_engine.get_position_holding(vt_symbol=order_vt_symbol)
+            if pos is None:
+                self.write_error(f'{self.strategy_name}无法获取{order_vt_symbol}的持仓信息，无法平仓')
+                return
+            if pos.short_pos < order_volume:
+                self.write_error(f'{self.strategy_name}{order_vt_symbol}的持仓空单{pos.short_pos}不满足平仓{order_volume}要求，无法平仓')
+                return
+
             # 发送委托
             vt_orderids = self.cover(price=cover_price,
                                      volume=order_volume,
@@ -1551,6 +1559,13 @@ class CtaProFutureTemplate(CtaProTemplate):
                 self.write_log(u'{}涨停，不做sell'.format(order_vt_symbol))
                 return
 
+            pos = self.cta_engine.get_position_holding(vt_symbol=order_vt_symbol)
+            if pos is None:
+                self.write_error(f'{self.strategy_name}无法获取{order_vt_symbol}的持仓信息，无法平仓')
+                return
+            if pos.long_pos < order_volume:
+                self.write_error(f'{self.strategy_name}{order_vt_symbol}的持仓多单{pos.long_pos}不满足平仓{order_volume}要求，无法平仓')
+                return
             # 发送委托
             vt_orderids = self.sell(price=sell_price,
                                     volume=order_volume,
