@@ -6,6 +6,8 @@ import urllib
 import hashlib
 import hmac
 import time
+import json
+
 from copy import copy
 from datetime import datetime, timedelta
 from enum import Enum
@@ -37,7 +39,7 @@ from vnpy.trader.object import (
 )
 from vnpy.trader.event import EVENT_TIMER
 from vnpy.event import Event
-
+from vnpy.trader.utility import print_dict
 REST_HOST = "https://www.binance.com"
 WEBSOCKET_TRADE_HOST = "wss://stream.binance.com:9443/ws/"
 WEBSOCKET_DATA_HOST = "wss://stream.binance.com:9443/stream?streams="
@@ -168,6 +170,9 @@ class BinanceGateway(BaseGateway):
             func()
             self.query_functions.append(func)
 
+    def get_order(self, orderid: str):
+        return self.rest_api.get_order(orderid)
+
 class BinanceRestApi(RestClient):
     """
     BINANCE REST API
@@ -196,6 +201,10 @@ class BinanceRestApi(RestClient):
 
         self.assets = {}    # 币资产的合约信息， symbol: contract
         self.positions = {}  # 币持仓信息， symbol: position
+
+        self.orders = {}
+
+        self.accountid = ""
 
     def sign(self, request):
         """
@@ -333,6 +342,10 @@ class BinanceRestApi(RestClient):
             self.order_count += 1
             return self.order_count
 
+    def get_order(self, orderid: str):
+        """返回缓存的Order"""
+        return self.orders.get(orderid, None)
+
     def send_order(self, req: OrderRequest):
         """"""
         orderid = str(self.connect_time + self._new_order_id())
@@ -340,6 +353,11 @@ class BinanceRestApi(RestClient):
             orderid,
             self.gateway_name
         )
+        order.accountid = self.accountid
+        order.vt_accountid = f"{self.gateway_name}.{self.accountid}"
+        order.datetime = datetime.now()
+        self.orders.update({orderid: copy(order)})
+        self.gateway.write_log(f'委托返回订单更新:{order.__dict__}')
         self.gateway.on_order(order)
 
         data = {
@@ -439,8 +457,11 @@ class BinanceRestApi(RestClient):
     def on_query_account(self, data, request):
         """"""
         # ==》 account event
+        if not self.accountid:
+            self.accountid = self.gateway_name
+
         account = AccountData(
-            accountid=self.gateway_name,
+            accountid=self.accountid,
             balance=0,
             frozen=0,
             gateway_name=self.gateway_name
@@ -476,6 +497,7 @@ class BinanceRestApi(RestClient):
             time = dt.strftime("%Y-%m-%d %H:%M:%S")
 
             order = OrderData(
+                accountid=self.accountid,
                 orderid=d["clientOrderId"],
                 symbol=d["symbol"],
                 exchange=Exchange.BINANCE,
@@ -488,6 +510,8 @@ class BinanceRestApi(RestClient):
                 time=time,
                 gateway_name=self.gateway_name,
             )
+            self.orders.update({order.orderid: copy(order)})
+            self.gateway.write_log(f'返回订单查询结果：{order.__dict__}')
             self.gateway.on_order(order)
 
         self.gateway.write_log("委托信息查询成功")
@@ -551,6 +575,13 @@ class BinanceRestApi(RestClient):
         """
         order = request.extra
         order.status = Status.REJECTED
+        self.orders.update({order.orderid: copy(order)})
+        self.gateway.write_log(f'订单委托失败:{order.__dict__}')
+        if not order.accountid:
+            order.accountid = self.accountid
+            order.vt_accountid = f"{self.gateway_name}.{self.accountid}"
+        if not order.datetime:
+            order.datetime = datetime.now()
         self.gateway.on_order(order)
 
         msg = f"委托失败，状态码：{status_code}，信息：{request.response.text}"
@@ -564,6 +595,13 @@ class BinanceRestApi(RestClient):
         """
         order = request.extra
         order.status = Status.REJECTED
+        self.orders.update({order.orderid: copy(order)})
+        self.gateway.write_log(f'发送订单异常:{order.__dict__}')
+        if not order.accountid:
+            order.accountid = self.accountid
+            order.vt_accountid = f"{self.gateway_name}.{self.accountid}"
+        if not order.datetime:
+            order.datetime = datetime.now()
         self.gateway.on_order(order)
 
         # Record exception if not ConnectionError
@@ -691,7 +729,10 @@ class BinanceTradeWebsocketApi(WebsocketClient):
             self.on_order(packet)
 
     def on_account(self, packet):
-        """"""
+        """web socket的账号更新信息"""
+
+        # 这里不处理，改为定时resful查询进行更新
+        """
         for d in packet["B"]:
             account = AccountData(
                 accountid=d["a"],
@@ -702,31 +743,49 @@ class BinanceTradeWebsocketApi(WebsocketClient):
 
             if account.balance:
                 self.gateway.on_account(account)
+        """
+        return
 
     def on_order(self, packet: dict):
         """"""
+        self.gateway.write_log('ws返回订单更新:\n'.format(json.dumps(packet, indent=2)))
         dt = datetime.fromtimestamp(packet["O"] / 1000)
         time = dt.strftime("%Y-%m-%d %H:%M:%S")
 
-        if packet["C"] == "null":
+        if packet["C"] == "null" or len(packet['C']) == 0:
             orderid = packet["c"]
         else:
             orderid = packet["C"]
 
-        order = OrderData(
-            symbol=packet["s"],
-            exchange=Exchange.BINANCE,
-            orderid=orderid,
-            type=ORDERTYPE_BINANCE2VT[packet["o"]],
-            direction=DIRECTION_BINANCE2VT[packet["S"]],
-            price=float(packet["p"]),
-            volume=float(packet["q"]),
-            traded=float(packet["z"]),
-            status=STATUS_BINANCE2VT[packet["X"]],
-            time=time,
-            gateway_name=self.gateway_name
-        )
-
+        # 尝试从缓存中获取订单
+        order = self.gateway.get_order(orderid)
+        if order:
+            order.traded = float(packet["z"])
+            order.status = STATUS_BINANCE2VT[packet["X"]]
+            if order.status in [Status.CANCELLED, Status.REJECTED]:
+                order.cancel_time = time
+            if len(order.sys_orderid) == 0:
+                order.sys_orderid = str(packet["i"])
+        else:
+            self.gateway.write_log(f'缓存中根据orderid:{orderid} 找不到Order,创建一个新的')
+            self.gateway.write_log(print_dict(packet))
+            order = OrderData(
+                accountid=self.gateway_name,
+                symbol=packet["s"],
+                exchange=Exchange.BINANCE,
+                orderid=orderid,
+                sys_orderid=str(packet['i']),
+                type=ORDERTYPE_BINANCE2VT[packet["o"]],
+                direction=DIRECTION_BINANCE2VT[packet["S"]],
+                price=float(packet["p"]),
+                volume=float(packet["q"]),
+                traded=float(packet["z"]),
+                status=STATUS_BINANCE2VT[packet["X"]],
+                datetime=dt,
+                time=time,
+                gateway_name=self.gateway_name
+            )
+        self.gateway.write_log(f'WS订单更新:\n{order.__dict__}')
         self.gateway.on_order(order)
 
         # Push trade event
@@ -738,6 +797,7 @@ class BinanceTradeWebsocketApi(WebsocketClient):
         trade_time = trade_dt.strftime("%Y-%m-%d %H:%M:%S")
 
         trade = TradeData(
+            accountid=self.gateway_name,
             symbol=order.symbol,
             exchange=order.exchange,
             orderid=order.orderid,
@@ -746,8 +806,10 @@ class BinanceTradeWebsocketApi(WebsocketClient):
             price=float(packet["L"]),
             volume=trade_volume,
             time=trade_time,
+            datetime=trade_dt,
             gateway_name=self.gateway_name,
         )
+        self.gateway.write_log(f'WS成交更新:\n{trade.__dict__}')
         self.gateway.on_trade(trade)
 
 

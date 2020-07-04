@@ -959,7 +959,7 @@ class BinancefTradeWebsocketApi(WebsocketClient):
             price=float(ord_data["L"]),
             volume=trade_volume,
             time=trade_time,
-            datetime=trade_time,
+            datetime=trade_dt,
             gateway_name=self.gateway_name,
         )
         self.gateway.write_log(f'WS成交更新:\n{trade.__dict__}')
