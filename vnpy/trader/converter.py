@@ -29,7 +29,8 @@ class OffsetConverter:
         #     return
 
         holding = self.get_position_holding(position.vt_symbol, position.gateway_name)
-        holding.update_position(position)
+        if holding:
+            holding.update_position(position)
 
     def update_trade(self, trade: TradeData) -> None:
         """"""
@@ -66,6 +67,8 @@ class OffsetConverter:
         holding = self.holdings.get(k, None)
         if not holding:
             contract = self.main_engine.get_contract(vt_symbol)
+            if contract is None:
+                return None
             holding = PositionHolding(contract)
             self.holdings[k] = holding
         return holding

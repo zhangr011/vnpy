@@ -574,6 +574,7 @@ class CtaStockTemplate(CtaTemplate):
         :return:
         """
         self.write_log(u'init_position(),初始化持仓')
+        subscribe_symbols = []
 
         if len(self.gt.dn_grids) <= 0:
             # 加载已开仓的多数据，网格JSON
@@ -614,6 +615,13 @@ class CtaStockTemplate(CtaTemplate):
                                        .format(lg.vt_symbol, lg.open_price, lg.volume, lg.open_time))
 
                         self.positions.update({lg.vt_symbol: pos})
+
+                    if len(lg.vt_symbol) > 0 and lg.vt_symbol not in self.vt_symbols and lg.vt_symbol not in subscribe_symbols:
+                        subscribe_symbols.append(lg.vt_symbol)
+
+            for vt_symbol in subscribe_symbols:
+                self.write_log(f'{vt_symbol}不在配置清单中，添加行情订阅')
+                self.cta_engine.subscribe_symbol(strategy_name=self.strategy_name, vt_symbol=vt_symbol)
 
         self.gt.save()
         self.display_grids()
@@ -1301,6 +1309,18 @@ class CtaStockTemplate(CtaTemplate):
         """显示事务的过程记录=》 log"""
         if not self.inited:
             return
+
+        if not self.backtesting:
+            for vt_symbol in self.vt_symbols:
+                name = self.cta_engine.get_name(vt_symbol)
+                price = self.cta_engine.get_price(vt_symbol)
+                self.write_log('%-11s'%vt_symbol + '[%-12s'%name + f'] 当前价格: {price}')
+
+            self.write_log(f'当前委托状态:{self.entrust}')
+
+            if len(self.active_orders) > 0:
+                self.write_log('当前活动订单:{}'.format(self.active_orders))
+
         if hasattr(self, 'policy'):
             policy = getattr(self, 'policy')
             op = getattr(policy, 'to_json', None)

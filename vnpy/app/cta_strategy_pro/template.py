@@ -7,7 +7,7 @@ import traceback
 import zlib
 
 from abc import ABC
-from copy import copy
+from copy import copy,deepcopy
 from typing import Any, Callable
 from logging import INFO, ERROR
 from datetime import datetime
@@ -913,7 +913,8 @@ class CtaProTemplate(CtaTemplate):
             return
         none_mi_price = max(none_mi_tick.last_price, none_mi_tick.bid_price_1)
 
-        grid = copy(none_mi_grid)
+        grid = deepcopy(none_mi_grid)
+        grid.id = str(uuid.uuid1())
 
         # 委托卖出非主力合约
         vt_orderids = self.sell(price=none_mi_price,
@@ -925,7 +926,6 @@ class CtaProTemplate(CtaTemplate):
             self.write_log(f'切换合约,委托卖出非主力合约{none_mi_symbol}持仓:{none_mi_grid.volume}')
 
             # 添加买入主力合约
-            grid.id = str(uuid.uuid1())
             grid.snapshot.update({'mi_symbol': self.vt_symbol, 'open_price': self.cur_mi_price})
             self.gt.dn_grids.append(grid)
 
@@ -982,7 +982,8 @@ class CtaProTemplate(CtaTemplate):
             return
         none_mi_price = max(none_mi_tick.last_price, none_mi_tick.bid_price_1)
 
-        grid = copy(none_mi_grid)
+        grid = deepcopy(none_mi_grid)
+        grid.id = str(uuid.uuid1())
         # 委托平空非主力合约
         vt_orderids = self.cover(price=none_mi_price,
                                  volume=none_mi_grid.volume,
@@ -1128,7 +1129,7 @@ class CtaProFutureTemplate(CtaProTemplate):
 
     def on_trade(self, trade: TradeData):
         """交易更新"""
-        self.write_log(u'{},交易更新:{},当前持仓：{} '
+        self.write_log(u'{},交易更新事件:{},当前持仓：{} '
                        .format(self.cur_datetime,
                                trade.__dict__,
                                self.position.pos))
@@ -1175,7 +1176,7 @@ class CtaProFutureTemplate(CtaProTemplate):
         if order_info:
             volume = order_info.get('volume')
             if volume != order.volume:
-                self.write_log(f'调整{order.vt_orderid} volume:{volume}=>{order.volume}')
+                self.write_log(f'修正order被拆单得情况，调整{order.vt_orderid} volume:{volume}=>{order.volume}')
                 order_info.update({'volume': order.volume})
 
     def on_order(self, order: OrderData):
@@ -1222,7 +1223,7 @@ class CtaProFutureTemplate(CtaProTemplate):
         :param order:
         :return:
         """
-        self.write_log(u'{},委托单:{}全部完成'.format(order.time, order.vt_orderid))
+        self.write_log(u'委托单全部完成:{}'.format(order.__dict__))
         order_info = self.active_orders[order.vt_orderid]
 
         # 通过vt_orderid，找到对应的网格
@@ -1265,7 +1266,8 @@ class CtaProFutureTemplate(CtaProTemplate):
                 self.write_log(f'剩余委托单号:{grid.order_ids}')
 
             self.gt.save()
-
+        else:
+            self.write_error(f'on_trade找不到对应grid')
         # 在策略得活动订单中，移除
         self.active_orders.pop(order.vt_orderid, None)
 
@@ -1379,7 +1381,6 @@ class CtaProFutureTemplate(CtaProTemplate):
                 info.update({'retry': order_retry})
 
             self.gt.save()
-
 
         elif old_order['direction'] == Direction.SHORT and order_type == OrderType.FAK:
             # 删除旧的委托记录
@@ -1771,11 +1772,16 @@ class CtaProFutureTemplate(CtaProTemplate):
             if self.activate_today_lock:
                 self.write_log(u'昨仓多单:{},没有今仓,满足条件,直接平昨仓'.format(grid_pos.long_yd))
 
-
             sell_price = self.cta_engine.get_price(sell_symbol)
             if sell_price is None:
                 self.write_error(f'暂时不能获取{sell_symbol}价格，不能平仓')
                 return False
+
+            # 实盘使用对价
+            if not self.backtesting:
+                sell_tick = self.cta_engine.get_tick(sell_symbol)
+                if sell_tick and 0 < sell_tick.bid_price_1 < sell_price:
+                    sell_price = sell_tick.bid_price_1
 
             # 发出平多委托
             if grid.traded_volume > 0:
@@ -1870,6 +1876,12 @@ class CtaProFutureTemplate(CtaProTemplate):
             if cover_price is None:
                 self.write_error(f'暂时没有{cover_symbol}行情，不能执行平仓')
                 return False
+
+            # 实盘使用对价
+            if not self.backtesting:
+                cover_tick = self.cta_engine.get_tick(cover_symbol)
+                if cover_tick and 0 < cover_price < cover_tick.ask_price_1 :
+                    cover_price = cover_tick.ask_price_1
 
             # 发出cover委托
             if grid.traded_volume > 0:

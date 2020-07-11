@@ -90,6 +90,8 @@ class BaseGateway(ABC):
         self.gateway_name: str = gateway_name
         self.logger = None
 
+        self.accountid = ""
+
         self.create_logger()
 
         # 所有订阅on_bar的都会添加
@@ -124,6 +126,7 @@ class BaseGateway(ABC):
         Tick event push.
         Tick event of a specific vt_symbol is also pushed.
         """
+        self.prices.update({tick.vt_symbol: tick.last_price})
         self.on_event(EVENT_TICK, tick)
         # self.on_event(EVENT_TICK + tick.vt_symbol, tick)
 

@@ -466,8 +466,8 @@ class BinanceRestApi(RestClient):
             frozen=0,
             gateway_name=self.gateway_name
         )
-        self.gateway.on_account(account)
 
+        put_event_account = True
         # ==> position event
         for account_data in data["balances"]:
             pos = PositionData(
@@ -488,7 +488,27 @@ class BinanceRestApi(RestClient):
                 self.positions.update({pos.symbol: pos})
                 self.gateway.on_position(copy(pos))
 
-        self.gateway.write_log("账户资金查询成功")
+                if pos.symbol == 'USDT':
+                    pos.cur_price = 1
+                    account.balance += pos.volume
+                else:
+                    price = self.gateway.prices.get(f'{pos.symbol}USDT.{pos.exchange.value}', None)
+
+                    if price is None:
+                        req = SubscribeRequest(
+                            symbol=f'{pos.symbol}USDT',
+                            exchange=pos.exchange
+                        )
+                        self.gateway.subscribe(req)
+                        put_event_account = False
+                    else:
+                        pos.cur_price = price
+                        account.balance += pos.volume * price
+
+
+        if put_event_account:
+            self.gateway.on_account(account)
+        #self.gateway.write_log("账户资金查询成功")
 
     def on_query_order(self, data, request):
         """"""

@@ -434,7 +434,6 @@ class KLineWidget(KeyWraper):
 
         # 交易事务有关的线段
         self.list_trans = []  # 交易事务( {'start_time','end_time','tns_type','start_price','end_price','start_x','end_x','completed'}
-        self.list_trans_lines = []
 
         # 交易记录相关的箭头
         self.list_trade_arrow = []  # 交易图标 list
@@ -445,6 +444,9 @@ class KLineWidget(KeyWraper):
         self.list_markup = []
         self.x_t_markup_map = OrderedDict()  # x轴与标记的映射
         self.t_markup_dict = OrderedDict()  # t 时间的标记
+
+        # 缠论相关的线段
+        self.list_bi = []
 
         # 所有K线上指标
         self.main_color_pool = deque(['red', 'green', 'yellow', 'white'])
@@ -935,7 +937,6 @@ class KLineWidget(KeyWraper):
         self.t_trade_dict = OrderedDict()
 
         self.list_trans = []
-        self.list_trans_lines = []
 
         self.list_markup = []
         self.x_t_markup_map = OrderedDict()
@@ -1115,7 +1116,7 @@ class KLineWidget(KeyWraper):
             if direction == Direction.LONG:
                 if offset == Offset.OPEN:
                     # buy
-                    arrow = pg.ArrowItem(pos=(x, price), angle=135, brush=None, pen={'color': 'r', 'width': 1},
+                    arrow = pg.ArrowItem(pos=(x, price), angle=135, brush=None, pen={'color': 'y', 'width': 2},
                                          tipAngle=30, baseAngle=20, tailLen=10, tailWidth=2)
                     # d = {
                     #    "pos": (x, price),
@@ -1129,17 +1130,17 @@ class KLineWidget(KeyWraper):
                     # arrow.setData([d])
                 else:
                     # cover
-                    arrow = pg.ArrowItem(pos=(x, price), angle=0, brush=(255, 0, 0), pen=None, headLen=20, headWidth=20,
+                    arrow = pg.ArrowItem(pos=(x, price), angle=0, brush='y', pen=None, headLen=20, headWidth=20,
                                          tailLen=10, tailWidth=2)
             # 空信号
             elif direction == Direction.SHORT:
                 if offset == Offset.CLOSE:
                     # sell
-                    arrow = pg.ArrowItem(pos=(x, price), angle=0, brush=(0, 255, 0), pen=None, headLen=20, headWidth=20,
+                    arrow = pg.ArrowItem(pos=(x, price), angle=0, brush='g', pen=None, headLen=20, headWidth=20,
                                          tailLen=10, tailWidth=2)
                 else:
                     # short
-                    arrow = pg.ArrowItem(pos=(x, price), angle=-135, brush=None, pen={'color': 'g', 'width': 1},
+                    arrow = pg.ArrowItem(pos=(x, price), angle=-135, brush=None, pen={'color': 'g', 'width': 2},
                                          tipAngle=30, baseAngle=20, tailLen=10, tailWidth=2)
             if arrow:
                 self.pi_main.addItem(arrow)
@@ -1374,6 +1375,84 @@ class KLineWidget(KeyWraper):
 
                 self.add_markup(t_value=t_value, price=price, txt=markup_text)
 
+
+    def add_bi(self, df_bi, color='b', style= None):
+        """
+        添加缠论_笔（段）_画线
+        # direction,(1/-1)，start, end, high, low
+        # 笔： color = 'y', style: QtCore.Qt.DashLine
+        # 段： color = 'b',
+        :return:
+        """
+        if len(self.datas) == 0 or len(df_bi) == 0:
+            print(u'No datas exist', file=sys.stderr)
+            return
+
+        for index, row in df_bi.iterrows():
+
+            start_time = row['start']
+            if not isinstance(start_time, datetime) and isinstance(start_time, str):
+                start_time = datetime.strptime(start_time, '%Y-%m-%d %H:%M:%S')
+
+            end_time = row['end']
+            if not isinstance(end_time, datetime) and isinstance(end_time, str):
+                end_time = datetime.strptime(end_time, '%Y-%m-%d %H:%M:%S')
+
+            start_x = self.axisTime.get_x_by_time(start_time)
+            end_x = self.axisTime.get_x_by_time(end_time)
+
+            if int(row['direction']) == 1:
+                pos = np.array([[start_x, row['low']], [end_x, row['high']]])
+            elif int(row['direction']) == -1:
+                pos = np.array([[start_x, row['high']], [end_x, row['low']]])
+            else:
+                continue
+
+            if style:
+                pen = pg.mkPen({'color': color, 'width': 1, 'style': QtCore.Qt.DashLine})
+            else:
+                pen = pg.mkPen({'color': color, 'width': 1})
+
+            bi = pg.GraphItem(pos=pos, adj=np.array([[0, 1]]), pen=pen)
+            self.pi_main.addItem(bi)
+
+
+    def add_zs(self, df_zs, color='y'):
+        """
+        添加缠论中枢_画线
+        # direction,(1/-1)，start, end, high, low
+        # 笔中枢： color ='y'
+        # 段中枢： color = 'b'
+        :return:
+        """
+        if len(self.datas) == 0 or len(df_zs) == 0:
+            print(u'No datas exist', file=sys.stderr)
+            return
+
+        for index,row in df_zs.iterrows():
+
+            start_time = row['start']
+            if not isinstance(start_time, datetime) and isinstance(start_time, str):
+                start_time = datetime.strptime(start_time, '%Y-%m-%d %H:%M:%S')
+
+            end_time = row['end']
+            if not isinstance(end_time, datetime) and isinstance(end_time, str):
+                end_time = datetime.strptime(end_time, '%Y-%m-%d %H:%M:%S')
+
+            start_x = self.axisTime.get_x_by_time(start_time)
+            end_x = self.axisTime.get_x_by_time(end_time)
+
+            pos_top = np.array([[start_x, row['high']], [end_x, row['high']]])
+            pos_buttom = np.array([[start_x, row['low']], [end_x, row['low']]])
+            pos_left = np.array([[start_x, row['high']], [start_x, row['low']]])
+            pos_right = np.array([[end_x, row['high']], [end_x, row['low']]])
+
+            pen = pg.mkPen({'color': color, 'width': 1})
+            for pos in [pos_top, pos_buttom, pos_left, pos_right]:
+                line = pg.GraphItem(pos=pos, adj=np.array([[0, 1]]), pen=pen)
+                self.pi_main.addItem(line)
+
+
     def loadData(self, df_datas, main_indicators=[], sub_indicators=[]):
         """
         载入pandas.DataFrame数据
@@ -1562,6 +1641,34 @@ class GridKline(QtWidgets.QWidget):
                     self.kline_dict[kline_name].add_markups(df_markup=df_markup,
                                                        include_list=kline_setting.get('dist_include_list', []),
                                                        exclude_list=['buy', 'short', 'sell', 'cover'])
+
+                # 笔
+                bi_file = kline_setting.get('bi_file', None)
+                if bi_file and os.path.exists(bi_file):
+                    print(f'loading {bi_file}')
+                    df_bi = pd.read_csv(bi_file)
+                    self.kline_dict[kline_name].add_bi(df_bi, color='y', style= QtCore.Qt.DashLine)
+
+                # 段
+                duan_file = kline_setting.get('duan_file', None)
+                if duan_file and os.path.exists(duan_file):
+                    print(f'loading {duan_file}')
+                    df_duan = pd.read_csv(duan_file)
+                    self.kline_dict[kline_name].add_bi(df_duan, color='b')
+
+                # 笔中枢
+                bi_zs_file = kline_setting.get('bi_zs_file', None)
+                if bi_zs_file and os.path.exists(bi_zs_file):
+                    print(f'loading {bi_zs_file}')
+                    df_bi_zs = pd.read_csv(bi_zs_file)
+                    self.kline_dict[kline_name].add_zs(df_bi_zs, color='y')
+
+                # 段中枢
+                duan_zs_file = kline_setting.get('duan_zs_file', None)
+                if duan_zs_file and os.path.exists(duan_zs_file):
+                    print(f'loading {duan_zs_file}')
+                    df_duan_zs = pd.read_csv(duan_zs_file)
+                    self.kline_dict[kline_name].add_zs(df_duan_zs, color='b')
 
         except Exception as ex:
             traceback.print_exc()

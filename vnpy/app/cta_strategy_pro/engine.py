@@ -189,6 +189,7 @@ class CtaEngine(BaseEngine):
         register the funcs to main_engine
         :return:
         """
+        self.main_engine.get_name = self.get_name
         self.main_engine.get_strategy_status = self.get_strategy_status
         self.main_engine.get_strategy_pos = self.get_strategy_pos
         self.main_engine.compare_pos = self.compare_pos
@@ -200,6 +201,7 @@ class CtaEngine(BaseEngine):
         self.main_engine.reload_strategy = self.reload_strategy
         self.main_engine.save_strategy_data = self.save_strategy_data
         self.main_engine.save_strategy_snapshot = self.save_strategy_snapshot
+        self.main_engine.clean_strategy_cache = self.clean_strategy_cache
 
         # 注册到远程服务调用
         if self.main_engine.rpc_service:
@@ -214,6 +216,7 @@ class CtaEngine(BaseEngine):
             self.main_engine.rpc_service.register(self.main_engine.reload_strategy)
             self.main_engine.rpc_service.register(self.main_engine.save_strategy_data)
             self.main_engine.rpc_service.register(self.main_engine.save_strategy_snapshot)
+            self.main_engine.rpc_service.register(self.main_engine.clean_strategy_cache)
 
     def process_timer_event(self, event: Event):
         """ 处理定时器事件"""
@@ -795,6 +798,15 @@ class CtaEngine(BaseEngine):
         return True
 
     @lru_cache()
+    def get_name(self, vt_symbol: str):
+        """查询合约的name"""
+        contract = self.main_engine.get_contract(vt_symbol)
+        if contract is None:
+            self.write_error(f'查询不到{vt_symbol}合约信息')
+            return vt_symbol
+        return contract.name
+
+    @lru_cache()
     def get_size(self, vt_symbol: str):
         """查询合约的size"""
         contract = self.main_engine.get_contract(vt_symbol)
@@ -1257,6 +1269,15 @@ class CtaEngine(BaseEngine):
         except Exception as ex:
             self.write_error(u'保存策略{}数据异常:'.format(strategy_name, str(ex)))
             self.write_error(traceback.format_exc())
+
+    def clean_strategy_cache(self, strategy_name):
+        """清除策略K线缓存文件"""
+        cache_file = os.path.abspath(os.path.join(self.get_data_path(), f'{strategy_name}_klines.pkb2'))
+        if os.path.exists(cache_file):
+            self.write_log(f'移除策略缓存文件:{cache_file}')
+            os.remove(cache_file)
+        else:
+            self.write_log(f'策略缓存文件不存在:{cache_file}')
 
     def get_strategy_snapshot(self, strategy_name):
         """实时获取策略的K线切片（比较耗性能）"""

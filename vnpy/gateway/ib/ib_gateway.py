@@ -330,7 +330,13 @@ class IbApi(EWrapper):
         if exchange is Exchange.IDEALPRO:
             tick.last_price = (tick.bid_price_1 + tick.ask_price_1) / 2
             tick.datetime = datetime.now()
-        self.gateway.on_tick(copy(tick))
+        # 有些错误数据过来，例如ask_price1 = -1.0
+        if tick.ask_price_1 < tick.last_price:
+            return
+        if tick.bid_price_1 < min(tick.last_price - 10 * contract.pricetick, tick.last_price * 0.8):
+            return
+        if tick.last_price != 0:
+            self.gateway.on_tick(copy(tick))
 
     def tickSize(
         self, reqId: TickerId, tickType: TickType, size: int
@@ -346,8 +352,10 @@ class IbApi(EWrapper):
         tick = self.ticks[reqId]
         name = TICKFIELD_IB2VT[tickType]
         setattr(tick, name, size)
-
-        self.gateway.on_tick(copy(tick))
+        if tick.ask_volume_1 == 0 or tick.bid_volume_1 == 0:
+            return
+        if tick.last_price != 0:
+            self.gateway.on_tick(copy(tick))
 
     def tickString(
         self, reqId: TickerId, tickType: TickType, value: str
@@ -362,8 +370,12 @@ class IbApi(EWrapper):
 
         tick = self.ticks[reqId]
         tick.datetime = datetime.fromtimestamp(int(value))
-
-        self.gateway.on_tick(copy(tick))
+        if tick.ask_price_1 < tick.last_price:
+            return
+        if tick.bid_price_1 < tick.last_price * 0.8:
+            return
+        if tick.last_price != 0:
+            self.gateway.on_tick(copy(tick))
 
     def orderStatus(  # pylint: disable=invalid-name
         self,
@@ -381,6 +393,7 @@ class IbApi(EWrapper):
     ):
         """
         Callback of order status update.
+        委托单状态变化
         """
         super().orderStatus(
             orderId,
@@ -398,6 +411,10 @@ class IbApi(EWrapper):
 
         orderid = str(orderId)
         order = self.orders.get(orderid, None)
+        if order is None:
+            self.gateway.write_error(f'无法获取{orderid}在本地的缓存委托单')
+            return
+
         order.traded = filled
 
         # To filter PendingCancel status
@@ -422,8 +439,11 @@ class IbApi(EWrapper):
         )
 
         orderid = str(orderId)
+        # ==> 生成 xxxx-HKD-STK等格式的合约名称
+        symbol = generate_symbol(ib_contract)
+
         order = OrderData(
-            symbol=ib_contract.conId,
+            symbol=symbol,
             exchange=EXCHANGE_IB2VT.get(
                 ib_contract.exchange, ib_contract.exchange),
             type=ORDERTYPE_IB2VT[ib_order.orderType],
@@ -475,6 +495,7 @@ class IbApi(EWrapper):
     ):
         """
         Callback of position update.
+        持仓更新
         """
         super().updatePortfolio(
             contract,
@@ -527,14 +548,17 @@ class IbApi(EWrapper):
     def contractDetails(self, reqId: int, contractDetails: ContractDetails):  # pylint: disable=invalid-name
         """
         Callback of contract data update.
+        合约数据更新
         """
         super().contractDetails(reqId, contractDetails)
 
         # Generate symbol from ib contract details
         ib_contract = contractDetails.contract
+        # 合约乘数
         if not ib_contract.multiplier:
             ib_contract.multiplier = 1
 
+        # ==> 生成 xxxx-HKD-STK等格式的合约名称
         symbol = generate_symbol(ib_contract)
 
         # Generate contract
@@ -562,19 +586,22 @@ class IbApi(EWrapper):
     ):  # pylint: disable=invalid-name
         """
         Callback of trade data update.
+        交易数据更新
         """
         super().execDetails(reqId, contract, execution)
 
         # today_date = datetime.now().strftime("%Y%m%d")
+        dt = datetime.strptime(execution.time, "%Y%m%d  %H:%M:%S")
         trade = TradeData(
-            symbol=contract.conId,
+            symbol=generate_symbol(contract),
             exchange=EXCHANGE_IB2VT.get(contract.exchange, contract.exchange),
             orderid=str(execution.orderId),
             tradeid=str(execution.execId),
             direction=DIRECTION_IB2VT[execution.side],
             price=execution.price,
             volume=execution.shares,
-            time=datetime.strptime(execution.time, "%Y%m%d  %H:%M:%S"),
+            datetime=dt,
+            time=dt.strftime('%H:%M:%S'),
             gateway_name=self.gateway_name,
         )
 
@@ -583,6 +610,7 @@ class IbApi(EWrapper):
     def managedAccounts(self, accountsList: str):
         """
         Callback of all sub accountid.
+        所有子账号信息更新
         """
         super().managedAccounts(accountsList)
 
@@ -596,6 +624,7 @@ class IbApi(EWrapper):
     def historicalData(self, reqId: int, ib_bar: IbBarData):
         """
         Callback of history data update.
+        历史行情
         """
         dt = datetime.strptime(ib_bar.date, "%Y%m%d %H:%M:%S")
 
@@ -617,6 +646,7 @@ class IbApi(EWrapper):
     def historicalDataEnd(self, reqId: int, start: str, end: str):
         """
         Callback of history data finished.
+        行情数据推送结束
         """
         self.history_condition.acquire()
         self.history_condition.notify()
@@ -625,6 +655,7 @@ class IbApi(EWrapper):
     def connect(self, host: str, port: int, clientid: int, account: str):
         """
         Connect to TWS.
+        连接本地TWS
         """
         if self.status:
             self.gateway.write_log(f'已连接，不再重连')
@@ -650,6 +681,7 @@ class IbApi(EWrapper):
     def subscribe(self, req: SubscribeRequest):
         """
         Subscribe tick data update.
+        订阅行情
         """
         if not self.status:
             return
@@ -659,6 +691,7 @@ class IbApi(EWrapper):
             return
 
         # Extract ib contract detail
+        # vn symbol => ib contract
         ib_contract = generate_ib_contract(req.symbol, req.exchange)
         if not ib_contract:
             self.gateway.write_log("代码解析失败，请检查格式是否正确")
@@ -684,6 +717,7 @@ class IbApi(EWrapper):
     def send_order(self, req: OrderRequest):
         """
         Send a new order.
+        发送委托
         """
         if not self.status:
             return ""
@@ -698,6 +732,7 @@ class IbApi(EWrapper):
 
         self.orderid += 1
 
+        # vn symbol -> ib contract
         ib_contract = generate_ib_contract(req.symbol, req.exchange)
         if not ib_contract:
             return ""
@@ -719,12 +754,14 @@ class IbApi(EWrapper):
         self.client.reqIds(1)
 
         order = req.create_order_data(str(self.orderid), self.gateway_name)
+        order.datetime = datetime.now()
         self.gateway.on_order(order)
         return order.vt_orderid
 
     def cancel_order(self, req: CancelRequest):
         """
         Cancel an existing order.
+        撤单
         """
         if not self.status:
             return
@@ -738,7 +775,7 @@ class IbApi(EWrapper):
 
         self.reqid += 1
 
-        # 转换为ib的合约
+        # vn symbol => ib的合约
         ib_contract = generate_ib_contract(req.symbol, req.exchange)
 
         if req.end:
@@ -782,15 +819,21 @@ class IbApi(EWrapper):
         return history
 
     def load_contract_data(self):
-        """"""
-        f = shelve.open(self.data_filepath)
-        self.contracts = f.get("contracts", {})
-        f.close()
+        """
+        加载本地缓存合约数据
+        :return:
+        """
+        try:
+            f = shelve.open(self.data_filepath)
+            self.contracts = f.get("contracts", {})
+            f.close()
 
-        for contract in self.contracts.values():
-            self.gateway.on_contract(contract)
+            for contract in self.contracts.values():
+                self.gateway.on_contract(contract)
 
-        self.gateway.write_log("本地缓存合约信息加载成功")
+            self.gateway.write_log("本地缓存合约信息加载成功")
+        except Exception as ex:
+            self.gateway.write_error(f'本地缓存合约信息加载失败:{str(ex)}')
 
     def save_contract_data(self):
         """"""

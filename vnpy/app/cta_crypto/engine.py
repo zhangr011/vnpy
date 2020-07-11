@@ -184,6 +184,7 @@ class CtaEngine(BaseEngine):
         self.main_engine.reload_strategy = self.reload_strategy
         self.main_engine.save_strategy_data = self.save_strategy_data
         self.main_engine.save_strategy_snapshot = self.save_strategy_snapshot
+        self.main_engine.clean_strategy_cache = self.clean_strategy_cache
 
         # 注册到远程服务调用
         if self.main_engine.rpc_service:
@@ -198,6 +199,7 @@ class CtaEngine(BaseEngine):
             self.main_engine.rpc_service.register(self.main_engine.reload_strategy)
             self.main_engine.rpc_service.register(self.main_engine.save_strategy_data)
             self.main_engine.rpc_service.register(self.main_engine.save_strategy_snapshot)
+            self.main_engine.rpc_service.register(self.main_engine.clean_strategy_cache)
 
     def process_timer_event(self, event: Event):
         """ 处理定时器事件"""
@@ -217,7 +219,7 @@ class CtaEngine(BaseEngine):
                 # 主动获取所有策略得持仓信息
                 all_strategy_pos = self.get_all_strategy_pos()
 
-                if dt.minute % 5 == 0:
+                if dt.minute % 5 == 0 and self.engine_config.get('compare_pos',True):
                     # 比对仓位，使用上述获取得持仓信息，不用重复获取
                     self.compare_pos(strategy_pos_list=copy(all_strategy_pos))
 
@@ -1209,6 +1211,15 @@ class CtaEngine(BaseEngine):
             self.write_error(u'保存策略{}数据异常:'.format(strategy_name, str(ex)))
             self.write_error(traceback.format_exc())
 
+    def clean_strategy_cache(self, strategy_name):
+        """清除策略K线缓存文件"""
+        cache_file = os.path.abspath(os.path.join(self.get_data_path(), f'{strategy_name}_klines.pkb2'))
+        if os.path.exists(cache_file):
+            self.write_log(f'移除策略缓存文件:{cache_file}')
+            os.remove(cache_file)
+        else:
+            self.write_log(f'策略缓存文件不存在:{cache_file}')
+
     def get_strategy_snapshot(self, strategy_name):
         """实时获取策略的K线切片（比较耗性能）"""
         strategy = self.strategies.get(strategy_name, None)
@@ -1511,6 +1522,23 @@ class CtaEngine(BaseEngine):
         value = getattr(strategy, parameter, None)
         return value
 
+    def get_none_strategy_pos_list(self):
+        """获取非策略持有的仓位"""
+        # 格式 [  'strategy_name':'account', 'pos': [{'vt_symbol': '', 'direction': 'xxx', 'volume':xxx }] } ]
+        none_strategy_pos_file = os.path.abspath(os.path.join(os.getcwd(), 'data', 'none_strategy_pos.json'))
+        if not os.path.exists(none_strategy_pos_file):
+            return []
+        try:
+            with open(none_strategy_pos_file, encoding='utf8') as f:
+                pos_list = json.load(f)
+                if isinstance(pos_list, list):
+                    return pos_list
+
+            return []
+        except Exception as ex:
+            self.write_error(u'未能读取或解释{}'.format(none_strategy_pos_file))
+            return []
+
     def compare_pos(self, strategy_pos_list=[], auto_balance=False):
         """
         对比账号&策略的持仓,不同的话则发出微信提醒
@@ -1526,6 +1554,10 @@ class CtaEngine(BaseEngine):
         if len(strategy_pos_list) == 0:
             strategy_pos_list = self.get_all_strategy_pos()
         self.write_log(u'策略持仓清单:{}'.format(strategy_pos_list))
+
+        none_strategy_pos = self.get_none_strategy_pos_list()
+        if len(none_strategy_pos) > 0:
+            strategy_pos_list.extend(none_strategy_pos)
 
         # 需要进行对比得合约集合（来自策略持仓/账号持仓）
         vt_symbols = set()

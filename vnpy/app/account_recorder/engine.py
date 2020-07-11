@@ -40,7 +40,7 @@ from vnpy.trader.event import (
     EVENT_WARNING,
     EVENT_CRITICAL,
 )
-# from vnpy.trader.constant import Direction
+from vnpy.trader.constant import Direction, Exchange, Status
 from vnpy.trader.engine import BaseEngine, MainEngine
 from vnpy.trader.utility import get_trading_date, load_json, save_json
 from vnpy.data.mongo.mongo_data import MongoData
@@ -334,6 +334,9 @@ class AccountRecorder(BaseEngine):
         if len(order.sys_orderid) == 0:
             # 未有系统的委托编号，不做持久化
             order.sys_orderid = order.orderid
+        if order.status in [Status.SUBMITTING]:
+            return
+
         dt = getattr(order, 'datetime')
         if not dt:
             order_date = datetime.now().strftime('%Y-%m-%d')
@@ -350,9 +353,9 @@ class AccountRecorder(BaseEngine):
                'account_id': order.accountid,
                'sys_orderid': order.sys_orderid,
                'order_date': order_date,
-               'holder_id': getattr(order,'holder_id','')}
+               'holder_id': getattr(order, 'holder_id', '')}
 
-        data = copy.copy(order.__dict__)
+        data = copy.deepcopy(order.__dict__)
         data.update({'account_id': data.pop('accountid')})
         data.update({'order_date': order_date})
         data.update({'exchange': order.exchange.value})
@@ -360,6 +363,10 @@ class AccountRecorder(BaseEngine):
         data.update({'offset': order.offset.value})
         data.update({'type': order.type.value})
         data.update({'status': order.status.value})
+
+        if order.exchange in [Exchange.SSE, Exchange.SZSE]:
+            if hasattr(self.main_engine, 'get_name'):
+                data.update({'name': self.main_engine.get_name(order.vt_symbol)})
 
         self.update_data(db_name=ACCOUNT_DB_NAME, col_name=TODAY_ORDER_COL, fld=fld, data=data)
 
@@ -373,11 +380,11 @@ class AccountRecorder(BaseEngine):
                     'account_id': order.accountid,
                     'sys_orderid': order.sys_orderid,
                     'order_date': order_date,
-                    'holder_id': getattr(order,'holder_id','')}
+                    'holder_id': getattr(order, 'holder_id', '')}
 
             self.update_data(db_name=ACCOUNT_DB_NAME, col_name=HISTORY_ORDER_COL, fld=fld2, data=history_data)
 
-    def get_trading_date(self, dt:datetime):
+    def get_trading_date(self, dt: datetime):
         if self.is_7x24:
             return dt.strftime('%Y-%m-%d')
         else:
@@ -397,7 +404,7 @@ class AccountRecorder(BaseEngine):
         # 提前创建索引
         # db.today_trades.createIndex({'account_id':1,'vt_symbol':1,'vt_tradeid':1,'trade_date':1,'holder_id':1},{'name':'accountid_vtSymbol_vt_tradeid_trade_date_holder_id','unique':true})
 
-        data = copy.copy(trade.__dict__)
+        data = copy.deepcopy(trade.__dict__)
         data.update({'account_id': data.pop('accountid')})
         data.update({'trade_date': trade_date})
         data.update({'exchange': trade.exchange.value})

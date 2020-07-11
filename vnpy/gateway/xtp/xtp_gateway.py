@@ -308,7 +308,7 @@ class XtpMdApi(MdApi):
         tick.ask_volume_1, tick.ask_volume_2, tick.ask_volume_3, tick.ask_volume_4, tick.ask_volume_5 = data["ask_qty"][0:5]
 
         tick.name = get_vt_symbol_name(tick.vt_symbol)
-        self.gateway.prices.update({tick.vt_symbol: tick.last_price})
+        #self.gateway.prices.update({tick.vt_symbol: tick.last_price})
         self.gateway.on_tick(tick)
 
     def onSubOrderBook(self, data: dict, error: dict, last: bool) -> None:

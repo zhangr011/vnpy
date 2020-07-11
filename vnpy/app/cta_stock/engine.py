@@ -184,6 +184,7 @@ class CtaEngine(BaseEngine):
         register the funcs to main_engine
         :return:
         """
+        self.main_engine.get_name = self.get_name
         self.main_engine.get_strategy_status = self.get_strategy_status
         self.main_engine.get_strategy_pos = self.get_strategy_pos
         self.main_engine.compare_pos = self.compare_pos
@@ -195,6 +196,7 @@ class CtaEngine(BaseEngine):
         self.main_engine.reload_strategy = self.reload_strategy
         self.main_engine.save_strategy_data = self.save_strategy_data
         self.main_engine.save_strategy_snapshot = self.save_strategy_snapshot
+        self.main_engine.clean_strategy_cache = self.clean_strategy_cache
 
         # 注册到远程服务调用
         if self.main_engine.rpc_service:
@@ -209,6 +211,7 @@ class CtaEngine(BaseEngine):
             self.main_engine.rpc_service.register(self.main_engine.reload_strategy)
             self.main_engine.rpc_service.register(self.main_engine.save_strategy_data)
             self.main_engine.rpc_service.register(self.main_engine.save_strategy_snapshot)
+            self.main_engine.rpc_service.register(self.main_engine.clean_strategy_cache)
 
     def process_timer_event(self, event: Event):
         """ 处理定时器事件"""
@@ -1246,6 +1249,15 @@ class CtaEngine(BaseEngine):
             self.write_error(u'保存策略{}数据异常:'.format(strategy_name, str(ex)))
             self.write_error(traceback.format_exc())
 
+    def clean_strategy_cache(self, strategy_name):
+        """清除策略K线缓存文件"""
+        cache_file = os.path.abspath(os.path.join(self.get_data_path(), f'{strategy_name}_klines.pkb2'))
+        if os.path.exists(cache_file):
+            self.write_log(f'移除策略缓存文件:{cache_file}')
+            os.remove(cache_file)
+        else:
+            self.write_log(f'策略缓存文件不存在:{cache_file}')
+
     def get_strategy_snapshot(self, strategy_name):
         """实时获取策略的K线切片（比较耗性能）"""
         strategy = self.strategies.get(strategy_name, None)
@@ -1380,7 +1392,8 @@ class CtaEngine(BaseEngine):
                     self.class_module_map[class_name] = module_name
             return True
         except:  # noqa
-            msg = f"策略文件{module_name}加载失败，触发异常：\n{traceback.format_exc()}"
+            account = self.engine_config.get('accountid', '')
+            msg = f"cta_stock:{account}策略文件{module_name}加载失败，触发异常：\n{traceback.format_exc()}"
             self.write_log(msg=msg, level=logging.CRITICAL)
             return False
 
@@ -1615,8 +1628,8 @@ class CtaEngine(BaseEngine):
                 pos_compare_result += '\n{}: '.format(vt_symbol)
                 # 多单不一致
                 if round(symbol_pos['策略多单'], 7) != round(symbol_pos['账号多单'], 7):
-                    msg = '{}多单[账号({}), 策略{},共({})], ' \
-                        .format(vt_symbol,
+                    msg = '{}[账号({}), 策略{},共({})], ' \
+                        .format(self.get_name(vt_symbol),
                                 symbol_pos['账号多单'],
                                 symbol_pos['多单策略'],
                                 symbol_pos['策略多单'])

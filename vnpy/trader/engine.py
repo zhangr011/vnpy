@@ -463,6 +463,7 @@ class OmsEngine(BaseEngine):
 
         # 更新自定义合约
         custom_contracts = self.get_all_custom_contracts()
+        self.get_all_custom_contracts(rtn_setting=True)
         for contract in custom_contracts.values():
 
             # 更新合约缓存
@@ -481,7 +482,7 @@ class OmsEngine(BaseEngine):
                 spd_mapping_list = self.symbol_spd_maping.get(symbol, [])
 
                 # 更新映射 symbol => spd_symbol
-                if contract.symbol not in spd_mapping_list:
+                if (not contract.symbol.endswith('.SPD')) and contract.symbol not in spd_mapping_list:
                     spd_mapping_list.append(contract.symbol)
                     self.symbol_spd_maping.update({symbol: spd_mapping_list})
 
@@ -556,6 +557,9 @@ class OmsEngine(BaseEngine):
         position = event.data
         self.positions[position.vt_positionid] = position
 
+        if position.exchange != Exchange.SPD:
+            self.create_spd_position_event(position.symbol, position.direction)
+
     def reverse_direction(self, direction):
         """返回反向持仓"""
         if direction == Direction.LONG:
@@ -586,28 +590,34 @@ class OmsEngine(BaseEngine):
             leg2_ratio = spd_setting.get('leg2_ratio', 1)
 
             # 找出leg1，leg2的持仓，并判断出spd的方向
+            spd_pos = None
             if leg1_symbol == symbol:
                 k1 = f"{leg1_contract.gateway_name}.{leg1_contract.vt_symbol}.{direction.value}"
                 leg1_pos = self.positions.get(k1)
                 k2 = f"{leg2_contract.gateway_name}.{leg2_contract.vt_symbol}.{self.reverse_direction(direction).value}"
                 leg2_pos = self.positions.get(k2)
                 spd_direction = direction
+                k3 = f"{spd_contract.gateway_name}.{spd_symbol}.{Exchange.SPD.value}.{spd_direction.value}"
+                spd_pos = self.positions.get(k3)
             elif leg2_symbol == symbol:
                 k1 = f"{leg1_contract.gateway_name}.{leg1_contract.vt_symbol}.{self.reverse_direction(direction).value}"
                 leg1_pos = self.positions.get(k1)
                 k2 = f"{leg2_contract.gateway_name}.{leg2_contract.vt_symbol}.{direction.value}"
                 leg2_pos = self.positions.get(k2)
                 spd_direction = self.reverse_direction(direction)
+                k3 = f"{spd_contract.gateway_name}.{spd_symbol}.{Exchange.SPD.value}.{spd_direction.value}"
+                spd_pos = self.positions.get(k3)
             else:
                 continue
 
-            if leg1_pos is None or leg2_pos is None or leg1_pos.volume ==0 or leg2_pos.volume == 0:
+            if leg1_pos is None or leg2_pos is None:  # or leg1_pos.volume ==0 or leg2_pos.volume == 0:
                 continue
 
             # 根据leg1/leg2的volume ratio，计算出最小spd_volume
             spd_volume = min(int(leg1_pos.volume/leg1_ratio), int(leg2_pos.volume/leg2_ratio))
-            if spd_volume <= 0:
+            if spd_volume <= 0 and spd_pos is None:
                 continue
+
             if spd_setting.get('is_ratio', False) and leg2_pos.price > 0:
                 spd_price = 100 * (leg2_pos.price * leg1_ratio) / (leg2_pos.price * leg2_ratio)
             elif spd_setting.get('is_spread', False):
@@ -617,6 +627,7 @@ class OmsEngine(BaseEngine):
 
             spd_pos = PositionData(
                 gateway_name=spd_contract.gateway_name,
+                accountid=leg1_pos.accountid,
                 symbol=spd_symbol,
                 exchange=Exchange.SPD,
                 direction=spd_direction,
