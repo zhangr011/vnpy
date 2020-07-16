@@ -804,8 +804,10 @@ class CtaProTemplate(CtaTemplate):
         self.display_grids()
 
         if not self.backtesting:
-            pos_symbols.add(self.vt_symbol)
-            pos_symbols.add(self.idx_symbol)
+            if self.vt_symbol not in pos_symbols:
+                pos_symbols.add(self.vt_symbol)
+            if self.idx_symbol not in pos_symbols:
+                pos_symbols.add(self.idx_symbol)
             # 如果持仓的合约，不在self.vt_symbol中，需要订阅
             for symbol in list(pos_symbols):
                 self.write_log(f'新增订阅合约:{symbol}')
@@ -1807,7 +1809,7 @@ class CtaProFutureTemplate(CtaProTemplate):
 
         # 当前没有昨仓,采用锁仓处理
         else:
-            self.write_log(u'昨仓多单:{}不满足条件,创建对锁仓'.format(grid_pos.longYd))
+            self.write_log(u'昨仓多单:{}不满足条件,创建对锁仓'.format(grid_pos.long_yd))
             dist_record = dict()
             dist_record['datetime'] = self.cur_datetime
             dist_record['symbol'] = sell_symbol
@@ -1907,7 +1909,7 @@ class CtaProFutureTemplate(CtaProTemplate):
 
         # 当前没有昨仓,采用锁仓处理
         else:
-            self.write_log(u'昨仓空单:{}不满足条件,建立对锁仓'.format(grid_pos.shortYd))
+            self.write_log(u'昨仓空单:{}不满足条件,建立对锁仓'.format(grid_pos.short_yd))
             dist_record = dict()
             dist_record['datetime'] = self.cur_datetime
             dist_record['symbol'] = cover_symbol

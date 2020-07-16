@@ -234,7 +234,6 @@ class CtaEngine(BaseEngine):
                     # 比对仓位，使用上述获取得持仓信息，不用重复获取
                     self.compare_pos(strategy_pos_list=copy(all_strategy_pos))
 
-
                 # 推送到事件
                 self.put_all_strategy_pos_event(all_strategy_pos)
 

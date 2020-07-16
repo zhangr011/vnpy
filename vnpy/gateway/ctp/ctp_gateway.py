@@ -1875,7 +1875,7 @@ class TickCombiner(object):
             ratio_tick.date = tick.date
             ratio_tick.time = tick.time
 
-            # 比率tick
+            # 比率tick = (腿1 * 腿1 手数 / 腿2价格 * 腿2手数) 百分比
             ratio_tick.ask_price_1 = 100 * self.last_leg1_tick.ask_price_1 * self.leg1_ratio \
                                      / (self.last_leg2_tick.bid_price_1 * self.leg2_ratio)  # noqa
             ratio_tick.ask_price_1 = round_to(

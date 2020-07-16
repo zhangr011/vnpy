@@ -117,7 +117,11 @@ class AlgoTemplate:
         offset: Offset = Offset.NONE
     ):
         """"""
-        msg = f"委托买入{vt_symbol}：{volume}@{price}"
+        if offset in [Offset.CLOSE]:
+            msg = f"委托买平{vt_symbol}：{volume}@{price}"
+        else:
+            msg = f"委托买入{vt_symbol}：{volume}@{price}"
+
         self.write_log(msg)
 
         return self.algo_engine.send_order(
@@ -139,7 +143,11 @@ class AlgoTemplate:
         offset: Offset = Offset.NONE
     ):
         """"""
-        msg = f"委托卖出{vt_symbol}：{volume}@{price}"
+        if offset in [Offset.NONE, Offset.CLOSE]:
+            msg = f"委托卖出{vt_symbol}：{volume}@{price}"
+        else:
+            msg = f"委托开空{vt_symbol}：{volume}@{price}"
+
         self.write_log(msg)
 
         return self.algo_engine.send_order(
