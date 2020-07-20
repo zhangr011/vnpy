@@ -5,6 +5,9 @@ import traceback
 import json
 from datetime import datetime, timedelta
 from copy import copy, deepcopy
+from functools import lru_cache
+from typing import List
+import pandas as pd
 
 from vnpy.api.ctp import (
     MdApi,
@@ -48,11 +51,13 @@ from vnpy.trader.constant import (
     OrderType,
     Product,
     Status,
-    OptionType
+    OptionType,
+    Interval
 )
 from vnpy.trader.gateway import BaseGateway
 from vnpy.trader.object import (
     TickData,
+    BarData,
     OrderData,
     TradeData,
     PositionData,
@@ -61,6 +66,7 @@ from vnpy.trader.object import (
     OrderRequest,
     CancelRequest,
     SubscribeRequest,
+    HistoryRequest
 )
 from vnpy.trader.utility import (
     extract_vt_symbol,
@@ -72,6 +78,8 @@ from vnpy.trader.utility import (
     print_dict
 )
 from vnpy.trader.event import EVENT_TIMER
+
+from vnpy.api.websocket import WebsocketClient
 
 # 增加通达信指数接口行情
 from time import sleep
@@ -152,6 +160,64 @@ index_contracts = {}
 # tdx 期货配置本地缓存
 future_contracts = get_future_contracts()
 
+# 时间戳对齐
+TIME_GAP = 8 * 60 * 60 * 1000000000
+INTERVAL_VT2TQ = {
+    Interval.MINUTE: 60,
+    Interval.HOUR: 60 * 60,
+    Interval.DAILY: 60 * 60 * 24,
+}
+
+TQ2VT_TYPE = {
+    "FUTURE_OPTION": Product.OPTION,
+    "INDEX": Product.INDEX,
+    "FUTURE_COMBINE": Product.SPREAD,
+    "SPOT": Product.SPOT,
+    "FUTURE_CONT": Product.INDEX,
+    "FUTURE": Product.FUTURES,
+    "FUTURE_INDEX": Product.INDEX,
+    "OPTION": Product.OPTION,
+}
+
+@lru_cache(maxsize=9999)
+def vt_to_tq_symbol(symbol: str, exchange: Exchange) -> str:
+    """
+    TQSdk exchange first
+    """
+    for count, word in enumerate(symbol):
+        if word.isdigit():
+            break
+
+    fix_symbol = symbol
+    if exchange in [Exchange.INE, Exchange.SHFE, Exchange.DCE]:
+        fix_symbol = symbol.lower()
+
+    # Check for index symbol
+    time_str = symbol[count:]
+
+    if time_str in ["88"]:
+        return f"KQ.m@{exchange.value}.{fix_symbol[:count]}"
+    if time_str in ["99"]:
+        return f"KQ.i@{exchange.value}.{fix_symbol[:count]}"
+
+    return f"{exchange.value}.{fix_symbol}"
+
+
+@lru_cache(maxsize=9999)
+def tq_to_vt_symbol(tq_symbol: str) -> str:
+    """"""
+    if "KQ.m" in tq_symbol:
+        ins_type, instrument = tq_symbol.split("@")
+        exchange, symbol = instrument.split(".")
+        return f"{symbol}88.{exchange}"
+    elif "KQ.i" in tq_symbol:
+        ins_type, instrument = tq_symbol.split("@")
+        exchange, symbol = instrument.split(".")
+        return f"{symbol}99.{exchange}"
+    else:
+        exchange, symbol = tq_symbol.split(".")
+        return f"{symbol}.{exchange}"
+
 
 class CtpGateway(BaseGateway):
     """
@@ -185,6 +251,7 @@ class CtpGateway(BaseGateway):
         self.md_api = None
         self.tdx_api = None
         self.rabbit_api = None
+        self.tq_api = None
 
         self.subscribed_symbols = set()  # 已订阅合约代码
 
@@ -204,6 +271,7 @@ class CtpGateway(BaseGateway):
         auth_code = setting["授权编码"]
         product_info = setting["产品信息"]
         rabbit_dict = setting.get('rabbit', None)
+        tq_dict = setting.get('tq', None)
         if (
                 (not td_address.startswith("tcp://"))
                 and (not td_address.startswith("ssl://"))
@@ -239,22 +307,28 @@ class CtpGateway(BaseGateway):
         self.md_api.connect(md_address, userid, password, brokerid)
 
         if rabbit_dict:
+            self.write_log(f'激活RabbitMQ行情接口')
             self.rabbit_api = SubMdApi(gateway=self)
             self.rabbit_api.connect(rabbit_dict)
+        elif tq_dict is not None:
+            self.write_log(f'激活天勤行情接口')
+            self.tq_api = TqMdApi(gateway=self)
+            self.tq_api.connect(tq_dict)
         else:
+            self.write_log(f'激活通达信行情接口')
             self.tdx_api = TdxMdApi(gateway=self)
             self.tdx_api.connect()
 
         self.init_query()
 
-        for (vt_symbol, is_bar) in self.subscribed_symbols:
+        for (vt_symbol, is_bar) in list(self.subscribed_symbols):
             symbol, exchange = extract_vt_symbol(vt_symbol)
             req = SubscribeRequest(
                 symbol=symbol,
                 exchange=exchange,
                 is_bar=is_bar
             )
-            # 指数合约，从tdx行情订阅
+            # 指数合约，从tdx行情、天勤订阅
             if req.symbol[-2:] in ['99']:
                 req.symbol = req.symbol.upper()
                 if self.tdx_api is not None:
@@ -262,9 +336,18 @@ class CtpGateway(BaseGateway):
                     self.tdx_api.connect()
                     self.tdx_api.subscribe(req)
                 elif self.rabbit_api is not None:
+                    # 使用rabbitmq获取
                     self.rabbit_api.subscribe(req)
+                elif self.tq_api:
+                    # 使用天勤行情获取
+                    self.tq_api.subscribe(req)
             else:
-                self.md_api.subscribe(req)
+                # 上期所、上能源支持五档行情，使用天勤接口
+                if self.tq_api and req.exchange in [Exchange.SHFE, Exchange.INE]:
+                    self.write_log(f'使用天勤接口订阅')
+                    self.tq_api.subscribe(req)
+                else:
+                    self.md_api.subscribe(req)
 
     def check_status(self):
         """检查状态"""
@@ -339,11 +422,22 @@ class CtpGateway(BaseGateway):
                 if req.symbol[-2:] in ['99']:
                     req.symbol = req.symbol.upper()
                     if self.tdx_api:
+                        self.write_log(f'使用通达信接口订阅{req.symbol}')
                         self.tdx_api.subscribe(req)
                     elif self.rabbit_api:
+                        self.write_log(f'使用RabbitMQ接口订阅{req.symbol}')
                         self.rabbit_api.subscribe(req)
+                    elif self.tq_api:
+                        self.write_log(f'使用天勤接口订阅{ req.symbol}')
+                        self.tq_api.subscribe(req)
                 else:
-                    self.md_api.subscribe(req)
+                    # 上期所、上能源支持五档行情，使用天勤接口
+                    if self.tq_api and req.exchange in [Exchange.SHFE, Exchange.INE]:
+                        self.write_log(f'使用天勤接口订阅{ req.symbol}')
+                        self.tq_api.subscribe(req)
+                    else:
+                        self.write_log(f'使用CTP接口订阅{req.symbol}')
+                        self.md_api.subscribe(req)
 
             # Allow the strategies to start before the connection
             self.subscribed_symbols.add((req.vt_symbol, req.is_bar))
@@ -408,6 +502,12 @@ class CtpGateway(BaseGateway):
             self.rabbit_api = None
             tmp4.close()
 
+        if self.tq_api:
+            self.write_log(u'天勤行情API')
+            tmp5 = self.tq_api
+            self.tq_api = None
+            tmp5.close()
+
     def process_timer_event(self, event):
         """"""
         self.count += 1
@@ -432,7 +532,6 @@ class CtpGateway(BaseGateway):
         for combiner in self.tick_combiner_map.get(tick.symbol, []):
             tick = copy(tick)
             combiner.on_tick(tick)
-
 
 class CtpMdApi(MdApi):
     """"""
@@ -1708,6 +1807,222 @@ class SubMdApi():
         if vn_symbol not in self.registed_symbol_set:
             self.registed_symbol_set.add(vn_symbol)
             self.gateway.write_log(u'RabbitMQ行情订阅 {}'.format(str(vn_symbol)))
+
+
+class TqMdApi():
+    """天勤行情API"""
+
+    def __init__(self, gateway):
+        """"""
+        super().__init__()
+
+        self.gateway = gateway
+        self.gateway_name = gateway.gateway_name
+
+        self.api = None
+        self.is_connected = False
+        self.subscribe_array = []
+        # 行情对象列表
+        self.quote_objs = []
+
+        # 数据更新线程
+        self.update_thread = None
+        # 所有的合约
+        self.all_instruments = []
+
+        self.ticks = {}
+
+    def connect(self, setting):
+        """"""
+        try:
+            from tqsdk import TqApi
+            self.api = TqApi()
+        except Exception as e:
+            self.gateway.write_log(f'天勤行情API接入异常'.format(str(e)))
+        if self.api:
+            self.is_connected = True
+            self.gateway.write_log(f'天勤行情API已连接')
+            self.update_thread = Thread(target=self.update)
+            self.update_thread.start()
+
+    def generate_tick_from_quote(self, vt_symbol, quote) -> TickData:
+        """
+        生成TickData
+        """
+        # 清洗 nan
+        quote = {k: 0 if v != v else v for k, v in quote.items()}
+        symbol, exchange = extract_vt_symbol(vt_symbol)
+        tick = TickData(
+            symbol=symbol,
+            exchange=exchange,
+            datetime=datetime.strptime(quote["datetime"], "%Y-%m-%d %H:%M:%S.%f"),
+            name=symbol,
+            volume=quote["volume"],
+            open_interest=quote["open_interest"],
+            last_price=quote["last_price"],
+            limit_up=quote["upper_limit"],
+            limit_down=quote["lower_limit"],
+            open_price=quote["open"],
+            high_price=quote["highest"],
+            low_price=quote["lowest"],
+            pre_close=quote["pre_close"],
+            bid_price_1=quote["bid_price1"],
+            bid_price_2=quote["bid_price2"],
+            bid_price_3=quote["bid_price3"],
+            bid_price_4=quote["bid_price4"],
+            bid_price_5=quote["bid_price5"],
+            ask_price_1=quote["ask_price1"],
+            ask_price_2=quote["ask_price2"],
+            ask_price_3=quote["ask_price3"],
+            ask_price_4=quote["ask_price4"],
+            ask_price_5=quote["ask_price5"],
+            bid_volume_1=quote["bid_volume1"],
+            bid_volume_2=quote["bid_volume2"],
+            bid_volume_3=quote["bid_volume3"],
+            bid_volume_4=quote["bid_volume4"],
+            bid_volume_5=quote["bid_volume5"],
+            ask_volume_1=quote["ask_volume1"],
+            ask_volume_2=quote["ask_volume2"],
+            ask_volume_3=quote["ask_volume3"],
+            ask_volume_4=quote["ask_volume4"],
+            ask_volume_5=quote["ask_volume5"],
+            gateway_name=self.gateway_name
+        )
+        if symbol.endswith('99') and tick.ask_price_1 == 0.0 and tick.bid_price_1 == 0.0:
+            price_tick = quote['price_tick']
+            if isinstance(price_tick, float) or isinstance(price_tick,int):
+                tick.ask_price_1 = tick.last_price + price_tick
+                tick.ask_volume_1 = 1
+                tick.bid_price_1 = tick.last_price - price_tick
+                tick.bid_volume_1 = 1
+
+        return tick
+
+    def update(self) -> None:
+        """
+        更新行情/委托/账户/持仓
+        """
+        while self.api.wait_update():
+
+            # 更新行情信息
+            for vt_symbol, quote in self.quote_objs:
+                if self.api.is_changing(quote):
+                    tick = self.generate_tick_from_quote(vt_symbol, quote)
+                    tick and self.gateway.on_tick(tick) and self.gateway.on_custom_tick(tick)
+
+    def subscribe(self, req: SubscribeRequest) -> None:
+        """
+        订阅行情
+        """
+        if req.vt_symbol not in self.subscribe_array:
+            symbol, exchange = extract_vt_symbol(req.vt_symbol)
+            try:
+                quote = self.api.get_quote(vt_to_tq_symbol(symbol, exchange))
+                self.quote_objs.append((req.vt_symbol, quote))
+                self.subscribe_array.append(req.vt_symbol)
+            except Exception as ex:
+                self.gateway.write_log('订阅天勤行情异常:{}'.format(str(ex)))
+
+    def query_contracts(self) -> None:
+        """"""
+        self.all_instruments = [
+            v for k, v in self.api._data["quotes"].items() if v["expired"] == False
+        ]
+        for contract in self.all_instruments:
+            if (
+                "SSWE" in contract["instrument_id"]
+                or "CSI" in contract["instrument_id"]
+            ):
+                # vnpy没有这两个交易所，需要可以自行修改vnpy代码
+                continue
+
+            vt_symbol = tq_to_vt_symbol(contract["instrument_id"])
+            symbol, exchange = extract_vt_symbol(vt_symbol)
+
+            if TQ2VT_TYPE[contract["ins_class"]] == Product.OPTION:
+                contract_data = ContractData(
+                    symbol=symbol,
+                    exchange=exchange,
+                    name=symbol,
+                    product=TQ2VT_TYPE[contract["ins_class"]],
+                    size=contract["volume_multiple"],
+                    pricetick=contract["price_tick"],
+                    history_data=True,
+                    option_strike=contract["strike_price"],
+                    option_underlying=tq_to_vt_symbol(contract["underlying_symbol"]),
+                    option_type=OptionType[contract["option_class"]],
+                    option_expiry=datetime.fromtimestamp(contract["expire_datetime"]),
+                    option_index=tq_to_vt_symbol(contract["underlying_symbol"]),
+                    gateway_name=self.gateway_name,
+                )
+            else:
+                contract_data = ContractData(
+                    symbol=symbol,
+                    exchange=exchange,
+                    name=symbol,
+                    product=TQ2VT_TYPE[contract["ins_class"]],
+                    size=contract["volume_multiple"],
+                    pricetick=contract["price_tick"],
+                    history_data=True,
+                    gateway_name=self.gateway_name,
+                )
+            self.gateway.on_contract(contract_data)
+
+    def query_history(self, req: HistoryRequest) -> List[BarData]:
+        """
+        获取历史数据
+        """
+        symbol = req.symbol
+        exchange = req.exchange
+        interval = req.interval
+        start = req.start
+        end = req.end
+        # 天勤需要的数据
+        tq_symbol = vt_to_tq_symbol(symbol, exchange)
+        tq_interval = INTERVAL_VT2TQ.get(interval)
+        end += timedelta(1)
+        total_days = end - start
+        # 一次最多只能下载 8964 根Bar
+        min_length = min(8964, total_days.days * 500)
+        df = self.api.get_kline_serial(tq_symbol, tq_interval, min_length).sort_values(
+            by=["datetime"]
+        )
+
+        # 时间戳对齐
+        df["datetime"] = pd.to_datetime(df["datetime"] + TIME_GAP)
+
+        # 过滤开始结束时间
+        df = df[(df["datetime"] >= start - timedelta(days=1)) & (df["datetime"] < end)]
+
+        data: List[BarData] = []
+        if df is not None:
+            for ix, row in df.iterrows():
+                bar = BarData(
+                    symbol=symbol,
+                    exchange=exchange,
+                    interval=interval,
+                    datetime=row["datetime"].to_pydatetime(),
+                    open_price=row["open"],
+                    high_price=row["high"],
+                    low_price=row["low"],
+                    close_price=row["close"],
+                    volume=row["volume"],
+                    open_interest=row.get("close_oi", 0),
+                    gateway_name=self.gateway_name,
+                )
+                data.append(bar)
+        return data
+
+    def close(self) -> None:
+        """"""
+        try:
+            if self.api:
+                self.api.close()
+                self.is_connected = False
+                if self.update_thread:
+                    self.update_thread.join()
+        except Exception as e:
+            self.gateway.write_log('退出天勤行情api异常:{}'.format(str(e)))
 
 
 class TickCombiner(object):

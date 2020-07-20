@@ -504,7 +504,7 @@ class ConnectDialog(QtWidgets.QDialog):
     def __init__(self, main_engine: MainEngine, gateway_name: str):
         """"""
         super().__init__()
-
+        self.setting = {}
         self.main_engine: MainEngine = main_engine
         self.gateway_name: str = gateway_name
         self.filename: str = f"connect_{gateway_name.lower()}.json"
@@ -523,6 +523,8 @@ class ConnectDialog(QtWidgets.QDialog):
 
         # Saved setting provides field data used last time.
         loaded_setting = load_json(self.filename)
+
+        self.setting.update(loaded_setting)
 
         # Initialize line edits and form layout based on setting.
         form = QtWidgets.QFormLayout()
@@ -570,9 +572,11 @@ class ConnectDialog(QtWidgets.QDialog):
                 field_value = field_type(widget.text())
             setting[field_name] = field_value
 
-        save_json(self.filename, setting)
+        self.setting.update(setting)
 
-        self.main_engine.connect(setting, self.gateway_name)
+        save_json(self.filename, self.setting)
+
+        self.main_engine.connect(self.setting, self.gateway_name)
 
         self.accept()
 

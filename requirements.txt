@@ -1,3 +1,4 @@
+six==1.13.0
 PyQt5
 pyqtgraph
 dataclasses; python_version<="3.6"
@@ -7,7 +8,7 @@ websocket-client
 peewee
 mongoengine
 numpy
-pandas
+pandas==0.25.2
 matplotlib
 seaborn
 futu-api
@@ -18,6 +19,7 @@ ibapi
 deap
 pyzmq
 QScintilla
-pytdx
+PySocks
 pykalman
 cython
+tqsdk
