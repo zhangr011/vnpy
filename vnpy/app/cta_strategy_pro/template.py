@@ -989,7 +989,7 @@ class CtaProTemplate(CtaTemplate):
         # 委托平空非主力合约
         vt_orderids = self.cover(price=none_mi_price,
                                  volume=none_mi_grid.volume,
-                                 vt_symbol=self.vt_symbol,
+                                 vt_symbol=none_mi_symbol,
                                  order_type=self.order_type,
                                  grid=none_mi_grid)
         if len(vt_orderids) > 0:
