@@ -16,7 +16,7 @@ from time import sleep
 from functools import lru_cache
 from collections import OrderedDict
 from multiprocessing.dummy import Pool
-
+from threading import Thread
 from vnpy.event import EventEngine
 from vnpy.trader.event import EVENT_TIMER
 from vnpy.trader.constant import (
@@ -25,10 +25,12 @@ from vnpy.trader.constant import (
     Direction,
     OrderType,
     Status,
-    Offset
+    Offset,
+    Interval
 )
 from vnpy.trader.gateway import BaseGateway, LocalOrderManager
 from vnpy.trader.object import (
+    BarData,
     CancelRequest,
     OrderRequest,
     SubscribeRequest,
@@ -37,7 +39,8 @@ from vnpy.trader.object import (
     OrderData,
     TradeData,
     PositionData,
-    AccountData
+    AccountData,
+    HistoryRequest
 )
 from vnpy.trader.utility import get_folder_path, print_dict, extract_vt_symbol, get_stock_exchange, append_data
 from vnpy.data.tdx.tdx_common import get_stock_type_sz, get_stock_type_sh
@@ -46,6 +49,14 @@ from vnpy.data.tdx.tdx_common import get_stock_type_sz, get_stock_type_sh
 symbol_name_map: Dict[str, str] = {}
 # 代码 <=> 交易所
 symbol_exchange_map: Dict[str, Exchange] = {}
+
+# 时间戳对齐
+TIME_GAP = 8 * 60 * 60 * 1000000000
+INTERVAL_VT2TQ = {
+    Interval.MINUTE: 60,
+    Interval.HOUR: 60 * 60,
+    Interval.DAILY: 60 * 60 * 24,
+}
 
 # 功能<->文件对应
 PB_FILE_NAMES = {
@@ -323,6 +334,7 @@ class PbGateway(BaseGateway):
 
         self.md_api = PbMdApi(self)
         self.td_api = PbTdApi(self)
+        self.tq_api = None
 
         self.tdx_connected = False  # 通达信行情API得连接状态
 
@@ -359,6 +371,8 @@ class PbGateway(BaseGateway):
                             product_id=product_id,
                             unit_id=unit_id,
                             holder_ids=holder_ids)
+        self.tq_api = TqMdApi(self)
+        self.tq_api.connect()
         self.init_query()
 
     def close(self) -> None:
@@ -368,7 +382,10 @@ class PbGateway(BaseGateway):
 
     def subscribe(self, req: SubscribeRequest) -> None:
         """"""
-        self.md_api.subscribe(req)
+        if self.tq_api and self.tq_api.is_connected:
+            self.tq_api.subscribe(req)
+        else:
+            self.md_api.subscribe(req)
 
     def send_order(self, req: OrderRequest) -> str:
         """"""
@@ -2012,3 +2029,167 @@ class PbTdApi(object):
 
     def cancel_all_csv(self):
         pass
+
+
+class TqMdApi():
+    """天勤行情API"""
+
+    def __init__(self, gateway):
+        """"""
+        super().__init__()
+
+        self.gateway = gateway
+        self.gateway_name = gateway.gateway_name
+
+        self.api = None
+        self.is_connected = False
+        self.subscribe_array = []
+        # 行情对象列表
+        self.quote_objs = []
+
+        # 数据更新线程
+        self.update_thread = None
+        # 所有的合约
+        self.all_instruments = []
+
+        self.ticks = {}
+
+    def connect(self, setting = {}):
+        """"""
+        try:
+            from tqsdk import TqApi
+            self.api = TqApi(_stock=True)
+        except Exception as e:
+            self.gateway.write_log(f'天勤股票行情API接入异常:'.format(str(e)))
+            self.gateway.write_log(traceback.format_exc())
+        if self.api:
+            self.is_connected = True
+            self.gateway.write_log(f'天勤股票行情API已连接')
+            self.update_thread = Thread(target=self.update)
+            self.update_thread.start()
+
+    def generate_tick_from_quote(self, vt_symbol, quote) -> TickData:
+        """
+        生成TickData
+        """
+        # 清洗 nan
+        quote = {k: 0 if v != v else v for k, v in quote.items()}
+        symbol, exchange = extract_vt_symbol(vt_symbol)
+        return TickData(
+            symbol=symbol,
+            exchange=exchange,
+            datetime=datetime.strptime(quote["datetime"], "%Y-%m-%d %H:%M:%S.%f"),
+            name=symbol,
+            volume=quote["volume"],
+            open_interest=quote["open_interest"],
+            last_price=quote["last_price"],
+            limit_up=quote["upper_limit"],
+            limit_down=quote["lower_limit"],
+            open_price=quote["open"],
+            high_price=quote["highest"],
+            low_price=quote["lowest"],
+            pre_close=quote["pre_close"],
+            bid_price_1=quote["bid_price1"],
+            bid_price_2=quote["bid_price2"],
+            bid_price_3=quote["bid_price3"],
+            bid_price_4=quote["bid_price4"],
+            bid_price_5=quote["bid_price5"],
+            ask_price_1=quote["ask_price1"],
+            ask_price_2=quote["ask_price2"],
+            ask_price_3=quote["ask_price3"],
+            ask_price_4=quote["ask_price4"],
+            ask_price_5=quote["ask_price5"],
+            bid_volume_1=quote["bid_volume1"],
+            bid_volume_2=quote["bid_volume2"],
+            bid_volume_3=quote["bid_volume3"],
+            bid_volume_4=quote["bid_volume4"],
+            bid_volume_5=quote["bid_volume5"],
+            ask_volume_1=quote["ask_volume1"],
+            ask_volume_2=quote["ask_volume2"],
+            ask_volume_3=quote["ask_volume3"],
+            ask_volume_4=quote["ask_volume4"],
+            ask_volume_5=quote["ask_volume5"],
+            gateway_name=self.gateway_name
+        )
+
+    def update(self) -> None:
+        """
+        更新行情/委托/账户/持仓
+        """
+        while self.api.wait_update():
+
+            # 更新行情信息
+            for vt_symbol, quote in self.quote_objs:
+                if self.api.is_changing(quote):
+                    tick = self.generate_tick_from_quote(vt_symbol, quote)
+                    tick and self.gateway.on_tick(tick) and self.gateway.on_custom_tick(tick)
+
+    def subscribe(self, req: SubscribeRequest) -> None:
+        """
+        订阅行情
+        """
+        if req.vt_symbol not in self.subscribe_array:
+            symbol, exchange = extract_vt_symbol(req.vt_symbol)
+            try:
+                quote = self.api.get_quote(f'{exchange.value}.{symbol}')
+                self.quote_objs.append((req.vt_symbol, quote))
+                self.subscribe_array.append(req.vt_symbol)
+            except Exception as ex:
+                self.gateway.write_log('订阅天勤行情异常:{}'.format(str(ex)))
+
+    def query_history(self, req: HistoryRequest) -> List[BarData]:
+        """
+        获取历史数据
+        """
+        symbol = req.symbol
+        exchange = req.exchange
+        interval = req.interval
+        start = req.start
+        end = req.end
+        # 天勤需要的数据
+        tq_symbol = f'{exchange.value}.{symbol}'
+        tq_interval = INTERVAL_VT2TQ.get(interval)
+        end += timedelta(1)
+        total_days = end - start
+        # 一次最多只能下载 8964 根Bar
+        min_length = min(8964, total_days.days * 500)
+        df = self.api.get_kline_serial(tq_symbol, tq_interval, min_length).sort_values(
+            by=["datetime"]
+        )
+
+        # 时间戳对齐
+        df["datetime"] = pd.to_datetime(df["datetime"] + TIME_GAP)
+
+        # 过滤开始结束时间
+        df = df[(df["datetime"] >= start - timedelta(days=1)) & (df["datetime"] < end)]
+
+        data: List[BarData] = []
+        if df is not None:
+            for ix, row in df.iterrows():
+                bar = BarData(
+                    symbol=symbol,
+                    exchange=exchange,
+                    interval=interval,
+                    datetime=row["datetime"].to_pydatetime(),
+                    open_price=row["open"],
+                    high_price=row["high"],
+                    low_price=row["low"],
+                    close_price=row["close"],
+                    volume=row["volume"],
+                    open_interest=row.get("close_oi", 0),
+                    gateway_name=self.gateway_name,
+                )
+                data.append(bar)
+        return data
+
+    def close(self) -> None:
+        """"""
+        try:
+            if self.api and self.api.wait_update():
+                self.api.close()
+                self.is_connected = False
+                if self.update_thread:
+                    self.update_thread.join()
+        except Exception as e:
+            self.gateway.write_log('退出天勤行情api异常:{}'.format(str(e)))
+

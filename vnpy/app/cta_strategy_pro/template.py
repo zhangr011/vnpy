@@ -197,6 +197,9 @@ class CtaTemplate(ABC):
             if self.is_upper_limit(vt_symbol):
                 self.write_error(u'涨停价不做FAK/FOK委托')
                 return []
+        if volume == 0:
+            self.write_error(f'委托数量有误，必须大于0，{vt_symbol}, price:{price}')
+            return []
         return self.send_order(vt_symbol=vt_symbol,
                                direction=Direction.LONG,
                                offset=Offset.OPEN,
@@ -218,6 +221,9 @@ class CtaTemplate(ABC):
             if self.is_lower_limit(vt_symbol):
                 self.write_error(u'跌停价不做FAK/FOK sell委托')
                 return []
+        if volume == 0:
+            self.write_error(f'委托数量有误，必须大于0，{vt_symbol}, price:{price}')
+            return []
         return self.send_order(vt_symbol=vt_symbol,
                                direction=Direction.SHORT,
                                offset=Offset.CLOSE,
@@ -239,6 +245,9 @@ class CtaTemplate(ABC):
             if self.is_lower_limit(vt_symbol):
                 self.write_error(u'跌停价不做FAK/FOK short委托')
                 return []
+        if volume == 0:
+            self.write_error(f'委托数量有误，必须大于0，{vt_symbol}, price:{price}')
+            return []
         return self.send_order(vt_symbol=vt_symbol,
                                direction=Direction.SHORT,
                                offset=Offset.OPEN,
@@ -260,6 +269,9 @@ class CtaTemplate(ABC):
             if self.is_upper_limit(vt_symbol):
                 self.write_error(u'涨停价不做FAK/FOK cover委托')
                 return []
+        if volume == 0:
+            self.write_error(f'委托数量有误，必须大于0，{vt_symbol}, price:{price}')
+            return []
         return self.send_order(vt_symbol=vt_symbol,
                                direction=Direction.LONG,
                                offset=Offset.CLOSE,
@@ -2021,7 +2033,7 @@ class CtaProFutureTemplate(CtaProTemplate):
         target_long_grid = None
         remove_long_grid_ids = []
         for g in sorted(locked_long_grids, key=lambda grid: grid.volume):
-            if g.order_status or len(g.orderRef) > 0:
+            if g.order_status or len(g.order_ids) > 0:
                 continue
             if target_long_grid is None:
                 target_long_grid = g
@@ -2035,7 +2047,7 @@ class CtaProFutureTemplate(CtaProTemplate):
                     remain_grid = copy(g)
                     g.volume = open_volume
                     remain_grid.volume -= open_volume
-                    remain_grid.id = uuid.uuid1()
+                    remain_grid.id = str(uuid.uuid1())
                     self.gt.dn_grids.append(remain_grid)
                     self.write_log(u'添加剩余仓位到新多单网格:g.volume:{}'
                                    .format(remain_grid.volume))
@@ -2081,7 +2093,7 @@ class CtaProFutureTemplate(CtaProTemplate):
                     remain_grid = copy(g)
                     g.volume = open_volume
                     remain_grid.volume -= open_volume
-                    remain_grid.id = uuid.uuid1()
+                    remain_grid.id = str(uuid.uuid1())
                     self.gt.up_grids.append(remain_grid)
                     self.write_log(u'添加剩余仓位到新空单网格:g.volume:{}'
                                    .format(remain_grid.volume))
@@ -2145,6 +2157,8 @@ class CtaProFutureTemplate(CtaProTemplate):
         """
         # 正在委托时,不处理
         if self.entrust != 0:
+            return
+        if not self.activate_today_lock:
             return
 
         # 多单得对锁格

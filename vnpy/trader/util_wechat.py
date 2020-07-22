@@ -5,7 +5,7 @@ http://wxpusher.zjiecode.com/
 开通步骤：
 1、关注公众号，注册
 2、通过公众号，获取UID
-3、通过网站=》应用列表=》新建应用，如vnpy2，并获得APP_TOOKEN
+3、通过网站打开管理后台：http://wxpusher.zjiecode.com/admin/ 使用微信扫码登录，=》应用列表=》新建应用，如vnpy2，并获得APP_TOOKEN
 4、应用列表=》应用（vnpy2）=》 关注.
 '''
 
@@ -20,7 +20,7 @@ global wechat_lock
 wechat_lock = Lock()
 
 # 这里可以设置UIDS, 多个人可同时接收
-UIDS = ['UID_kZguGPBQPWn41Ni9FK4CgPts2Kj']
+UIDS = ['UID_kZguGPBQPWn41Ni9FK4CgPts2KjU']
 
 APP_TOKEN = 'AT_aDuiQu41dmAQV2vUMXOaaTDrWyhKJN2z'
 
