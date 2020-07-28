@@ -373,7 +373,7 @@ class StockPolicy(CtaPolicy):
         self.cur_trading_date = json_data.get('cur_trading_date', None)
         self.sub_tns = json_data.get('sub_tns',{})
         signals = json_data.get('signals', {})
-        for kline_name, signal in signals:
+        for k, signal in signals.items():
             last_signal = signal.get('last_signal', "")
             str_ast_signal_time = signal.get('last_signal_time', "")
             try:
@@ -383,7 +383,7 @@ class StockPolicy(CtaPolicy):
                     last_signal_time = None
             except Exception as ex:
                 last_signal_time = None
-            self.signals.update({kline_name: {'last_signal': last_signal, 'last_signal_time': last_signal_time}})
+            self.signals.update({k: {'last_signal': last_signal, 'last_signal_time': last_signal_time}})
 
 
     def to_json(self):
@@ -400,7 +400,7 @@ class StockPolicy(CtaPolicy):
                                '%Y-%m-%d %H:%M:%S') if last_signal_time is not None else ""
                            }
                       })
-        j['singlals'] = d
+        j['signals'] = d
         return j
 
 

@@ -627,7 +627,7 @@ class TradingWidget(QtWidgets.QWidget):
             [order_type.value for order_type in OrderType])
 
         double_validator = QtGui.QDoubleValidator()
-        double_validator.setBottom(0)
+        #double_validator.setBottom(0)
 
         self.price_line = QtWidgets.QLineEdit()
         self.price_line.setValidator(double_validator)

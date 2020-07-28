@@ -108,6 +108,7 @@ class TdxFutureData(object):
         # 所有期货合约的本地缓存
         self.future_contracts = get_future_contracts()
 
+
     def write_log(self, content):
         if self.strategy:
             self.strategy.write_log(content)

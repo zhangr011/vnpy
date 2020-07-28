@@ -4,6 +4,9 @@
 import os
 import traceback
 from copy import copy
+import bz2
+import pickle
+import zlib
 from vnpy.trader.utility import append_data
 from .template import (
     CtaPosition,
@@ -71,10 +74,6 @@ class CtaSpreadTemplate(CtaTemplate):
         """更新配置参数"""
         super().update_setting(setting)
 
-        # 订阅主动腿/被动腿合约
-        self.cta_engine.subscribe_symbol(strategy_name=self.strategy_name, vt_symbol=self.act_vt_symbol)
-        self.cta_engine.subscribe_symbol(strategy_name=self.strategy_name, vt_symbol=self.pas_vt_symbol)
-
         self.act_price_tick = self.cta_engine.get_price_tick(self.act_vt_symbol)
         self.pas_price_tick = self.cta_engine.get_price_tick(self.pas_vt_symbol)
 
@@ -94,6 +93,102 @@ class CtaSpreadTemplate(CtaTemplate):
         dn_grids_info = self.gt.to_str(direction=Direction.LONG)
         if len(self.gt.dn_grids) > 0:
             self.write_log(dn_grids_info)
+
+    def sync_data(self):
+        """同步更新数据"""
+        if not self.backtesting:
+            self.write_log(u'保存k线缓存数据')
+            self.save_klines_to_cache()
+
+
+    def save_klines_to_cache(self, kline_names: list = []):
+        """
+        保存K线数据到缓存
+        :param kline_names: 一般为self.klines的keys
+        :return:
+        """
+        if len(kline_names) == 0:
+            kline_names = list(self.klines.keys())
+
+        # 获取保存路径
+        save_path = self.cta_engine.get_data_path()
+        # 保存缓存的文件名
+        file_name = os.path.abspath(os.path.join(save_path, f'{self.strategy_name}_klines.pkb2'))
+        with bz2.BZ2File(file_name, 'wb') as f:
+            klines = {}
+            for kline_name in kline_names:
+                kline = self.klines.get(kline_name, None)
+                if kline:
+                    kline.strategy = None
+                    kline.cb_on_bar = None
+                    if kline.cb_on_period:
+                        kline.cb_on_period = None
+                    kline.cb_dict = {}
+                klines.update({kline_name: kline})
+            pickle.dump(klines, f)
+
+    def load_klines_from_cache(self, kline_names: list = []):
+        """
+        从缓存加载K线数据
+        :param kline_names:
+        :return:
+        """
+        if len(kline_names) == 0:
+            kline_names = list(self.klines.keys())
+
+        save_path = self.cta_engine.get_data_path()
+        file_name = os.path.abspath(os.path.join(save_path, f'{self.strategy_name}_klines.pkb2'))
+        try:
+            last_bar_dt = None
+            with bz2.BZ2File(file_name, 'rb') as f:
+                klines = pickle.load(f)
+                # 逐一恢复K线
+                for kline_name in kline_names:
+                    # 缓存的k线实例
+                    cache_kline = klines.get(kline_name, None)
+                    # 当前策略实例的K线实例
+                    strategy_kline = self.klines.get(kline_name, None)
+
+                    if cache_kline and strategy_kline:
+                        # 临时保存当前的回调函数
+                        cb_on_bar = strategy_kline.cb_on_bar
+                        # 缓存实例数据 =》 当前实例数据
+                        strategy_kline.__dict__.update(cache_kline.__dict__)
+
+                        # 所有K线的最后时间
+                        if last_bar_dt and strategy_kline.cur_datetime:
+                            last_bar_dt = max(last_bar_dt, strategy_kline.cur_datetime)
+                        else:
+                            last_bar_dt = strategy_kline.cur_datetime
+
+                        # 重新绑定k线策略与on_bar回调函数
+                        strategy_kline.strategy = self
+                        strategy_kline.cb_on_bar = cb_on_bar
+
+                        self.write_log(f'恢复{kline_name}缓存数据,最新bar结束时间:{last_bar_dt}')
+
+                self.write_log(u'加载缓存k线数据完毕')
+                return last_bar_dt
+        except Exception as ex:
+            self.write_error(f'加载缓存K线数据失败:{str(ex)}')
+        return None
+
+    def get_klines_snapshot(self):
+        """返回当前klines的切片数据"""
+        try:
+            d = {
+                'strategy': self.strategy_name,
+                'datetime': datetime.now()}
+            klines = {}
+            for kline_name in sorted(self.klines.keys()):
+                klines.update({kline_name: self.klines.get(kline_name).get_data()})
+            kline_names = list(klines.keys())
+            binary_data = zlib.compress(pickle.dumps(klines))
+            d.update({'kline_names': kline_names, 'klines': binary_data, 'zlib': True})
+            return d
+        except Exception as ex:
+            self.write_error(f'获取klines切片数据失败:{str(ex)}')
+            return {}
 
     def init_position(self, status_filter=[True]):
         """
@@ -205,6 +300,10 @@ class CtaSpreadTemplate(CtaTemplate):
 
     def on_start(self):
         """启动策略（必须由用户继承实现）"""
+        # 订阅主动腿/被动腿合约
+        self.cta_engine.subscribe_symbol(strategy_name=self.strategy_name, vt_symbol=self.act_vt_symbol)
+        self.cta_engine.subscribe_symbol(strategy_name=self.strategy_name, vt_symbol=self.pas_vt_symbol)
+
         self.write_log(u'启动')
         self.trading = True
         self.put_event()
@@ -448,7 +547,8 @@ class CtaSpreadTemplate(CtaTemplate):
 
                     self.update_pos(price=grid.close_price,
                                     volume=grid.volume,
-                                    operation='cover' if grid.direction == Direction.SHORT else 'sell')
+                                    operation='cover' if grid.direction == Direction.SHORT else 'sell',
+                                    dt=self.cur_datetime)
 
                     self.write_log(f'移除网格:{grid.to_json()}')
                     self.gt.remove_grids_by_ids(direction=grid.direction, ids=[grid.id])
@@ -460,7 +560,8 @@ class CtaSpreadTemplate(CtaTemplate):
                     self.write_log(f'{grid.direction.value}单已开仓完毕,,手数:{grid.volume}, 详细:{grid.snapshot}')
                     self.update_pos(price=grid.open_price,
                                     volume=grid.volume,
-                                    operation='short' if grid.direction == Direction.SHORT else 'buy')
+                                    operation='short' if grid.direction == Direction.SHORT else 'buy',
+                                    dt=self.cur_datetime)
                 # 网格的所有委托单部分执行完毕
             else:
                 self.write_log(f'剩余委托单号:{grid.order_ids}')
@@ -656,7 +757,7 @@ class CtaSpreadTemplate(CtaTemplate):
 
         order_price = old_order['price']
         order_type = old_order.get('order_type', OrderType.LIMIT)
-        order_retry = old_order['retry']
+        order_retry = old_order.get('retry',1)
         grid = old_order.get('grid', None)
         if order_retry > 10:
             msg = u'{} 平仓撤单 {}/{}手， 重试平仓次数{}>10' \
@@ -789,18 +890,23 @@ class CtaSpreadTemplate(CtaTemplate):
             over_seconds = (dt - order_time).total_seconds()
 
             # 只处理未成交的限价委托单
-            if order_status in [Status.NOTTRADED] and (order_type == OrderType.LIMIT):
+            if order_status in [Status.SUBMITTING, Status.NOTTRADED] and (order_type == OrderType.LIMIT):
                 if over_seconds > self.cancel_seconds or force:  # 超过设置的时间还未成交
                     self.write_log(u'超时{}秒未成交，取消委托单：vt_orderid:{},order:{}'
                                    .format(over_seconds, vt_orderid, order_info))
-                    order_info.update({'status': Status.CANCELING})
+                    order_info.update({'status': Status.CANCELLING})
                     self.active_orders.update({vt_orderid: order_info})
                     ret = self.cancel_order(str(vt_orderid))
                     if not ret:
                         self.write_log(u'撤单失败,更新状态为撤单成功')
                         order_info.update({'status': Status.CANCELLED})
                         self.active_orders.update({vt_orderid: order_info})
-
+                    else:
+                        if order_grid:
+                            if vt_orderid in order_grid.order_ids:
+                                order_grid.order_ids.remove(vt_orderid)
+                            if len(order_grid.order_ids) == 0:
+                                order_grid.order_status = False
                 continue
 
             # 处理状态为‘撤销’的委托单
@@ -925,8 +1031,8 @@ class CtaSpreadTemplate(CtaTemplate):
             return True
 
         # leg1 接近跌停价（10个minDiff 以内）
-        if self.cur_act_tick.limie_down > 0 \
-                and self.cur_act_tick.bid_price_1 - 10 * self.act_price_tick < self.cur_act_tick.limie_down:
+        if self.cur_act_tick.limit_down > 0 \
+                and self.cur_act_tick.bid_price_1 - 10 * self.act_price_tick < self.cur_act_tick.limit_down:
             self.write_log(u'主动腿 bid_price_1{} 接近跌停价{}'
                            .format(self.cur_act_tick.bid_price_1, self.cur_act_tick.limit_up))
             return True
@@ -939,8 +1045,8 @@ class CtaSpreadTemplate(CtaTemplate):
             return True
 
         # leg2 接近跌停价（10个minDiff 以内）
-        if self.cur_pas_tick.limie_down > 0 \
-                and self.cur_pas_tick.bid_price_1 - 10 * self.pas_price_tick < self.cur_pas_tick.limie_down:
+        if self.cur_pas_tick.limit_down > 0 \
+                and self.cur_pas_tick.bid_price_1 - 10 * self.pas_price_tick < self.cur_pas_tick.limit_down:
             self.write_log(u'被动腿 bid_price_1{} 接近跌停价{}'
                            .format(self.cur_pas_tick.bid_price_1, self.cur_pas_tick.limit_up))
             return True
@@ -976,26 +1082,26 @@ class CtaSpreadTemplate(CtaTemplate):
 
         # 开空主动腿
         act_vt_orderids = self.short(vt_symbol=self.act_vt_symbol,
-                                     price=self.cur_act_tick.bid_price1,
+                                     price=self.cur_act_tick.bid_price_1,
                                      volume=grid.volume * self.act_vol_ratio,
                                      order_type=self.order_type,
                                      order_time=self.cur_datetime,
                                      grid=grid)
         if not act_vt_orderids:
             self.write_error(f'spd_short，{self.act_vt_symbol}开空仓{grid.volume * self.act_vol_ratio}手失败，'
-                             f'委托价:{self.cur_act_tick.bid_price1}')
+                             f'委托价:{self.cur_act_tick.bid_price_1}')
             return []
 
         # 开多被动腿
         pas_vt_orderids = self.buy(vt_symbol=self.pas_vt_symbol,
-                                   price=self.cur_pas_tick.ask_price1,
+                                   price=self.cur_pas_tick.ask_price_1,
                                    volume=grid.volume * self.pas_vol_ratio,
                                    order_type=self.order_type,
                                    order_time=self.cur_datetime,
                                    grid=grid)
         if not pas_vt_orderids:
             self.write_error(f'spd_short，{self.pas_vt_symbol}开多仓{grid.volume * self.pas_vol_ratio}手失败，'
-                             f'委托价:{self.cur_pas_tick.ask_price1}')
+                             f'委托价:{self.cur_pas_tick.ask_price_1}')
             return []
 
         grid.order_status = True
@@ -1035,26 +1141,26 @@ class CtaSpreadTemplate(CtaTemplate):
 
         # 开多主动腿
         act_vt_orderids = self.buy(vt_symbol=self.act_vt_symbol,
-                                   price=self.cur_act_tick.ask_price1,
+                                   price=self.cur_act_tick.ask_price_1,
                                    volume=grid.volume * self.act_vol_ratio,
                                    order_type=self.order_type,
                                    order_time=self.cur_datetime,
                                    grid=grid)
         if not act_vt_orderids:
             self.write_error(f'spd_short，{self.act_vt_symbol}开多仓{grid.volume * self.act_vol_ratio}手失败，'
-                             f'委托价:{self.cur_act_tick.ask_price1}')
+                             f'委托价:{self.cur_act_tick.ask_price_1}')
             return []
 
         # 开空被动腿
         pas_vt_orderids = self.short(vt_symbol=self.pas_vt_symbol,
-                                     price=self.cur_pas_tick.bid_price1,
+                                     price=self.cur_pas_tick.bid_price_1,
                                      volume=grid.volume * self.pas_vol_ratio,
                                      order_type=self.order_type,
                                      order_time=self.cur_datetime,
                                      grid=grid)
         if not pas_vt_orderids:
             self.write_error(f'spd_short，{self.pas_vt_symbol}开空仓{grid.volume * self.pas_vol_ratio}手失败，'
-                             f'委托价:{self.cur_pas_tick.bid_price1}')
+                             f'委托价:{self.cur_pas_tick.bid_price_1}')
             return []
 
         grid.order_status = True
@@ -1066,7 +1172,7 @@ class CtaSpreadTemplate(CtaTemplate):
     # ----------------------------------------------------------------------
     def spd_sell(self, grid: CtaGrid, force: bool = False):
         """非标准合约的套利平正套指令"""
-        self.write_log(u'套利平正套单,price={0,volume={}'.format(grid.close_price, grid.volume))
+        self.write_log(u'套利平正套单,price={},volume={}'.format(grid.close_price, grid.volume))
         if self.entrust != 0:
             self.write_log(u'正在委托，不平仓')
             return []
@@ -1106,26 +1212,26 @@ class CtaSpreadTemplate(CtaTemplate):
 
         # 主动腿多单平仓
         act_vt_orderids = self.sell(vt_symbol=self.act_vt_symbol,
-                                    price=self.cur_act_tick.bid_price1,
+                                    price=self.cur_act_tick.bid_price_1,
                                     volume=grid.volume * self.act_vol_ratio,
                                     order_type=self.order_type,
                                     order_time=self.cur_datetime,
                                     grid=grid)
         if not act_vt_orderids:
             self.write_error(f'spd_sell，{self.act_vt_symbol}多单平仓{grid.volume * self.act_vol_ratio}手失败，'
-                             f'委托价:{self.cur_act_tick.bid_price1}')
+                             f'委托价:{self.cur_act_tick.bid_price_1}')
             return []
 
         # 被动腿空单平仓
         pas_vt_orderids = self.cover(vt_symbol=self.pas_vt_symbol,
-                                     price=self.cur_pas_tick.ask_price1,
+                                     price=self.cur_pas_tick.ask_price_1,
                                      volume=grid.volume * self.pas_vol_ratio,
                                      order_type=self.order_type,
                                      order_time=self.cur_datetime,
                                      grid=grid)
         if not pas_vt_orderids:
             self.write_error(f'spd_sell，{self.pas_vt_symbol}空单平仓{grid.volume * self.pas_vol_ratio}手失败，'
-                             f'委托价:{self.cur_pas_tick.ask_price1}')
+                             f'委托价:{self.cur_pas_tick.ask_price_1}')
             return []
 
         grid.order_status = True
@@ -1155,6 +1261,13 @@ class CtaSpreadTemplate(CtaTemplate):
             self.write_log(u'实际价差{}不满足:{}'.format(self.cur_spd_tick.ask_price_1, grid.close_price))
             return []
 
+        self.act_pos = self.cta_engine.get_position_holding(vt_symbol=self.act_vt_symbol)
+        self.pas_pos = self.cta_engine.get_position_holding(vt_symbol=self.pas_vt_symbol)
+
+        if not all([self.act_pos, self.pas_pos]):
+            self.write_error('主动腿/被动退得持仓数据不存在')
+            return []
+
         act_close_volume = grid.snapshot.get('act_open_volume')
         pas_close_volume = grid.snapshot.get('pas_open_volume')
 
@@ -1170,26 +1283,26 @@ class CtaSpreadTemplate(CtaTemplate):
 
         # 主动腿空单平仓
         act_vt_orderids = self.cover(vt_symbol=self.act_vt_symbol,
-                                     price=self.cur_act_tick.ask_price1,
+                                     price=self.cur_act_tick.ask_price_1,
                                      volume=grid.volume * self.act_vol_ratio,
                                      order_type=self.order_type,
                                      order_time=self.cur_datetime,
                                      grid=grid)
         if not act_vt_orderids:
             self.write_error(f'spd_cover{self.act_vt_symbol}空单平仓{grid.volume * self.act_vol_ratio}手失败，'
-                             f'委托价:{self.cur_act_tick.ask_price1}')
+                             f'委托价:{self.cur_act_tick.ask_price_1}')
             return []
 
         # 被动腿多单平仓
         pas_vt_orderids = self.sell(vt_symbol=self.pas_vt_symbol,
-                                    price=self.cur_pas_tick.bid_price1,
+                                    price=self.cur_pas_tick.bid_price_1,
                                     volume=grid.volume * self.pas_vol_ratio,
                                     order_type=self.order_type,
                                     order_time=self.cur_datetime,
                                     grid=grid)
         if not pas_vt_orderids:
             self.write_error(f'spd_cover，{self.pas_vt_symbol}多单平仓{grid.volume * self.pas_vol_ratio}手失败，'
-                             f'委托价:{self.cur_pas_tick.bid_price1}')
+                             f'委托价:{self.cur_pas_tick.bid_price_1}')
             return []
 
         grid.order_status = True

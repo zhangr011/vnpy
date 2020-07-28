@@ -1646,7 +1646,7 @@ class PbTdApi(object):
                         order.status = Status.REJECTED
                         self.gateway.write_log(f'dbf批量下单，委托被拒:{order.__dict__}')
                         self.gateway.order_manager.on_order(order)
-                        self.gateway.write_error(msg=err_msg, error={"ErrorID": err_id, "ErrorMsg": "委托失败"})
+                        self.gateway.write_error(msg=f'{order.direction.value},{order.vt_symbol},{err_msg}', error={"ErrorID": err_id, "ErrorMsg": "委托失败"})
 
                     if sys_orderid != '0':
                         self.gateway.order_manager.update_orderid_map(local_orderid=local_orderid,

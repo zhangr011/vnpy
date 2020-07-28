@@ -2199,8 +2199,8 @@ class CtaProFutureTemplate(CtaProTemplate):
         self.write_log(u'空单对锁格:{}'.format([g.to_json() for g in locked_short_grids]))
 
         if locked_long_volume != locked_short_volume:
-            self.write_error(u'对锁格多空数量不一致,不能解锁.\n多:{},\n空:{}'
-                             .format(locked_long_volume, locked_short_volume))
+            self.write_error(u'{}对锁格多空数量不一致,不能解锁.\n多:{},\n空:{}'
+                             .format(self.strategy_name, locked_long_volume, locked_short_volume))
             return
 
         # 检查所有品种得昨仓是否满足数量
