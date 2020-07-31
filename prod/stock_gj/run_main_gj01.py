@@ -12,7 +12,7 @@ from vnpy.event import EventEngine
 from vnpy.trader.engine import MainEngine
 from vnpy.trader.ui import MainWindow, create_qapp
 
-from vnpy.gateway.binancef import BinancefGateway
+#from vnpy.gateway.binancef import BinancefGateway
 # from vnpy.gateway.bitmex import BitmexGateway
 # from vnpy.gateway.futu import FutuGateway
 # from vnpy.gateway.ib import IbGateway
@@ -40,8 +40,10 @@ from vnpy.gateway.binancef import BinancefGateway
 # from vnpy.gateway.bitstamp import BitstampGateway
 # from vnpy.gateway.gateios import GateiosGateway
 # from vnpy.gateway.bybit import BybitGateway
+from vnpy.gateway.gj import GjGateway
 
-from vnpy.app.cta_strategy_pro import CtaStrategyProApp
+# from vnpy.app.cta_crypto import CtaCryptoApp
+from vnpy.app.cta_stock import CtaStockApp
 # from vnpy.app.csv_loader import CsvLoaderApp
 # from vnpy.app.algo_trading import AlgoTradingApp
 # from vnpy.app.cta_backtester import CtaBacktesterApp
@@ -62,7 +64,7 @@ def main():
 
     main_engine = MainEngine(event_engine)
 
-    main_engine.add_gateway(BinancefGateway, 'binance_future')
+    main_engine.add_gateway(GjGateway, 'gj01')
     #main_engine.add_gateway(CtpGateway)
     # main_engine.add_gateway(CtptestGateway)
     # main_engine.add_gateway(MiniGateway)
@@ -92,7 +94,7 @@ def main():
     #main_engine.add_gateway(BybitGateway)
 
     #main_engine.add_app(CtaStrategyApp)
-    main_engine.add_app(CtaStrategyProApp)
+    main_engine.add_app(CtaStockApp)
     #main_engine.add_app(CtaBacktesterApp)
     # main_engine.add_app(CsvLoaderApp)
     # main_engine.add_app(AlgoTradingApp)

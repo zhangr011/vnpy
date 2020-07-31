@@ -11,7 +11,7 @@ from copy import copy,deepcopy
 from typing import Any, Callable
 from logging import INFO, ERROR
 from datetime import datetime
-from vnpy.trader.constant import Interval, Direction, Offset, Status, OrderType, Color
+from vnpy.trader.constant import Interval, Direction, Offset, Status, OrderType, Color, Exchange
 from vnpy.trader.object import BarData, TickData, OrderData, TradeData
 from vnpy.trader.utility import virtual, append_data, extract_vt_symbol, get_underlying_symbol
 
@@ -836,7 +836,7 @@ class CtaProTemplate(CtaTemplate):
 
         if self.position.long_pos > 0:
             for g in self.gt.get_opened_grids(direction=Direction.LONG):
-                vt_symbol = g.snapshot.get('mi_symbol', self.vt_symbol)
+                vt_symbol = g.snapshot.get('mi_symbol', g.vt_symbol if g.vt_symbol and '99' not in g.vt_symbol else self.vt_symbol)
                 open_price = g.snapshot.get('open_price', g.open_price)
                 pos_list.append({'vt_symbol': vt_symbol,
                                  'direction': 'long',
@@ -845,7 +845,7 @@ class CtaProTemplate(CtaTemplate):
 
         if abs(self.position.short_pos) > 0:
             for g in self.gt.get_opened_grids(direction=Direction.SHORT):
-                vt_symbol = g.snapshot.get('mi_symbol', self.vt_symbol)
+                vt_symbol = g.snapshot.get('mi_symbol',  g.vt_symbol if g.vt_symbol and '99' not in g.vt_symbol else self.vt_symbol)
                 open_price = g.snapshot.get('open_price', g.open_price)
                 pos_list.append({'vt_symbol': vt_symbol,
                                  'direction': 'short',
@@ -1202,20 +1202,25 @@ class CtaProFutureTemplate(CtaProTemplate):
         self.fix_order(order)
 
         if order.vt_orderid in self.active_orders:
+            active_order = self.active_orders[order.vt_orderid]
 
             if order.volume == order.traded and order.status in [Status.ALLTRADED]:
                 self.on_order_all_traded(order)
 
-            elif order.offset == Offset.OPEN and order.status in [Status.CANCELLED]:
+            #elif order.offset == Offset.OPEN and order.status in [Status.CANCELLED]:
+            # 这里 换成active_order的，因为原始order有可能被换成锁仓方式
+            elif active_order['offset'] == Offset.OPEN and order.status in [Status.CANCELLED]:
                 # 开仓委托单被撤销
                 self.on_order_open_canceled(order)
 
-            elif order.offset != Offset.OPEN and order.status in [Status.CANCELLED]:
+            #elif order.offset != Offset.OPEN and order.status in [Status.CANCELLED]:
+            #  # 这里 换成active_order的，因为原始order有可能被换成锁仓方式
+            elif active_order['offset'] != Offset.OPEN and order.status in [Status.CANCELLED]:
                 # 平仓委托单被撤销
                 self.on_order_close_canceled(order)
 
             elif order.status == Status.REJECTED:
-                if order.offset == Offset.OPEN:
+                if active_order['offset'] == Offset.OPEN:
                     self.write_error(u'{}委托单开{}被拒，price:{},total:{},traded:{}，status:{}'
                                      .format(order.vt_symbol, order.direction, order.price, order.volume,
                                              order.traded, order.status))
@@ -1238,10 +1243,10 @@ class CtaProFutureTemplate(CtaProTemplate):
         :return:
         """
         self.write_log(u'委托单全部完成:{}'.format(order.__dict__))
-        order_info = self.active_orders[order.vt_orderid]
+        active_order = self.active_orders[order.vt_orderid]
 
         # 通过vt_orderid，找到对应的网格
-        grid = order_info.get('grid', None)
+        grid = active_order.get('grid', None)
         if grid is not None:
             # 移除当前委托单
             if order.vt_orderid in grid.order_ids:
@@ -1253,7 +1258,7 @@ class CtaProFutureTemplate(CtaProTemplate):
                 grid.traded_volume = 0
 
                 # 平仓完毕（cover， sell）
-                if order.offset != Offset.OPEN:
+                if active_order['offset'] != Offset.OPEN:
                     grid.open_status = False
                     grid.close_status = True
 

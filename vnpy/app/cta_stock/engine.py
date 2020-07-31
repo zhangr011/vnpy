@@ -237,6 +237,11 @@ class CtaEngine(BaseEngine):
                 # 推送到事件
                 self.put_all_strategy_pos_event(all_strategy_pos)
 
+        for strategy in self.strategies.values():
+            if strategy.inited:
+                self.call_strategy_func(strategy, strategy.on_timer)
+
+
     def process_tick_event(self, event: Event):
         """处理tick到达事件"""
         tick = event.data

@@ -187,7 +187,8 @@ class AlgoEngine(BaseEngine):
         price: float,
         volume: float,
         order_type: OrderType,
-        offset: Offset
+        offset: Offset,
+        lock:bool=False
     ):
         """"""
         contract = self.main_engine.get_contract(vt_symbol)
@@ -208,7 +209,7 @@ class AlgoEngine(BaseEngine):
             price=price,
             offset=offset
         )
-        req_list = self.offset_converter.convert_order_request(req=original_req, lock=False, gateway_name=contract.gateway_name)
+        req_list = self.offset_converter.convert_order_request(req=original_req, lock=lock, gateway_name=contract.gateway_name)
         vt_orderids = []
         for req in req_list:
             vt_orderid = self.main_engine.send_order(req, contract.gateway_name)
@@ -251,7 +252,8 @@ class AlgoEngine(BaseEngine):
             'order_volume': req.volume,
             'timer_interval': 60 * 60 * 24,
             'strategy_name': req.strategy_name,
-            'gateway_name': gateway_name
+            'gateway_name': gateway_name,
+            'order_type': req.type
         }
         # 更新算法配置
         setting.update(contract)

@@ -1,6 +1,6 @@
 from vnpy.trader.engine import BaseEngine
 from vnpy.trader.object import TickData, OrderData, TradeData
-from vnpy.trader.constant import OrderType, Offset, Direction
+from vnpy.trader.constant import OrderType, Offset, Direction,Exchange
 from vnpy.trader.utility import virtual
 
 
@@ -114,7 +114,8 @@ class AlgoTemplate:
         price,
         volume,
         order_type: OrderType = OrderType.LIMIT,
-        offset: Offset = Offset.NONE
+        offset: Offset = Offset.NONE,
+        lock: bool = False
     ):
         """"""
         if offset in [Offset.CLOSE]:
@@ -131,7 +132,8 @@ class AlgoTemplate:
             price,
             volume,
             order_type,
-            offset
+            offset,
+            lock
         )
 
     def sell(
@@ -140,7 +142,8 @@ class AlgoTemplate:
         price,
         volume,
         order_type: OrderType = OrderType.LIMIT,
-        offset: Offset = Offset.NONE
+        offset: Offset = Offset.NONE,
+        lock: bool = False
     ):
         """"""
         if offset in [Offset.NONE, Offset.CLOSE]:
@@ -157,7 +160,8 @@ class AlgoTemplate:
             price,
             volume,
             order_type,
-            offset
+            offset,
+            lock
         )
 
     def cancel_order(self, vt_orderid: str):

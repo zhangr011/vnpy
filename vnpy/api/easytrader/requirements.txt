@@ -1,0 +1,31 @@
+-i http://mirrors.aliyun.com/pypi/simple/
+--trusted-host mirrors.aliyun.com
+beautifulsoup4
+bs4
+certifi
+chardet
+click
+cssselect
+dill
+easyutils
+flask
+idna
+itsdangerous
+jinja2
+lxml
+markupsafe
+numpy
+pandas
+pillow
+pyperclip
+pyquery
+pytesseract
+python-dateutil
+python-xlib
+pytz
+pywinauto==0.6.6
+requests
+six
+urllib3
+werkzeug
+
