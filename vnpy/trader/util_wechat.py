@@ -1,4 +1,4 @@
-﻿# -*- coding:utf-8 -*-
+# -*- coding:utf-8 -*-
 '''
 通过wxpusher发送Weixin的消息
 http://wxpusher.zjiecode.com/
@@ -20,9 +20,10 @@ global wechat_lock
 wechat_lock = Lock()
 
 # 这里可以设置UIDS, 多个人可同时接收
-UIDS = ['UID_kZguGPBQPWn41Ni9FK4CgPts2Kj']
+UIDS = ['UID_EuPgrgR0cIHSkPonmxZST9PnZ1VA']
 
-APP_TOKEN = 'AT_aDuiQu41dmAQV2vUMXOaaTDrWyhKJN2z'
+# APP_TOKEN = 'AT_aDuiQu41dmAQV2vUMXOaaTDrWyhKJN2z'
+APP_TOKEN = 'AT_uTDiw2Wjr9OCyzm68hvjEaIdEkyhkp3Y'
 
 
 class wechat_thread(Thread):
