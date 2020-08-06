@@ -26,8 +26,14 @@ dist
 *.iobj
 *.ipdb
 *.pdb
+*.so
 
 # Documents
 _build
 _static
 _templates
+
+tests/celery/
+/bar_data
+/zacchaeus
+/vnpy.egg-info
