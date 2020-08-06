@@ -202,7 +202,7 @@ def _get_trader_dir(temp_name: str) -> Tuple[Path, Path]:
     # by incenselee
     # 原方法，当前目录必须自建.vntrader子目录，否则在用户得目录下创建
     # 为兼容多账号管理，取消此方法。
-    return Path.cwd(), Path.cwd()
+    # return Path.cwd(), Path.cwd()
 
     cwd = Path.cwd()
     temp_path = cwd.joinpath(temp_name)
@@ -224,6 +224,12 @@ def _get_trader_dir(temp_name: str) -> Tuple[Path, Path]:
 
 
 TRADER_DIR, TEMP_DIR = _get_trader_dir(".vntrader")
+print('===== trader dir: =====')
+print(TRADER_DIR)
+print('===== temp dir: =====')
+print(TEMP_DIR)
+print('=====================')
+
 if TRADER_DIR not in sys.path:
     sys.path.append(str(TRADER_DIR))
     print(f'sys.path append: {str(TRADER_DIR)}')
