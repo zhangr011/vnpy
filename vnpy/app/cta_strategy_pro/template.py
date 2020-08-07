@@ -575,7 +575,7 @@ class CtaProTemplate(CtaTemplate):
     """
 
     idx_symbol = None  # 指数合约
-
+    exchange = Exchange.LOCAL
     price_tick = 1  # 商品的最小价格跳动
     symbol_size = 10  # 商品得合约乘数
     margin_rate = 0.1  # 商品的保证金
@@ -637,10 +637,10 @@ class CtaProTemplate(CtaTemplate):
         for name in self.parameters:
             if name in setting:
                 setattr(self, name, setting[name])
-
+        symbol, self.exchange = extract_vt_symbol(self.vt_symbol)
         if self.idx_symbol is None:
-            symbol, exchange = extract_vt_symbol(self.vt_symbol)
-            self.idx_symbol = get_underlying_symbol(symbol).upper() + '99.' + exchange.value
+            self.idx_symbol = get_underlying_symbol(symbol).upper() + '99.' + self.exchange.value
+
         self.cta_engine.subscribe_symbol(strategy_name=self.strategy_name, vt_symbol=self.idx_symbol)
 
         if self.vt_symbol != self.idx_symbol:
@@ -1816,6 +1816,7 @@ class CtaProFutureTemplate(CtaProTemplate):
                                 vt_symbol=sell_symbol,
                                 order_type=self.order_type,
                                 order_time=self.cur_datetime,
+                                lock=self.exchange==Exchange.CFFEX,
                                 grid=grid)
             if len(vt_orderids) == 0:
                 self.write_error(u'多单平仓委托失败')
@@ -1916,6 +1917,7 @@ class CtaProFutureTemplate(CtaProTemplate):
                                      vt_symbol=cover_symbol,
                                      order_type=self.order_type,
                                      order_time=self.cur_datetime,
+                                     lock=self.exchange==Exchange.CFFEX,
                                      grid=grid)
             if len(vt_orderids) == 0:
                 self.write_error(u'空单平仓委托失败')

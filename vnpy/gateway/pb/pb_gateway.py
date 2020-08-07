@@ -474,12 +474,13 @@ class PbMdApi(object):
                         {'ip': "124.160.88.183", 'port': 7709},
                         {'ip': "60.12.136.250", 'port': 7709},
                         {'ip': "218.108.98.244", 'port': 7709},
-                        {'ip': "218.108.47.69", 'port': 7709},
+                        #{'ip': "218.108.47.69", 'port': 7709},
                         {'ip': "114.80.63.12", 'port': 7709},
                         {'ip': "114.80.63.35", 'port': 7709},
                         {'ip': "180.153.39.51", 'port': 7709},
-                        {'ip': '14.215.128.18', 'port': 7709},
-                        {'ip': '59.173.18.140', 'port': 7709}]
+                        #{'ip': '14.215.128.18', 'port': 7709},
+                        #{'ip': '59.173.18.140', 'port': 7709}
+                         ]
 
         self.best_ip = {'ip': None, 'port': None}
         self.api_dict = {}  # API 的连接会话对象字典
@@ -688,7 +689,12 @@ class PbMdApi(object):
             exchange = info.get('exchange', '')
             if len(exchange) == 0:
                 continue
+
+            vn_exchange_str = get_stock_exchange(symbol)
+            if exchange != vn_exchange_str:
+                continue
             exchange = Exchange(exchange)
+
             if info['stock_type'] == 'stock_cn':
                 product = Product.EQUITY
             elif info['stock_type'] in ['bond_cn', 'cb_cn']:
@@ -715,16 +721,18 @@ class PbMdApi(object):
                 min_volume=volume_tick,
                 margin_rate=1
             )
-            # 缓存 合约 =》 中文名
-            symbol_name_map.update({contract.symbol: contract.name})
 
-            # 缓存代码和交易所的印射关系
-            symbol_exchange_map[contract.symbol] = contract.exchange
+            if product!= Product.INDEX:
+                # 缓存 合约 =》 中文名
+                symbol_name_map.update({contract.symbol: contract.name})
 
-            self.contract_dict.update({contract.symbol: contract})
-            self.contract_dict.update({contract.vt_symbol: contract})
-            # 推送
-            self.gateway.on_contract(contract)
+                # 缓存代码和交易所的印射关系
+                symbol_exchange_map[contract.symbol] = contract.exchange
+
+                self.contract_dict.update({contract.symbol: contract})
+                self.contract_dict.update({contract.vt_symbol: contract})
+                # 推送
+                self.gateway.on_contract(contract)
 
     def get_stock_list(self):
         """股票所有的code&name列表"""
@@ -1605,7 +1613,7 @@ class PbTdApi(object):
                 continue
 
     def check_send_order_dbf(self):
-        """检查更新委托文件csv"""
+        """检查更新委托文件dbf"""
 
         dbf_file = os.path.abspath(os.path.join(self.order_folder,
                                                 '{}{}.dbf'.format(PB_FILE_NAMES.get('send_order'), self.trading_date)))
@@ -1639,7 +1647,7 @@ class PbTdApi(object):
                             err_msg = err_msg.decode('gbk')
 
                         if len(err_msg) == 0 or record.wtsbdm == 0:
-                            self.gateway.write_log(f'收到失败标准，又没有失败原因:{print_dict(record.__dict__)}')
+                            self.gateway.write_log(f'收到失败，又没有失败原因')
                             continue
 
                         err_id = str(getattr(record, 'wtsbdm', '')).strip()
@@ -2056,6 +2064,9 @@ class TqMdApi():
 
     def connect(self, setting = {}):
         """"""
+        if self.api and self.is_connected:
+            self.gateway.write_log(f'天勤行情已经接入，无需重新连接')
+            return
         try:
             from tqsdk import TqApi
             self.api = TqApi(_stock=True)

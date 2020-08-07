@@ -42,6 +42,8 @@ if __name__ == "__main__":
     download_tasks = {}
     begin_date = datetime.strptime(args.begin, '%Y%m%d')
     end_date = datetime.strptime(args.end, '%Y%m%d')
+    if end_date > datetime.now():
+        end_date = datetime.now()
     n_days = (end_date - begin_date).days
 
     future_contracts = get_future_contracts()
@@ -56,7 +58,7 @@ if __name__ == "__main__":
     if n_days <= 0:
         n_days = 1
 
-    for n in range(n_days):
+    for n in range(n_days+1):
         download_date = begin_date + timedelta(days=n)
         if download_date.isoweekday() in [6, 7]:
             continue
@@ -71,10 +73,19 @@ if __name__ == "__main__":
             "{}_{}.csv".format(symbol, download_date.strftime('%Y%m%d'))))
         zip_file = os.path.abspath(os.path.join(save_folder,
             "{}_{}.pkb2".format(symbol, download_date.strftime('%Y%m%d'))))
+
         if os.path.exists(save_file):
-            continue
+            # 文件size是否大于1024字节
+            if os.path.getsize(save_file) > 1024:
+                # 获取最后的tick时间
+                dt = get_csv_last_dt(file_name=save_file, dt_format='%Y-%m-%d %H:%M:%S.%f')
+                # 判断是否为交易日最后
+                if dt and dt.hour == 14 and dt.minute == 59:
+                    continue
+
         if os.path.exists(zip_file):
-            continue
+            if os.path.getsize(save_file) > 1024:
+                continue
 
         # 下载从 2018-05-01凌晨0点 到 2018-06-01凌晨0点 的 T1809 盘口Tick数据
         download_tasks["{}_{}_tick".format(symbol, download_date.strftime('%Y%m%d'))] = DataDownloader(

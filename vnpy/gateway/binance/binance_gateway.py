@@ -162,7 +162,7 @@ class BinanceGateway(BaseGateway):
             self.status.update({'con': True})
 
         self.count += 1
-        if self.count < 2:
+        if self.count < 5:
             return
         self.count = 0
         if len(self.query_functions) > 0:

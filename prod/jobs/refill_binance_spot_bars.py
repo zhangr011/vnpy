@@ -13,18 +13,18 @@ if ROOT_PATH not in sys.path:
     print(f'append {ROOT_PATH} into sys.path')
 
 from datetime import datetime, timedelta
-from vnpy.data.binance.binance_future_data import BinanceFutureData, HistoryRequest, Exchange, Interval
+from vnpy.data.binance.binance_spot_data import BinanceSpotData, HistoryRequest, Exchange, Interval
 from vnpy.trader.utility import get_csv_last_dt, append_data
 
-# 获取币安合约交易的所有期货合约
-future_data = BinanceFutureData()
-contracts = BinanceFutureData.load_contracts()
+# 获取币安现货交易的所有合约
+spot_data = BinanceSpotData()
+contracts = BinanceSpotData.load_contracts()
 if len(contracts) == 0:
-    future_data.save_contracts()
-    contracts = BinanceFutureData.load_contracts()
+    spot_data.save_contracts()
+    contracts = BinanceSpotData.load_contracts()
 
 # 开始下载日期
-start_date = '20190101'
+start_date = '20170101'
 
 if __name__ == "__main__":
 
@@ -57,17 +57,19 @@ if __name__ == "__main__":
             start=start_dt
         )
 
-        bars = future_data.get_bars(req=req, return_dict=True)
-        future_data.export_to(bars, file_name=bar_file_path)
+        bars = spot_data.get_bars(req=req, return_dict=True)
+        spot_data.export_to(bars, file_name=bar_file_path)
 
     # 逐一合约进行下载
     for vt_symbol, contract_info in contracts.items():
         symbol = contract_info.get('symbol')
+        if symbol not in ['BTCUSDT', 'ETHUSDT']:
+            continue
 
         bar_file_path = os.path.abspath(os.path.join(
             ROOT_PATH,
             'bar_data',
-            'binance',
+            'binance_spot',
             f'{symbol}_{start_date}_{interval}.csv'))
 
         # 不存在文件，直接下载，并保存
@@ -98,7 +100,7 @@ if __name__ == "__main__":
             start=start_dt
         )
 
-        bars = future_data.get_bars(req=req, return_dict=True)
+        bars = spot_data.get_bars(req=req, return_dict=True)
         if len(bars) <= 0:
             print(f'下载{symbol} {interval_num} {interval_type.value} 数据为空白')
             continue

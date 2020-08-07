@@ -1,6 +1,6 @@
 # flake8: noqa
 """
-下载通达信股票合约1分钟bar => vnpy项目目录/bar_data/
+下载通达信可转债1分钟bar => vnpy项目目录/bar_data/
 上海股票 => SSE子目录
 深圳股票 => SZSE子目录
 """
@@ -30,22 +30,21 @@ start_date = '20160101'
 # 创建API对象
 api_01 = TdxStockData()
 
-# 更新本地合约缓存信息
-stock_list = load_json('stock_list.json')
-
 symbol_dict = api_01.symbol_dict
 
 # 逐一指数合约下载并更新
-for stock_code in stock_list:
-    market_id = get_tdx_market_code(stock_code)
-    if market_id == 0:
+for k, symbol_info in symbol_dict.items():
+    stock_code, market_id = k.split('_')
+
+    if market_id == '0':
         exchange_name = '深交所'
         exchange = Exchange.SZSE
     else:
         exchange_name = '上交所'
         exchange = Exchange.SSE
+    if symbol_info.get('stock_type') != 'cb_cn':
+        continue
 
-    symbol_info = symbol_dict.get(f'{stock_code}_{market_id}')
     stock_name = symbol_info.get('name')
     print(f'开始更新:{exchange_name}/{stock_name}, 代码:{stock_code}')
     bar_file_folder = os.path.abspath(os.path.join(bar_data_folder, f'{exchange.value}'))

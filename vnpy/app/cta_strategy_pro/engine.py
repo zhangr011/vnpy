@@ -1814,6 +1814,8 @@ class CtaEngine(BaseEngine):
             symbol, exchange = extract_vt_symbol(vt_symbol)
             self.main_engine.subscribe(req=SubscribeRequest(symbol=symbol, exchange=exchange),
                                        gateway_name=gateway_name)
+            self.write_log(f'{vt_symbol}无最新tick，订阅行情')
+
         if volume > 0 and tick:
             contract = self.main_engine.get_contract(vt_symbol)
             req = OrderRequest(
