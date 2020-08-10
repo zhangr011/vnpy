@@ -908,6 +908,7 @@ class CtaProTemplate(CtaTemplate):
                 continue
             if not g.open_status or g.order_status or g.volume - g.traded_volume <= 0:
                 continue
+
             none_mi_grid = g
             if g.traded_volume > 0 and g.volume - g.traded_volume > 0:
                 g.volume -= g.traded_volume
@@ -939,6 +940,12 @@ class CtaProTemplate(CtaTemplate):
         if len(vt_orderids) > 0:
             self.write_log(f'切换合约,委托卖出非主力合约{none_mi_symbol}持仓:{none_mi_grid.volume}')
 
+            # 已经发生过换月的，不执行买入新合约
+            if none_mi_grid.snapshot.get("switched", False):
+                self.write_log(f'已经执行过换月，不再创建新的买入操作')
+                return
+
+            none_mi_grid.snapshot.update({'switched': True})
             # 添加买入主力合约
             grid.snapshot.update({'mi_symbol': self.vt_symbol, 'open_price': self.cur_mi_price})
             self.gt.dn_grids.append(grid)
@@ -951,9 +958,9 @@ class CtaProTemplate(CtaTemplate):
             if len(vt_orderids) > 0:
                 self.write_log(u'切换合约,委托买入主力合约:{},价格:{},数量:{}'
                                .format(self.vt_symbol, self.cur_mi_price, grid.volume))
-                self.gt.save()
             else:
                 self.write_error(f'委托买入主力合约:{self.vt_symbol}失败')
+            self.gt.save()
         else:
             self.write_error(f'委托卖出非主力合约:{none_mi_symbol}失败')
 
@@ -1006,7 +1013,12 @@ class CtaProTemplate(CtaTemplate):
                                  grid=none_mi_grid)
         if len(vt_orderids) > 0:
             self.write_log(f'委托平空非主力合约{none_mi_symbol}持仓:{none_mi_grid.volume}')
+            # 已经发生过换月的，不执行开空新合约
+            if none_mi_grid.snapshot.get("switched", False):
+                self.write_log(f'已经执行过换月，不再创建新的空操作')
+                return
 
+            none_mi_grid.snapshot.update({'switched': True})
             # 添加卖出主力合约
             grid.id = str(uuid.uuid1())
             grid.snapshot.update({'mi_symbol': self.vt_symbol, 'open_price': self.cur_mi_price})
@@ -1018,9 +1030,9 @@ class CtaProTemplate(CtaTemplate):
                                      grid=grid)
             if len(vt_orderids) > 0:
                 self.write_log(f'委托做空主力合约:{self.vt_symbol},价格:{self.cur_mi_price},数量:{grid.volume}')
-                self.gt.save()
             else:
                 self.write_error(f'委托做空主力合约:{self.vt_symbol}失败')
+            self.gt.save()
         else:
             self.write_error(f'委托平空非主力合约:{none_mi_symbol}失败')
 
