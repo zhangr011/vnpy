@@ -6,7 +6,7 @@ import pickle
 import bz2
 from functools import lru_cache
 from logging import INFO, ERROR
-from vnpy.trader.utility import load_json, save_json, get_file_path
+from vnpy.trader.utility import load_json, save_json
 
 # 期货的配置文件
 TDX_FUTURE_CONFIG = 'tdx_future_config.json'
@@ -98,7 +98,7 @@ def save_future_contracts(future_contracts_dict: dict):
 
 def get_cache_config(config_file_name):
     """获取本地缓存的配置地址信息"""
-    config_file_name = get_file_path(config_file_name)
+    config_file_name = os.path.abspath(os.path.join(os.path.dirname(__file__), config_file_name))
     config = {}
     if not os.path.exists(config_file_name):
         return config
@@ -109,19 +109,21 @@ def get_cache_config(config_file_name):
 
 def save_cache_config(data: dict, config_file_name):
     """保存本地缓存的配置地址信息"""
-    config_file_name = get_file_path(config_file_name)
+    config_file_name = os.path.abspath(os.path.join(os.path.dirname(__file__), config_file_name))
     with bz2.BZ2File(config_file_name, 'wb') as f:
         pickle.dump(data, f)
 
 
 def get_cache_json(json_file_name: str):
     """获取本地缓存的json配置信息"""
-    return load_json(json_file_name)
+    config_file_name = os.path.abspath(os.path.join(os.path.dirname(__file__), json_file_name))
+    return load_json(config_file_name)
 
 
 def save_cache_json(data_dict: dict, json_file_name: str):
     """保存本地缓存的JSON配置信息"""
-    save_json(filename = json_file_name, data=data_dict)
+    config_file_name = os.path.abspath(os.path.join(os.path.dirname(__file__), json_file_name))
+    save_json(filename = config_file_name, data = data_dict)
 
 
 def get_stock_type(code):

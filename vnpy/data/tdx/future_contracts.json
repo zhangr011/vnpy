@@ -601,5 +601,11 @@
         "margin_rate": 0.08,
         "symbol_size": 20,
         "price_tick": 1.0
+    },
+    "LU": {
+        "underlying_symbol": "LU",
+        "mi_symbol": "lu2101",
+        "full_symbol": "LU2101",
+        "exchange": "SHFE"
     }
 }
