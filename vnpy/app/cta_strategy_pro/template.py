@@ -1819,7 +1819,8 @@ class CtaProFutureTemplate(CtaProTemplate):
                 grid.volume -= grid.traded_volume
                 grid.traded_volume = 0
 
-            if grid_pos.long_pos <grid.volume:
+            # 非股指，才需要检查现有仓位
+            if self.exchange!= Exchange.CFFEX and grid_pos.long_pos <grid.volume:
                 self.write_error(f'账号{sell_symbol}多单持仓:{grid_pos.long_pos}不满足平仓:{grid.volume}要求:')
                 return False
 
@@ -1920,7 +1921,8 @@ class CtaProFutureTemplate(CtaProTemplate):
                 grid.volume -= grid.traded_volume
                 grid.traded_volume = 0
 
-            if grid_pos.short_pos < grid.volume:
+            # 非股指，需要检查是否有持仓
+            if self.exchange==Exchange.CFFEX and grid_pos.short_pos < grid.volume:
                 self.write_error(f'账号{cover_symbol}多单持仓:{grid_pos.short_pos}不满足平仓:{grid.volume}要求:')
                 return False
 
