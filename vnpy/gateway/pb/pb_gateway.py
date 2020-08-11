@@ -2023,14 +2023,14 @@ class PbTdApi(object):
                 sys_orderid = str(data.wtxh)
 
                 if order_status in [Status.NOTTRADED] and len(sys_orderid) > 0:
-                    self.gateway.write_log(f'撤单：{data.__dict__}')
+                    self.gateway.write_log(f'撤单：{data.wtxh}')
                     cancel_data = (int(sys_orderid), None, None, None, None, None, None, None)
                     cancel_table.append(cancel_data)
 
             orders_table.close()
             cancel_table.close()
 
-        except Exchange as ex:
+        except Exception as ex:
             self.gateway.write_error(f'dbf全委托撤单异常:{str(ex)}')
             self.gateway.write_error(traceback.format_exc())
             return False

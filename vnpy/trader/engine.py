@@ -532,7 +532,7 @@ class OmsEngine(BaseEngine):
         tick = event.data
         self.ticks[tick.vt_symbol] = tick
 
-        if tick.last_price:
+        if '&' not in tick.symbol and tick.last_price:
             self.prices[tick.vt_symbol] = tick.last_price
 
     def process_order_event(self, event: Event) -> None:

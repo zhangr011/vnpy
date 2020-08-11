@@ -137,9 +137,9 @@ class CtptestGateway(BaseGateway):
 
     exchanges = list(EXCHANGE_CTP2VT.values())
 
-    def __init__(self, event_engine):
+    def __init__(self, event_engine, gateway_name="CTPTEST"):
         """Constructor"""
-        super().__init__(event_engine, "CTPTEST")
+        super().__init__(event_engine, gateway_name)
 
         self.td_api = CtpTdApi(self)
         self.md_api = CtpMdApi(self)
@@ -166,8 +166,9 @@ class CtptestGateway(BaseGateway):
             and (not md_address.startswith("ssl://"))
         ):
             md_address = "tcp://" + md_address
-
+        print(f'连接交易前置机:{td_address}')
         self.td_api.connect(td_address, userid, password, brokerid, auth_code, appid, product_info)
+        print(f'连接行情前置机:{md_address}')
         self.md_api.connect(md_address, userid, password, brokerid)
 
         self.init_query()
@@ -772,10 +773,10 @@ class CtpTdApi(TdApi):
 
         ctp_req = {
             "InstrumentID": req.symbol,
-            "ExchangeID": req.exchange,
+            "ExchangeID": req.exchange.value,
             "OrderRef": order_ref,
             "FrontID": int(frontid),
-            "SessionID": int(sessionid),
+            "SessionID": abs(int(sessionid)),
             "ActionFlag": THOST_FTDC_AF_Delete,
             "BrokerID": self.brokerid,
             "InvestorID": self.userid

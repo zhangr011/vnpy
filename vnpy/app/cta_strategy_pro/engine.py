@@ -237,7 +237,7 @@ class CtaEngine(BaseEngine):
                 all_strategy_pos = self.get_all_strategy_pos()
 
                 # 每5分钟检查一次
-                if dt.minute % 5 == 0:
+                if dt.minute % 5 == 0 and self.engine_config.get('compare_pos',True):
                     # 比对仓位，使用上述获取得持仓信息，不用重复获取
                     self.compare_pos(strategy_pos_list=copy(all_strategy_pos))
 
@@ -859,7 +859,10 @@ class CtaEngine(BaseEngine):
 
         tick = self.main_engine.get_tick(vt_symbol)
         if tick:
-            return tick.last_price
+            if '&' in tick.symbol:
+                return (tick.ask_price_1 + tick.bid_price_1) / 2
+            else:
+                return tick.last_price
 
         return None
 

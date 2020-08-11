@@ -383,6 +383,7 @@ class CtpGateway(BaseGateway):
 
                         # 增加映射（ leg1 对应的合成器列表映射)
                         leg1_symbol = setting.get('leg1_symbol')
+                        leg1_exchange = Exchange(setting.get('leg1_exchange'))
                         combiner_list = self.tick_combiner_map.get(leg1_symbol, [])
                         if combiner not in combiner_list:
                             self.write_log(u'添加Leg1:{}与合成器得映射'.format(leg1_symbol))
@@ -391,6 +392,7 @@ class CtpGateway(BaseGateway):
 
                         # 增加映射（ leg2 对应的合成器列表映射)
                         leg2_symbol = setting.get('leg2_symbol')
+                        leg2_exchange = Exchange(setting.get('leg2_exchange'))
                         combiner_list = self.tick_combiner_map.get(leg2_symbol, [])
                         if combiner not in combiner_list:
                             self.write_log(u'添加Leg2:{}与合成器得映射'.format(leg2_symbol))
@@ -400,14 +402,14 @@ class CtpGateway(BaseGateway):
                         self.write_log(u'订阅leg1:{}'.format(leg1_symbol))
                         leg1_req = SubscribeRequest(
                             symbol=leg1_symbol,
-                            exchange=symbol_exchange_map.get(leg1_symbol, Exchange.LOCAL)
+                            exchange=leg1_exchange
                         )
                         self.subscribe(leg1_req)
 
                         self.write_log(u'订阅leg2:{}'.format(leg2_symbol))
                         leg2_req = SubscribeRequest(
                             symbol=leg2_symbol,
-                            exchange=symbol_exchange_map.get(leg1_symbol, Exchange.LOCAL)
+                            exchange=leg2_exchange
                         )
                         self.subscribe(leg2_req)
 
@@ -645,6 +647,10 @@ class CtpMdApi(MdApi):
             ask_volume_1=data["AskVolume1"],
             gateway_name=self.gateway_name
         )
+
+        # 处理一下标准套利合约的last_price
+        if '&' in symbol:
+            tick.last_price = (tick.ask_price_1 + tick.bid_price_1)/2
 
         if data["BidVolume2"] or data["AskVolume2"]:
             tick.bid_price_2 = adjust_price(data["BidPrice2"])
