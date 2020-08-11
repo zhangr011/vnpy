@@ -46,8 +46,8 @@ if __name__ == "__main__":
         index_symbol = underlying_symbol + '99'
         print(f'开始更新:{index_symbol}')
 
-        pn = '1d'
-        period = '1day'
+        pn = '15m'
+        period = '15min'    # 15min, 1day
         # csv数据文件名
         bar_file_path = os.path.abspath(os.path.join(bar_data_folder, 'tdx', f'{underlying_symbol}99_{start_date}_{pn}.csv'))
 
