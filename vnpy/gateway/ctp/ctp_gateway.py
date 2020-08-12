@@ -985,6 +985,9 @@ class CtpTdApi(TdApi):
                 underlying_symbol = underlying_symbol.upper()
                 # 只推送普通合约的指数
                 if len(underlying_symbol) <= 2:
+                    if 'LU' == underlying_symbol:
+                        from zacchaeus import pdebug
+                        pdebug()
                     idx_contract = index_contracts.get(underlying_symbol, None)
                     if idx_contract is None:
                         idx_contract = deepcopy(contract)

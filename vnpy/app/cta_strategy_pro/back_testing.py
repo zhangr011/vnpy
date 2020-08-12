@@ -700,7 +700,7 @@ class BackTestingEngine(object):
                 self.write_log(u'转换策略为全路径:{}'.format(class_name))
 
         # 获取策略类的定义
-        strategy_class = import_module_by_str(class_name)
+        strategy_class = strategy_setting.get('strategy_class', None)
         if strategy_class is None:
             self.write_error(u'加载策略模块失败:{}'.format(class_name))
             return
