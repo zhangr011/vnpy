@@ -295,6 +295,7 @@ class CtpGateway(BaseGateway):
                 contract_dict = c.get_contracts()
                 for vt_symbol, contract in contract_dict.items():
                     contract.gateway_name = self.gateway_name
+                    symbol_exchange_map[contract.symbol] = contract.exchange
                     self.on_contract(contract)
 
         except Exception as ex:  # noqa
