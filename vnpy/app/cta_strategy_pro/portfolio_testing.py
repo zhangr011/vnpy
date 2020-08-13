@@ -319,7 +319,7 @@ class PortfolioTestingEngine(BackTestingEngine):
                         if gc_collect_days >= 10:
                             # 执行内存回收
                             gc.collect()
-                            sleep(1)
+                            sleep(0.1)
                             gc_collect_days = 0
 
                 if self.net_capital < 0:
@@ -438,7 +438,7 @@ class PortfolioTestingEngine(BackTestingEngine):
                 if gc_collect_days >= 10:
                     # 执行内存回收
                     gc.collect()
-                    sleep(1)
+                    sleep(0.1)
                     gc_collect_days = 0
 
                 if self.net_capital < 0:
