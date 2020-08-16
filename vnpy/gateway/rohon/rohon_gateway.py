@@ -1042,8 +1042,8 @@ class RohonTdApi(TdApi):
         """
         Callback of order status update.
         """
-        #if self.gateway.debug:
-        #    print(f'onRtnOrder')
+        if self.gateway.debug:
+            print(f'onRtnOrder')
 
         symbol = data["InstrumentID"]
         exchange = symbol_exchange_map.get(symbol, "")

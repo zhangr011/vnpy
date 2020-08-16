@@ -103,6 +103,7 @@ class AlgoTemplate:
         self.put_variables_event()
 
         self.write_log("停止算法")
+        return True
 
     def subscribe(self, vt_symbol):
         """"""

@@ -787,7 +787,8 @@ class BackTestingEngine(object):
         """保存策略数据"""
         for strategy in self.strategies.values():
             self.write_log(u'save strategy data')
-            strategy.save_data()
+            if hasattr(strategy,'save_data'):
+                strategy.save_data()
 
     def send_order(self,
                    strategy: CtaTemplate,

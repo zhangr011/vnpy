@@ -842,7 +842,7 @@ class CtpTdApi(TdApi):
         )
         self.gateway.on_order(order)
 
-        self.gateway.write_error("交易委托失败", error)
+        #self.gateway.write_error("交易委托失败", error)
 
     def onRspOrderAction(self, data: dict, error: dict, reqid: int, last: bool):
         """"""
@@ -1076,6 +1076,7 @@ class CtpTdApi(TdApi):
             traded=data["VolumeTraded"],
             status=STATUS_CTP2VT[data["OrderStatus"]],
             time=data["InsertTime"],
+            cancel_time=data["CancelTime"],
             gateway_name=self.gateway_name
         )
         self.gateway.on_order(order)

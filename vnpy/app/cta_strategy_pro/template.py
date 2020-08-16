@@ -1922,8 +1922,8 @@ class CtaProFutureTemplate(CtaProTemplate):
                 grid.traded_volume = 0
 
             # 非股指，需要检查是否有持仓
-            if self.exchange==Exchange.CFFEX and grid_pos.short_pos < grid.volume:
-                self.write_error(f'账号{cover_symbol}多单持仓:{grid_pos.short_pos}不满足平仓:{grid.volume}要求:')
+            if self.exchange!=Exchange.CFFEX and grid_pos.short_pos < grid.volume:
+                self.write_error(f'账号{cover_symbol}空单持仓:{grid_pos.short_pos}不满足平仓:{grid.volume}要求:')
                 return False
 
             vt_orderids = self.cover(price=cover_price,
