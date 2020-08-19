@@ -1610,7 +1610,7 @@ class CtaProFutureTemplate(CtaProTemplate):
         重载撤销所有正在进行得委托
         :return:
         """
-        self.write_log(u'撤销所有正在进行得委托')
+        # self.write_log(u'撤销所有正在进行得委托')
         self.tns_cancel_logic(dt=datetime.now(), force=True, reopen=False)
 
     def tns_cancel_logic(self, dt, force=False, reopen=False):
@@ -1629,7 +1629,7 @@ class CtaProFutureTemplate(CtaProTemplate):
             # order_price = order_info['price']
             # order_direction = order_info['direction']
             # order_offset = order_info['offset']
-            order_grid = order_info['grid']
+            order_grid = order_info.get('grid', None)
             order_status = order_info.get('status', Status.NOTTRADED)
             order_type = order_info.get('order_type', OrderType.LIMIT)
             over_seconds = (dt - order_time).total_seconds()
