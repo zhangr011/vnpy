@@ -37,8 +37,8 @@ if __name__ == "__main__":
         print('下载合约未设定 参数 -s rb2010')
         os._exit(0)
 
-    # 开始下载
-    api = TqApi(TqSim())
+    # 开始下载(使用快期的免费行情websocket)
+    api = TqApi(account=TqSim(), url="wss://u.shinnytech.com/t/md/front/mobile")
     download_tasks = {}
     begin_date = datetime.strptime(args.begin, '%Y%m%d')
     end_date = datetime.strptime(args.end, '%Y%m%d')
@@ -58,7 +58,7 @@ if __name__ == "__main__":
     if n_days <= 0:
         n_days = 1
 
-    for n in range(n_days+1):
+    for n in range(n_days + 1):
         download_date = begin_date + timedelta(days=n)
         if download_date.isoweekday() in [6, 7]:
             continue
@@ -70,9 +70,9 @@ if __name__ == "__main__":
             os.makedirs(save_folder)
 
         save_file = os.path.abspath(os.path.join(save_folder,
-            "{}_{}.csv".format(symbol, download_date.strftime('%Y%m%d'))))
+                                                 "{}_{}.csv".format(symbol, download_date.strftime('%Y%m%d'))))
         zip_file = os.path.abspath(os.path.join(save_folder,
-            "{}_{}.pkb2".format(symbol, download_date.strftime('%Y%m%d'))))
+                                                "{}_{}.pkb2".format(symbol, download_date.strftime('%Y%m%d'))))
 
         if os.path.exists(save_file):
             # 文件size是否大于1024字节
