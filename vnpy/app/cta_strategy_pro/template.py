@@ -15,7 +15,7 @@ from vnpy.trader.constant import Interval, Direction, Offset, Status, OrderType,
 from vnpy.trader.object import BarData, TickData, OrderData, TradeData
 from vnpy.trader.utility import virtual, append_data, extract_vt_symbol, get_underlying_symbol
 
-from .base import StopOrder, EngineType
+from .base import StopOrder, StopOrderStatus, EngineType
 from vnpy.component.cta_grid_trade import CtaGrid, CtaGridTrade, LOCK_GRID
 from vnpy.component.cta_position import CtaPosition
 from vnpy.component.cta_policy import CtaPolicy  # noqa
@@ -1604,6 +1604,8 @@ class CtaProFutureTemplate(CtaProTemplate):
 
     def on_stop_order(self, stop_order: StopOrder):
         self.write_log(f'停止单触发:{stop_order.__dict__}')
+        if StopOrderStatus.CANCELLED == stop_order.status:
+            self.active_orders.pop(stop_order.stop_orderid)
 
     def cancel_all_orders(self):
         """
