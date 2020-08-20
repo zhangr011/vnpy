@@ -889,7 +889,7 @@ class BackTestingEngine(object):
             stop_orderid=f"{STOPORDER_PREFIX}.{self.stop_order_count}",
             strategy_name=strategy.strategy_name,
         )
-        self.write_log(f'创建本地停止单:{stop_order.__dict__}')
+        # self.write_log(f'创建本地停止单:{stop_order.__dict__}')
         self.order_strategy_dict.update({stop_order.stop_orderid: strategy})
 
         self.active_stop_orders[stop_order.stop_orderid] = stop_order
@@ -1061,7 +1061,7 @@ class BackTestingEngine(object):
                 gateway_name=self.gateway_name,
             )
             order.datetime = self.last_dt
-            self.write_log(f'停止单被触发:\n{stop_order.__dict__}\n=>委托单{order.__dict__}')
+            # self.write_log(f'停止单被触发:\n{stop_order.__dict__}\n=>委托单{order.__dict__}')
             self.limit_orders[order.vt_orderid] = order
 
             # Create trade data.
@@ -1087,7 +1087,7 @@ class BackTestingEngine(object):
             )
             trade.strategy_name = strategy.strategy_name
             trade.datetime = self.last_dt
-            self.write_log(f'停止单触发成交:{trade.__dict__}')
+            # self.write_log(f'停止单触发成交:{trade.__dict__}')
             self.trade_dict[trade.vt_tradeid] = trade
             self.trades[trade.vt_tradeid] = copy.copy(trade)
 

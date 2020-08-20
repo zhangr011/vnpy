@@ -1603,7 +1603,7 @@ class CtaProFutureTemplate(CtaProTemplate):
         self.display_grids()
 
     def on_stop_order(self, stop_order: StopOrder):
-        self.write_log(f'停止单触发:{stop_order.__dict__}')
+        # self.write_log(f'停止单触发:{stop_order.__dict__}')
         if StopOrderStatus.CANCELLED == stop_order.status:
             self.active_orders.pop(stop_order.stop_orderid)
 
@@ -1640,8 +1640,8 @@ class CtaProFutureTemplate(CtaProTemplate):
             if order_status in [Status.NOTTRADED, Status.SUBMITTING] and (
                     order_type == OrderType.LIMIT or '.SPD' in order_vt_symbol):
                 if over_seconds > self.cancel_seconds or force:  # 超过设置的时间还未成交
-                    self.write_log(u'超时{}秒未成交，取消委托单：vt_orderid:{},order:{}'
-                                   .format(over_seconds, vt_orderid, order_info))
+                    # self.write_log(u'超时{}秒未成交，取消委托单：vt_orderid:{},order:{}'
+                    #                .format(over_seconds, vt_orderid, order_info))
                     order_info.update({'status': Status.CANCELLING})
                     self.active_orders.update({vt_orderid: order_info})
                     ret = self.cancel_order(str(vt_orderid))
