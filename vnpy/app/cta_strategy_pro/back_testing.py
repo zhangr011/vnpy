@@ -997,8 +997,8 @@ class BackTestingEngine(object):
                 strategy_cond = strategy.strategy_name == order_strategy.strategy_name
 
             if offset_cond and symbol_cond and strategy_cond:
-                self.write_log(u'撤销本地停止单:{},{} {}@{}'
-                               .format(stop_orderid, order.direction, order.price, order.volume))
+                # self.write_log(u'撤销本地停止单:{},{} {}@{}'
+                #                .format(stop_orderid, order.direction, order.price, order.volume))
                 order.status = Status.CANCELLED
                 order.cancel_time = str(self.last_dt)
                 self.active_stop_orders.pop(stop_orderid, None)

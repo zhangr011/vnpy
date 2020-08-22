@@ -108,7 +108,7 @@ def send_wx_msg(*args, **kwargs):
     if len(uids) == 0:
         uids.extend(UIDS)
 
-    app_token = kwargs.get('app_token')
+    app_token = kwargs.get('app_token', APP_TOKEN)
 
     t = wechat_thread(uids=uids, content=content, app_token=app_token)
     t.daemon = False

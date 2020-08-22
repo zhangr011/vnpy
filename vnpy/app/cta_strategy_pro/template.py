@@ -1658,7 +1658,7 @@ class CtaProFutureTemplate(CtaProTemplate):
 
             # 处理状态为‘撤销’的委托单
             elif order_status == Status.CANCELLED:
-                self.write_log(u'委托单{}已成功撤单，删除{}'.format(vt_orderid, order_info))
+                # self.write_log(u'委托单{}已成功撤单，删除{}'.format(vt_orderid, order_info))
                 canceled_ids.append(vt_orderid)
 
                 if reopen:

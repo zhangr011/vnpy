@@ -188,6 +188,7 @@ class PortfolioTestingEngine(BackTestingEngine):
         self.cur_capital = self.init_capital  # 更新设置期初资金
         if not self.data_end_date:
             self.data_end_date = datetime.today()
+            self.test_end_date = datetime.strftime(self.data_end_date, "%Y%m%d")
 
         # 保存回测脚本到数据库
         self.save_setting_to_mongo()
@@ -312,7 +313,7 @@ class PortfolioTestingEngine(BackTestingEngine):
                         last_trading_day = bar.trading_day
 
                         # 第二个交易日,撤单
-                        self.cancel_orders()
+                        # self.cancel_orders()
                         # 更新持仓缓存
                         self.update_pos_buffer()
 
