@@ -468,15 +468,30 @@ class SettingEditor(QtWidgets.QDialog):
         for name, tp in self.edits.items():
             edit, type_ = tp
             value_text = edit.text()
-
             if type_ == bool:
                 if value_text == "True":
                     value = True
                 else:
                     value = False
             else:
-                value = type_(value_text)
+                try:
+                    value = type_(value_text)
+                except Exception as ex:
+                    print(f'{name}数据类型转换未指定')
+                    if isnumber(value_text):
+                        value = float(value_text)
+                    elif value_text == 'None':
+                        value = None
+                    else:
+                        value = value_text
 
             setting[name] = value
 
         return setting
+
+def isnumber(aString):
+    try:
+        float(aString)
+        return True
+    except:
+        return False

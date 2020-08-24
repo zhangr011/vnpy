@@ -1632,7 +1632,12 @@ class CtaProFutureTemplate(CtaProTemplate):
         self.display_grids()
 
     def on_stop_order(self, stop_order: StopOrder):
+        """
+        停止单更新
+        需要自己重载，处理各类触发、撤单等情况
+        """
         self.write_log(f'停止单触发:{stop_order.__dict__}')
+
 
     def cancel_all_orders(self):
         """

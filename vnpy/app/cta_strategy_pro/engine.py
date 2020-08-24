@@ -237,7 +237,7 @@ class CtaEngine(BaseEngine):
                 all_strategy_pos = self.get_all_strategy_pos()
 
                 # 每5分钟检查一次
-                if dt.minute % 5 == 0 and self.engine_config.get('compare_pos',True):
+                if dt.minute % 5 == 0 and self.engine_config.get('compare_pos', True):
                     # 比对仓位，使用上述获取得持仓信息，不用重复获取
                     self.compare_pos(strategy_pos_list=copy(all_strategy_pos))
 
@@ -846,7 +846,6 @@ class CtaEngine(BaseEngine):
 
         return contract.min_volume
 
-
     def get_tick(self, vt_symbol: str):
         """获取合约得最新tick"""
         return self.main_engine.get_tick(vt_symbol)
@@ -1202,7 +1201,7 @@ class CtaEngine(BaseEngine):
 
         module_name = self.class_module_map[class_name]
         # 重新load class module
-        #if not self.load_strategy_class_from_module(module_name):
+        # if not self.load_strategy_class_from_module(module_name):
         #    err_msg = f'不能加载模块:{module_name}'
         #    self.write_error(err_msg)
         #    return False, err_msg
@@ -1520,7 +1519,7 @@ class CtaEngine(BaseEngine):
                     if short_pos['volume'] > 0:
                         pos_list.append(short_pos)
 
-            # 新增处理SPD结尾得特殊自定义套利合约
+            # 新增处理SPD结尾得特殊自定义套利合约 ，或 标准套利合约
             try:
                 if strategy.vt_symbol.endswith('.SPD') and len(pos_list) > 0:
                     old_pos_list = copy(pos_list)
@@ -1530,7 +1529,8 @@ class CtaEngine(BaseEngine):
                         spd_vt_symbol = pos.get('vt_symbol', None)
                         if spd_vt_symbol is not None and spd_vt_symbol.endswith('.SPD'):
                             spd_symbol, spd_exchange = extract_vt_symbol(spd_vt_symbol)
-                            spd_setting = self.main_engine.get_all_custom_contracts(rtn_setting=True).get(spd_symbol, None)
+                            spd_setting = self.main_engine.get_all_custom_contracts(rtn_setting=True).get(spd_symbol,
+                                                                                                          None)
 
                             if spd_setting is None:
                                 self.write_error(u'获取不到:{}得设置信息，检查自定义合约配置文件'.format(spd_symbol))
@@ -1543,13 +1543,15 @@ class CtaEngine(BaseEngine):
 
                             leg1_pos = {}
                             leg1_pos.update({'symbol': spd_setting.get('leg1_symbol')})
-                            leg1_pos.update({'vt_symbol': '{}.{}'.format(spd_setting.get('leg1_symbol'), spd_setting.get('leg1_exchange'))})
+                            leg1_pos.update({'vt_symbol': '{}.{}'.format(spd_setting.get('leg1_symbol'),
+                                                                         spd_setting.get('leg1_exchange'))})
                             leg1_pos.update({'direction': leg1_direction})
                             leg1_pos.update({'volume': spd_setting.get('leg1_ratio', 1) * spd_volume})
 
                             leg2_pos = {}
                             leg2_pos.update({'symbol': spd_setting.get('leg2_symbol')})
-                            leg2_pos.update({'vt_symbol': '{}.{}'.format(spd_setting.get('leg2_symbol'), spd_setting.get('leg2_exchange'))})
+                            leg2_pos.update({'vt_symbol': '{}.{}'.format(spd_setting.get('leg2_symbol'),
+                                                                         spd_setting.get('leg2_exchange'))})
                             leg2_pos.update({'direction': leg2_direction})
                             leg2_pos.update({'volume': spd_setting.get('leg2_ratio', 1) * spd_volume})
 
@@ -1558,6 +1560,34 @@ class CtaEngine(BaseEngine):
 
                         else:
                             pos_list.append(pos)
+
+                elif ' ' in strategy.vt_symbol and '&' in strategy.vt_symbol and len(pos_list) > 0:
+                    old_pos_list = copy(pos_list)
+                    pos_list = []
+                    for pos in old_pos_list:
+                        spd_vt_symbol = pos.get('vt_symbol', None)
+                        if spd_vt_symbol is not None and ' ' in spd_vt_symbol and '&' in spd_vt_symbol:
+                            spd_symbol, exchange = spd_vt_symbol.split('.')
+                            spd_symbol = spd_symbol.split(' ')[-1]
+                            leg1_symbol, leg2_symbol = spd_symbol.split('&')
+                            leg1_direction = 'long' if pos.get('direction') in [Direction.LONG, 'long'] else 'short'
+                            leg2_direction = 'short' if leg1_direction == 'long' else 'long'
+                            spd_volume = pos.get('volume')
+
+                            leg1_pos = {}
+                            leg1_pos.update({'symbol': leg1_symbol})
+                            leg1_pos.update({'vt_symbol': f'{leg1_symbol}.{exchange}'})
+                            leg1_pos.update({'direction': leg1_direction})
+                            leg1_pos.update({'volume': spd_volume})
+
+                            leg2_pos = {}
+                            leg2_pos.update({'symbol': leg2_symbol})
+                            leg2_pos.update({'vt_symbol': f'{leg2_symbol}.{exchange}'})
+                            leg2_pos.update({'direction': leg2_direction})
+                            leg2_pos.update({'volume': spd_volume})
+
+                            pos_list.append(leg1_pos)
+                            pos_list.append(leg2_pos)
 
             except Exception as ex:
                 self.write_error(f'分解SPD失败:{str(ex)}')
@@ -1681,7 +1711,8 @@ class CtaEngine(BaseEngine):
                 continue
             if holding.exchange == Exchange.SPD:
                 continue
-            if '&' in holding.vt_symbol and (holding.vt_symbol.startswith('SP') or holding.vt_symbol.startswith('STG') or holding.vt_symbol.startswith('PRT')):
+            if '&' in holding.vt_symbol and (holding.vt_symbol.startswith('SP') or holding.vt_symbol.startswith(
+                    'STG') or holding.vt_symbol.startswith('PRT')):
                 continue
 
             compare_pos[vt_symbol] = OrderedDict(
@@ -1730,6 +1761,7 @@ class CtaEngine(BaseEngine):
         pos_compare_result = ''
         # 精简输出
         compare_info = ''
+        diff_pos_dict = {}
         for vt_symbol in sorted(vt_symbols):
             # 发送不一致得结果
             symbol_pos = compare_pos.pop(vt_symbol, {})
@@ -1746,16 +1778,38 @@ class CtaEngine(BaseEngine):
                 'direction': Direction.SHORT.value,
                 'strategy_list': symbol_pos.get('空单策略', [])}
 
+            # 股指期货: 帐号多/空轧差， vs 策略多空轧差 是否一致；
+            # 其他期货：帐号多单 vs 除了多单， 空单 vs 空单
+            if vt_symbol.endswith(".CFFEX"):
+                diff_match = (symbol_pos.get('账号多单', 0) - symbol_pos.get('账号空单', 0)) == (
+                            symbol_pos.get('策略多单', 0) - symbol_pos.get('策略空单', 0))
+                pos_match = symbol_pos.get('账号空单', 0) == symbol_pos.get('策略空单', 0) and \
+                            symbol_pos.get('账号多单', 0) == symbol_pos.get('策略多单', 0)
+                match = diff_match
+                # 轧差一致，帐号/策略持仓不一致
+                if diff_match and not pos_match:
+                    if symbol_pos.get('账号多单', 0) > symbol_pos.get('策略多单', 0):
+                        self.write_log('{}轧差持仓：多:{},空:{} 大于 策略持仓 多:{},空:{}'.format(
+                            vt_symbol,
+                            symbol_pos.get('账号多单', 0),
+                            symbol_pos.get('账号空单', 0),
+                            symbol_pos.get('策略多单', 0),
+                            symbol_pos.get('策略空单', 0)
+                        ))
+                        diff_pos_dict.update({vt_symbol: {"long":symbol_pos.get('账号多单', 0) - symbol_pos.get('策略多单', 0),
+                                                          "short":symbol_pos.get('账号空单', 0) - symbol_pos.get('策略空单', 0)}})
+            else:
+                match = round(symbol_pos.get('账号空单', 0), 7) == round(symbol_pos.get('策略空单', 0), 7) and \
+                            round(symbol_pos.get('账号多单', 0), 7) == round(symbol_pos.get('策略多单', 0), 7)
             # 多空都一致
-            if round(symbol_pos.get('账号空单',0), 7) == round(symbol_pos.get('策略空单',0), 7) and \
-                    round(symbol_pos.get('账号多单',0), 7) == round(symbol_pos.get('策略多单',0), 7):
+            if match:
                 msg = u'{}多空都一致.{}\n'.format(vt_symbol, json.dumps(symbol_pos, indent=2, ensure_ascii=False))
                 self.write_log(msg)
                 compare_info += msg
             else:
                 pos_compare_result += '\n{}: '.format(vt_symbol)
                 # 判断是多单不一致？
-                diff_long_volume = round(symbol_pos.get('账号多单',0), 7) - round(symbol_pos.get('策略多单',0), 7)
+                diff_long_volume = round(symbol_pos.get('账号多单', 0), 7) - round(symbol_pos.get('策略多单', 0), 7)
                 if diff_long_volume != 0:
                     msg = '{}多单[账号({}), 策略{},共({})], ' \
                         .format(vt_symbol,
@@ -1770,7 +1824,7 @@ class CtaEngine(BaseEngine):
                         self.balance_pos(vt_symbol, Direction.LONG, diff_long_volume)
 
                 # 判断是空单不一致:
-                diff_short_volume = round(symbol_pos.get('账号空单',0), 7) - round(symbol_pos.get('策略空单',0), 7)
+                diff_short_volume = round(symbol_pos.get('账号空单', 0), 7) - round(symbol_pos.get('策略空单', 0), 7)
 
                 if diff_short_volume != 0:
                     msg = '{}空单[账号({}), 策略{},共({})], ' \
@@ -1800,6 +1854,9 @@ class CtaEngine(BaseEngine):
             return True, compare_info + ret_msg
         else:
             self.write_log(u'账户持仓与策略一致')
+            if len(diff_pos_dict) > 0:
+                for k,v in diff_pos_dict.items():
+                    self.write_log(f'{k} 存在大于策略的轧差持仓:{v}')
             return True, compare_info
 
     def balance_pos(self, vt_symbol, direction, volume):
@@ -1985,12 +2042,12 @@ class CtaEngine(BaseEngine):
             print(f"{strategy_name}: {msg}" if strategy_name else msg, file=sys.stderr)
 
         if level in [logging.CRITICAL, logging.WARN, logging.WARNING]:
-            send_wx_msg(content=f"{strategy_name}: {msg}" if strategy_name else msg, target=self.engine_config.get('accountid', 'XXX'))
+            send_wx_msg(content=f"{strategy_name}: {msg}" if strategy_name else msg,
+                        target=self.engine_config.get('accountid', 'XXX'))
 
     def write_error(self, msg: str, strategy_name: str = '', level: int = logging.ERROR):
         """写入错误日志"""
         self.write_log(msg=msg, strategy_name=strategy_name, level=level)
-
 
     def send_email(self, msg: str, strategy: CtaTemplate = None):
         """

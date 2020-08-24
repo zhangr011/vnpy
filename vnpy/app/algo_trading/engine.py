@@ -168,10 +168,13 @@ class AlgoEngine(BaseEngine):
         """"""
         algo = self.algos.get(algo_name, None)
         if algo:
-            algo.stop()
-            self.algos.pop(algo_name)
-            return True
-
+            if algo.stop():
+                self.algos.pop(algo_name)
+                return True
+            else:
+                self.write_error(f'停止算法实例{algo_name}失败，内部正在执行中，不能马上停止')
+        else:
+            self.write_error(f'停止算法实例{algo_name}失败，实例不存在')
         return False
 
     def stop_all(self):
