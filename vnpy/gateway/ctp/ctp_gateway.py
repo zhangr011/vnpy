@@ -154,6 +154,7 @@ OPTIONTYPE_CTP2VT = {
 MAX_FLOAT = sys.float_info.max
 
 symbol_exchange_map = {}
+option_name_map = {}
 symbol_name_map = {}
 symbol_size_map = {}
 index_contracts = {}
@@ -764,6 +765,9 @@ class CtpTdApi(TdApi):
 
         self.accountid = self.userid
 
+        self.long_option_cost = None  # 多头期权动态市值
+        self.short_option_cost = None  # 空头期权动态市值
+
     def onFrontConnected(self):
         """"""
         self.gateway.write_log("交易服务器连接成功")
@@ -903,7 +907,10 @@ class CtpTdApi(TdApi):
 
             # Update new position volume
             position.volume += data["Position"]
-            position.pnl += data["PositionProfit"]
+            if data["PositionProfit"] == 0 and position.symbol in option_name_map:
+                position.pnl += data["PositionCost"] - data["OpenCost"]
+            else:
+                position.pnl += data["PositionProfit"]
 
             # Calculate average position price
             if position.volume and size:
@@ -916,8 +923,34 @@ class CtpTdApi(TdApi):
             else:
                 position.frozen += data["LongFrozen"]
 
+            position.cur_price = self.gateway.prices.get(position.vt_symbol, None)
+            if position.cur_price is None:
+                position.cur_price = position.price
+                self.gateway.subscribe(SubscribeRequest(symbol=position.symbol, exchange=position.exchange))
+
         if last:
+            self.long_option_cost = None
+            self.short_option_cost = None
             for position in self.positions.values():
+                if position.symbol in option_name_map:
+                    # 重新累计多头期权动态权益
+                    if position.direction == Direction.LONG:
+                        if self.long_option_cost is None:
+                            self.long_option_cost = position.cur_price * position.volume * symbol_size_map.get(
+                                position.symbol, 0)
+                        else:
+                            self.long_option_cost += position.cur_price * position.volume * symbol_size_map.get(
+                                position.symbol, 0)
+
+                    # 重新累计空头期权动态权益
+                    if position.direction == Direction.SHORT:
+                        if self.short_option_cost is None:
+                            self.short_option_cost = position.cur_price * position.volume * symbol_size_map.get(
+                                position.symbol, 0)
+                        else:
+                            self.short_option_cost += position.cur_price * position.volume * symbol_size_map.get(
+                                position.symbol, 0)
+
                 self.gateway.on_position(position)
 
             self.positions.clear()
@@ -929,10 +962,16 @@ class CtpTdApi(TdApi):
         if len(self.accountid)== 0:
             self.accountid = data['AccountID']
 
+        balance = float(data["Balance"])
+        if self.long_option_cost is not None:
+            balance += self.long_option_cost
+        if self.short_option_cost is not None:
+            balance -= self.short_option_cost
+
         account = AccountData(
             accountid=data["AccountID"],
             pre_balance=round(float(data['PreBalance']), 7),
-            balance=round(float(data["Balance"]), 7),
+            balance=round(balance, 7),
             frozen=round(data["FrozenMargin"] + data["FrozenCash"] + data["FrozenCommission"], 7),
             gateway_name=self.gateway_name
         )
@@ -986,6 +1025,7 @@ class CtpTdApi(TdApi):
                 contract.option_strike = data["StrikePrice"]
                 contract.option_index = str(data["StrikePrice"])
                 contract.option_expiry = datetime.strptime(data["ExpireDate"], "%Y%m%d")
+                option_name_map[contract.symbol] = contract.name
 
             self.gateway.on_contract(contract)
 

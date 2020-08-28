@@ -125,7 +125,7 @@ CHINA_TZ = pytz.timezone("Asia/Shanghai")
 symbol_exchange_map = {}
 symbol_name_map = {}
 symbol_size_map = {}
-
+option_name_map = {}
 
 class SoptGateway(BaseGateway):
     """
@@ -388,7 +388,7 @@ class SoptMdApi(MdApi):
             return
         timestamp = f"{data['TradingDay']} {data['UpdateTime']}.{int(data['UpdateMillisec']/100)}"
         dt = datetime.strptime(timestamp, "%Y%m%d %H:%M:%S.%f")
-        dt = CHINA_TZ.localize(dt)
+        #dt = CHINA_TZ.localize(dt)
 
         tick = TickData(
             symbol=symbol,
@@ -523,6 +523,9 @@ class SoptTdApi(TdApi):
         self.positions = {}
         self.sysid_orderid_map = {}
 
+        self.long_option_cost = None    # 多头期权动态市值
+        self.short_option_cost = None   # 空头期权动态市值
+
     def onFrontConnected(self):
         """"""
         self.gateway.write_log("交易服务器连接成功")
@@ -618,11 +621,14 @@ class SoptTdApi(TdApi):
         if not data:
             return
 
+        #self.gateway.write_log(print_dict(data))
+
         # Get buffered position object
         key = f"{data['InstrumentID'], data['PosiDirection']}"
         position = self.positions.get(key, None)
         if not position:
             position = PositionData(
+                accountid=self.userid,
                 symbol=data["InstrumentID"],
                 exchange=symbol_exchange_map[data["InstrumentID"]],
                 direction=DIRECTION_SOPT2VT[data["PosiDirection"]],
@@ -646,7 +652,10 @@ class SoptTdApi(TdApi):
 
         # Update new position volume
         position.volume += data["Position"]
-        position.pnl += data["PositionProfit"]
+        if data["PositionProfit"] == 0:
+            position.pnl += data["PositionCost"] - data["OpenCost"]
+        else:
+            position.pnl += data["PositionProfit"]
 
         # Calculate average position price
         if position.volume and size:
@@ -659,27 +668,63 @@ class SoptTdApi(TdApi):
         else:
             position.frozen += data["LongFrozen"]
 
+        position.cur_price = self.gateway.prices.get(position.vt_symbol, None)
+        if position.cur_price is None:
+            position.cur_price = position.price
+            self.gateway.subscribe(SubscribeRequest(symbol=position.symbol, exchange=position.exchange))
+
         if last:
+            self.long_option_cost = None
+            self.short_option_cost = None
             for position in self.positions.values():
+                if position.symbol in option_name_map:
+                    # 重新累计多头期权动态权益
+                    if position.direction == Direction.LONG:
+                        if self.long_option_cost is None:
+                            self.long_option_cost = position.cur_price * position.volume * symbol_size_map.get(position.symbol, 0)
+                        else:
+                            self.long_option_cost += position.cur_price * position.volume * symbol_size_map.get(position.symbol, 0)
+
+                    # 重新累计空头期权动态权益
+                    if position.direction == Direction.SHORT:
+                        if self.short_option_cost is None:
+                            self.short_option_cost = position.cur_price * position.volume * symbol_size_map.get(position.symbol, 0)
+                        else:
+                            self.short_option_cost += position.cur_price * position.volume * symbol_size_map.get(position.symbol, 0)
+
                 self.gateway.on_position(position)
 
             self.positions.clear()
 
     def onRspQryTradingAccount(self, data: dict, error: dict, reqid: int, last: bool):
         """"""
+
+        balance = float(data["Balance"])
+
+        # 资金差额（权利金，正数，是卖call或卖put，收入权利金; 负数，是买call、买put，付出权利金）
+        cash_in = data.get('CashIn')
+        #balance -= cash_in
+
+        if self.long_option_cost is not None:
+            balance += self.long_option_cost
+        if self.short_option_cost is not None:
+            balance -= self.short_option_cost
         account = AccountData(
             accountid=data["AccountID"],
-            balance=data["Balance"],
+            balance=balance,
             frozen=data["FrozenMargin"] + data["FrozenCash"] + data["FrozenCommission"],
             gateway_name=self.gateway_name
         )
-        account.available = data["Available"]
-        account.commission = round(float(data['Commission']), 7)
-        account.margin = round(float(data['CurrMargin']), 7)
-        account.close_profit = round(float(data['CloseProfit']), 7)
-        account.holding_profit = round(float(data['PositionProfit']), 7)
 
-        account.trading_day = str(data.get('TradingDay',datetime.now().strftime('%Y-%m-%d')))
+        #self.gateway.write_log(print_dict(data))
+
+        account.available = data["Available"]
+        account.commission = round(float(data['Commission']), 7) + round(float(data['SpecProductCommission']), 7)
+        account.margin = round(float(data['CurrMargin']), 7)
+        account.close_profit = round(float(data['CloseProfit']), 7) + round(float(data['SpecProductCloseProfit']), 7)
+        account.holding_profit = round(float(data['PositionProfit']), 7) + round(float(data['SpecProductPositionProfit']), 7)
+
+        account.trading_day = str(data.get('TradingDay', datetime.now().strftime('%Y-%m-%d')))
         if '-' not in account.trading_day and len(account.trading_day) == 8:
             account.trading_day = '-'.join(
                 [
@@ -701,7 +746,7 @@ class SoptTdApi(TdApi):
             contract = ContractData(
                 symbol=data["InstrumentID"],
                 exchange=EXCHANGE_SOPT2VT[data["ExchangeID"]],
-                name=data["InstrumentName"],
+                name=data["InstrumentName"].strip(),
                 product=product,
                 size=data["VolumeMultiple"],
                 pricetick=data["PriceTick"],
@@ -724,6 +769,7 @@ class SoptTdApi(TdApi):
                 contract.option_index = get_option_index(
                     contract.option_strike, data["InstrumentCode"]
                 )
+                option_name_map[contract.symbol] = contract.name
 
             self.gateway.on_contract(contract)
 

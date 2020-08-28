@@ -1154,7 +1154,12 @@ class CtaProFutureTemplate(CtaProTemplate):
         self.put_event()
 
     def on_trade(self, trade: TradeData):
-        """交易更新"""
+        """
+        交易更新
+        支持股指期货的对锁单或者解锁
+        :param trade:
+        :return:
+        """
         self.write_log(u'{},交易更新事件:{},当前持仓：{} '
                        .format(self.cur_datetime,
                                trade.__dict__,
@@ -1168,30 +1173,45 @@ class CtaProFutureTemplate(CtaProTemplate):
         dist_record['volume'] = trade.volume
         dist_record['price'] = trade.price
         dist_record['symbol'] = trade.vt_symbol
+        if trade.exchange == Exchange.CFFEX:
+            if trade.direction == Direction.LONG:
+                if abs(self.position.short_pos) >= trade.volume:
+                    self.position.short_pos += trade.volume
+                else:
+                    self.position.long_pos += trade.volume
+            else:
+                if self.position.long_pos >= trade.volume:
+                    self.position.long_pos -= trade.volume
+                else:
+                    self.position.short_pos -= trade.volume
 
-        if trade.direction == Direction.LONG and trade.offset == Offset.OPEN:
-            dist_record['operation'] = 'buy'
-            self.position.open_pos(trade.direction, volume=trade.volume)
+            self.position.pos = self.position.long_pos + self.position.short_pos
             dist_record['long_pos'] = self.position.long_pos
             dist_record['short_pos'] = self.position.short_pos
+        else:
+            if trade.direction == Direction.LONG and trade.offset == Offset.OPEN:
+                dist_record['operation'] = 'buy'
+                self.position.open_pos(trade.direction, volume=trade.volume)
+                dist_record['long_pos'] = self.position.long_pos
+                dist_record['short_pos'] = self.position.short_pos
 
-        if trade.direction == Direction.SHORT and trade.offset == Offset.OPEN:
-            dist_record['operation'] = 'short'
-            self.position.open_pos(trade.direction, volume=trade.volume)
-            dist_record['long_pos'] = self.position.long_pos
-            dist_record['short_pos'] = self.position.short_pos
+            if trade.direction == Direction.SHORT and trade.offset == Offset.OPEN:
+                dist_record['operation'] = 'short'
+                self.position.open_pos(trade.direction, volume=trade.volume)
+                dist_record['long_pos'] = self.position.long_pos
+                dist_record['short_pos'] = self.position.short_pos
 
-        if trade.direction == Direction.LONG and trade.offset != Offset.OPEN:
-            dist_record['operation'] = 'cover'
-            self.position.close_pos(trade.direction, volume=trade.volume)
-            dist_record['long_pos'] = self.position.long_pos
-            dist_record['short_pos'] = self.position.short_pos
+            if trade.direction == Direction.LONG and trade.offset != Offset.OPEN:
+                dist_record['operation'] = 'cover'
+                self.position.close_pos(trade.direction, volume=trade.volume)
+                dist_record['long_pos'] = self.position.long_pos
+                dist_record['short_pos'] = self.position.short_pos
 
-        if trade.direction == Direction.SHORT and trade.offset != Offset.OPEN:
-            dist_record['operation'] = 'sell'
-            self.position.close_pos(trade.direction, volume=trade.volume)
-            dist_record['long_pos'] = self.position.long_pos
-            dist_record['short_pos'] = self.position.short_pos
+            if trade.direction == Direction.SHORT and trade.offset != Offset.OPEN:
+                dist_record['operation'] = 'sell'
+                self.position.close_pos(trade.direction, volume=trade.volume)
+                dist_record['long_pos'] = self.position.long_pos
+                dist_record['short_pos'] = self.position.short_pos
 
         self.save_dist(dist_record)
         self.pos = self.position.pos

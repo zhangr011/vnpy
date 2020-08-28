@@ -188,6 +188,7 @@ class PortfolioTestingEngine(BackTestingEngine):
         self.cur_capital = self.init_capital  # 更新设置期初资金
         if not self.data_end_date:
             self.data_end_date = datetime.today()
+            self.test_end_date = datetime.now().strftime('%Y%m%d')
 
         # 保存回测脚本到数据库
         self.save_setting_to_mongo()
@@ -275,6 +276,7 @@ class PortfolioTestingEngine(BackTestingEngine):
                 bar.high_price = float(bar_data['high'])
                 bar.low_price = float(bar_data['low'])
                 bar.volume = int(bar_data['volume'])
+                bar.open_interest = int(bar_data.get('open_interest', 0))
                 bar.date = bar_datetime.strftime('%Y-%m-%d')
                 bar.time = bar_datetime.strftime('%H:%M:%S')
                 str_td = str(bar_data.get('trading_day', ''))

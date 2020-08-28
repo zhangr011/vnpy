@@ -868,6 +868,9 @@ class CtaEngine(BaseEngine):
     def get_contract(self, vt_symbol):
         return self.main_engine.get_contract(vt_symbol)
 
+    def get_all_contracts(self):
+        return self.main_engine.get_all_contracts()
+
     def get_account(self, vt_accountid: str = ""):
         """ 查询账号的资金"""
         # 如果启动风控，则使用风控中的最大仓位

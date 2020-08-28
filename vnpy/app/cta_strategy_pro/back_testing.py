@@ -2273,6 +2273,8 @@ class BackTestingEngine(object):
         self.trade_dict.clear()
         self.trades.clear()
         self.trade_pnl_list = []
+        self.last_bar.clear()
+        self.last_dt = None
 
     def append_trade(self, trade: TradeData):
         """

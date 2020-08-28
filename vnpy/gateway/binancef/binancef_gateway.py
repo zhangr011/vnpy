@@ -214,6 +214,8 @@ class BinancefRestApi(RestClient):
 
         self.orders = {}
 
+        self.cache_position_symbols = {}
+
         self.accountid = ""
 
     def sign(self, request: Request) -> Request:
@@ -561,6 +563,15 @@ class BinancefRestApi(RestClient):
                 pnl=float(d["unRealizedProfit"]),
                 gateway_name=self.gateway_name,
             )
+
+            # 如果持仓数量为0，且不在之前缓存过的合约信息中，不做on_position
+            if position.volume == 0:
+                if position.symbol not in self.cache_position_symbols:
+                    continue
+            else:
+                if position.symbol not in self.cache_position_symbols:
+                    self.cache_position_symbols.update({position.symbol: position.volume})
+
             self.gateway.on_position(position)
             #if position.symbol == 'BTCUSDT':
             #    self.gateway.write_log(f'{position.__dict__}\n {d}')

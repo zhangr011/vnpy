@@ -1167,7 +1167,7 @@ class TqMdApi():
             return
         try:
             from tqsdk import TqApi
-            self.api = TqApi(_stock=True)
+            self.api = TqApi(_stock=True,url="wss://u.shinnytech.com/t/nfmd/front/mobile")
         except Exception as e:
             self.gateway.write_log(f'天勤股票行情API接入异常:'.format(str(e)))
             self.gateway.write_log(traceback.format_exc())
