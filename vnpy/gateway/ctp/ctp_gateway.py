@@ -476,6 +476,13 @@ class CtpGateway(BaseGateway):
         """"""
         self.td_api.query_position()
 
+    def query_history(self, req: HistoryRequest) -> List[BarData]:
+        """查询K线历史"""
+        if self.tq_api:
+            return self.tq_api.query_history(req)
+        else:
+            return []
+
     def close(self):
         """"""
         if self.md_api:
@@ -1911,7 +1918,9 @@ class TqMdApi():
             for vt_symbol, quote in self.quote_objs:
                 if self.api.is_changing(quote):
                     tick = self.generate_tick_from_quote(vt_symbol, quote)
-                    tick and self.gateway.on_tick(tick) and self.gateway.on_custom_tick(tick)
+                    if tick:
+                        self.gateway.on_tick(tick)
+                        self.gateway.on_custom_tick(tick)
 
     def subscribe(self, req: SubscribeRequest) -> None:
         """

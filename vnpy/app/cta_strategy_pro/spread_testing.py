@@ -29,6 +29,7 @@ from vnpy.trader.constant import (
 from vnpy.trader.utility import (
     extract_vt_symbol,
     get_underlying_symbol,
+    get_trading_date,
     import_module_by_str
 )
 
@@ -58,13 +59,15 @@ class SpreadTestingEngine(BackTestingEngine):
         """Constructor"""
         super().__init__(event_engine)
         self.tick_path = None  # tick级别回测， 路径
-
+        self.use_tq = False
         self.strategy_start_date_dict = {}
         self.strategy_end_date_dict = {}
 
     def prepare_env(self, test_setting):
         self.output('portfolio prepare_env')
         super().prepare_env(test_setting)
+
+        self.use_tq = test_setting.get('use_tq', False)
 
     def load_strategy(self, strategy_name: str, strategy_setting: dict = None):
         """
@@ -205,6 +208,8 @@ class SpreadTestingEngine(BackTestingEngine):
 
     def load_csv_file(self, tick_folder, vt_symbol, tick_date):
         """从文件中读取tick，返回list[{dict}]"""
+        if self.use_tq:
+            return self.load_tq_csv_file(tick_folder, vt_symbol, tick_date)
 
         symbol, exchange = extract_vt_symbol(vt_symbol)
         underly_symbol = get_underlying_symbol(symbol)
@@ -269,6 +274,65 @@ class SpreadTestingEngine(BackTestingEngine):
 
         del df
 
+        return ticks
+
+    def load_tq_csv_file(self, tick_folder, vt_symbol, tick_date):
+        """从天勤下载的csv文件中读取tick，返回list[{dict}]"""
+
+        symbol, exchange = extract_vt_symbol(vt_symbol)
+        underly_symbol = get_underlying_symbol(symbol)
+        exchange_folder = VN_EXCHANGE_TICKFOLDER_MAP.get(exchange.value)
+
+        file_path = os.path.abspath(
+            os.path.join(
+                tick_folder, 'tq', 'future',
+                tick_date.strftime('%Y%m'),
+                '{}_{}.csv'.format(symbol, tick_date.strftime('%Y%m%d'))))
+
+        ticks = []
+        if not os.path.isfile(file_path):
+            self.write_log(u'{0}文件不存在'.format(file_path))
+            return None
+        try:
+            df = pd.read_csv(file_path, parse_dates=False)
+            # datetime,symbol,exchange,last_price,highest,lowest,volume,amount,open_interest,upper_limit,lower_limit,
+            # bid_price_1,bid_volume_1,ask_price_1,ask_volume_1,
+            # bid_price_2,bid_volume_2,ask_price_2,ask_volume_2,
+            # bid_price_3,bid_volume_3,ask_price_3,ask_volume_3,
+            # bid_price_4,bid_volume_4,ask_price_4,ask_volume_4,
+            # bid_price_5,bid_volume_5,ask_price_5,ask_volume_5
+
+            self.write_log(u'加载csv文件{}'.format(file_path))
+            last_time = None
+            for index, row in df.iterrows():
+
+                tick = row.to_dict()
+                tick['date'], tick['time'] = tick['datetime'].split(' ')
+                tick.update({'trading_day':  tick_date.strftime('%Y-%m-%d')})
+                tick_datetime = datetime.strptime(tick['datetime'], '%Y-%m-%d %H:%M:%S.%f')
+
+                # 修正毫秒
+                if tick['time'] == last_time:
+                    # 与上一个tick的时间（去除毫秒后）相同,修改为500毫秒
+                    tick_datetime = tick_datetime.replace(microsecond=500)
+                    tick['time'] = tick_datetime.strftime('%H:%M:%S.%f')
+                else:
+                    last_time = tick['time']
+                    tick_datetime = tick_datetime.replace(microsecond=0)
+                    tick['time'] = tick_datetime.strftime('%H:%M:%S.%f')
+                tick['datetime'] = tick_datetime
+
+                # 排除涨停/跌停的数据
+                if (float(tick['bid_price_1']) == float('1.79769E308') and int(tick['bid_volume_1']) == 0) \
+                        or (float(tick['ask_price_1']) == float('1.79769E308') and int(tick['ask_volume_1']) == 0):
+                    continue
+
+                ticks.append(tick)
+
+            del df
+        except Exception as ex:
+            self.write_log(u'{0}文件读取不成功'.format(file_path))
+            return None
         return ticks
 
     def load_bz2_cache(self, cache_folder, cache_symbol, cache_date):

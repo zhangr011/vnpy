@@ -11,7 +11,7 @@ from copy import copy,deepcopy
 from typing import Any, Callable
 from logging import INFO, ERROR
 from datetime import datetime
-from vnpy.trader.constant import Interval, Direction, Offset, Status, OrderType, Color
+from vnpy.trader.constant import Interval, Direction, Offset, Status, OrderType, Color, Exchange
 from vnpy.trader.object import BarData, TickData, OrderData, TradeData
 from vnpy.trader.utility import virtual, append_data, extract_vt_symbol, get_underlying_symbol
 
@@ -197,6 +197,9 @@ class CtaTemplate(ABC):
             if self.is_upper_limit(vt_symbol):
                 self.write_error(u'涨停价不做FAK/FOK委托')
                 return []
+        if volume == 0:
+            self.write_error(f'委托数量有误，必须大于0，{vt_symbol}, price:{price}')
+            return []
         return self.send_order(vt_symbol=vt_symbol,
                                direction=Direction.LONG,
                                offset=Offset.OPEN,
@@ -218,6 +221,9 @@ class CtaTemplate(ABC):
             if self.is_lower_limit(vt_symbol):
                 self.write_error(u'跌停价不做FAK/FOK sell委托')
                 return []
+        if volume == 0:
+            self.write_error(f'委托数量有误，必须大于0，{vt_symbol}, price:{price}')
+            return []
         return self.send_order(vt_symbol=vt_symbol,
                                direction=Direction.SHORT,
                                offset=Offset.CLOSE,
@@ -239,6 +245,9 @@ class CtaTemplate(ABC):
             if self.is_lower_limit(vt_symbol):
                 self.write_error(u'跌停价不做FAK/FOK short委托')
                 return []
+        if volume == 0:
+            self.write_error(f'委托数量有误，必须大于0，{vt_symbol}, price:{price}')
+            return []
         return self.send_order(vt_symbol=vt_symbol,
                                direction=Direction.SHORT,
                                offset=Offset.OPEN,
@@ -260,6 +269,9 @@ class CtaTemplate(ABC):
             if self.is_upper_limit(vt_symbol):
                 self.write_error(u'涨停价不做FAK/FOK cover委托')
                 return []
+        if volume == 0:
+            self.write_error(f'委托数量有误，必须大于0，{vt_symbol}, price:{price}')
+            return []
         return self.send_order(vt_symbol=vt_symbol,
                                direction=Direction.LONG,
                                offset=Offset.CLOSE,
@@ -563,7 +575,7 @@ class CtaProTemplate(CtaTemplate):
     """
 
     idx_symbol = None  # 指数合约
-
+    exchange = Exchange.LOCAL
     price_tick = 1  # 商品的最小价格跳动
     symbol_size = 10  # 商品得合约乘数
     margin_rate = 0.1  # 商品的保证金
@@ -625,10 +637,10 @@ class CtaProTemplate(CtaTemplate):
         for name in self.parameters:
             if name in setting:
                 setattr(self, name, setting[name])
-
+        symbol, self.exchange = extract_vt_symbol(self.vt_symbol)
         if self.idx_symbol is None:
-            symbol, exchange = extract_vt_symbol(self.vt_symbol)
-            self.idx_symbol = get_underlying_symbol(symbol).upper() + '99.' + exchange.value
+            self.idx_symbol = get_underlying_symbol(symbol).upper() + '99.' + self.exchange.value
+
         self.cta_engine.subscribe_symbol(strategy_name=self.strategy_name, vt_symbol=self.idx_symbol)
 
         if self.vt_symbol != self.idx_symbol:
@@ -824,7 +836,7 @@ class CtaProTemplate(CtaTemplate):
 
         if self.position.long_pos > 0:
             for g in self.gt.get_opened_grids(direction=Direction.LONG):
-                vt_symbol = g.snapshot.get('mi_symbol', self.vt_symbol)
+                vt_symbol = g.snapshot.get('mi_symbol', g.vt_symbol if g.vt_symbol and '99' not in g.vt_symbol else self.vt_symbol)
                 open_price = g.snapshot.get('open_price', g.open_price)
                 pos_list.append({'vt_symbol': vt_symbol,
                                  'direction': 'long',
@@ -833,7 +845,7 @@ class CtaProTemplate(CtaTemplate):
 
         if abs(self.position.short_pos) > 0:
             for g in self.gt.get_opened_grids(direction=Direction.SHORT):
-                vt_symbol = g.snapshot.get('mi_symbol', self.vt_symbol)
+                vt_symbol = g.snapshot.get('mi_symbol',  g.vt_symbol if g.vt_symbol and '99' not in g.vt_symbol else self.vt_symbol)
                 open_price = g.snapshot.get('open_price', g.open_price)
                 pos_list.append({'vt_symbol': vt_symbol,
                                  'direction': 'short',
@@ -896,6 +908,7 @@ class CtaProTemplate(CtaTemplate):
                 continue
             if not g.open_status or g.order_status or g.volume - g.traded_volume <= 0:
                 continue
+
             none_mi_grid = g
             if g.traded_volume > 0 and g.volume - g.traded_volume > 0:
                 g.volume -= g.traded_volume
@@ -927,6 +940,12 @@ class CtaProTemplate(CtaTemplate):
         if len(vt_orderids) > 0:
             self.write_log(f'切换合约,委托卖出非主力合约{none_mi_symbol}持仓:{none_mi_grid.volume}')
 
+            # 已经发生过换月的，不执行买入新合约
+            if none_mi_grid.snapshot.get("switched", False):
+                self.write_log(f'已经执行过换月，不再创建新的买入操作')
+                return
+
+            none_mi_grid.snapshot.update({'switched': True})
             # 添加买入主力合约
             grid.snapshot.update({'mi_symbol': self.vt_symbol, 'open_price': self.cur_mi_price})
             self.gt.dn_grids.append(grid)
@@ -939,9 +958,9 @@ class CtaProTemplate(CtaTemplate):
             if len(vt_orderids) > 0:
                 self.write_log(u'切换合约,委托买入主力合约:{},价格:{},数量:{}'
                                .format(self.vt_symbol, self.cur_mi_price, grid.volume))
-                self.gt.save()
             else:
                 self.write_error(f'委托买入主力合约:{self.vt_symbol}失败')
+            self.gt.save()
         else:
             self.write_error(f'委托卖出非主力合约:{none_mi_symbol}失败')
 
@@ -994,7 +1013,12 @@ class CtaProTemplate(CtaTemplate):
                                  grid=none_mi_grid)
         if len(vt_orderids) > 0:
             self.write_log(f'委托平空非主力合约{none_mi_symbol}持仓:{none_mi_grid.volume}')
+            # 已经发生过换月的，不执行开空新合约
+            if none_mi_grid.snapshot.get("switched", False):
+                self.write_log(f'已经执行过换月，不再创建新的空操作')
+                return
 
+            none_mi_grid.snapshot.update({'switched': True})
             # 添加卖出主力合约
             grid.id = str(uuid.uuid1())
             grid.snapshot.update({'mi_symbol': self.vt_symbol, 'open_price': self.cur_mi_price})
@@ -1006,9 +1030,9 @@ class CtaProTemplate(CtaTemplate):
                                      grid=grid)
             if len(vt_orderids) > 0:
                 self.write_log(f'委托做空主力合约:{self.vt_symbol},价格:{self.cur_mi_price},数量:{grid.volume}')
-                self.gt.save()
             else:
                 self.write_error(f'委托做空主力合约:{self.vt_symbol}失败')
+            self.gt.save()
         else:
             self.write_error(f'委托平空非主力合约:{none_mi_symbol}失败')
 
@@ -1190,20 +1214,25 @@ class CtaProFutureTemplate(CtaProTemplate):
         self.fix_order(order)
 
         if order.vt_orderid in self.active_orders:
+            active_order = self.active_orders[order.vt_orderid]
 
             if order.volume == order.traded and order.status in [Status.ALLTRADED]:
                 self.on_order_all_traded(order)
 
-            elif order.offset == Offset.OPEN and order.status in [Status.CANCELLED]:
+            #elif order.offset == Offset.OPEN and order.status in [Status.CANCELLED]:
+            # 这里 换成active_order的，因为原始order有可能被换成锁仓方式
+            elif active_order['offset'] == Offset.OPEN and order.status in [Status.CANCELLED]:
                 # 开仓委托单被撤销
                 self.on_order_open_canceled(order)
 
-            elif order.offset != Offset.OPEN and order.status in [Status.CANCELLED]:
+            #elif order.offset != Offset.OPEN and order.status in [Status.CANCELLED]:
+            #  # 这里 换成active_order的，因为原始order有可能被换成锁仓方式
+            elif active_order['offset'] != Offset.OPEN and order.status in [Status.CANCELLED]:
                 # 平仓委托单被撤销
                 self.on_order_close_canceled(order)
 
             elif order.status == Status.REJECTED:
-                if order.offset == Offset.OPEN:
+                if active_order['offset'] == Offset.OPEN:
                     self.write_error(u'{}委托单开{}被拒，price:{},total:{},traded:{}，status:{}'
                                      .format(order.vt_symbol, order.direction, order.price, order.volume,
                                              order.traded, order.status))
@@ -1226,10 +1255,10 @@ class CtaProFutureTemplate(CtaProTemplate):
         :return:
         """
         self.write_log(u'委托单全部完成:{}'.format(order.__dict__))
-        order_info = self.active_orders[order.vt_orderid]
+        active_order = self.active_orders[order.vt_orderid]
 
         # 通过vt_orderid，找到对应的网格
-        grid = order_info.get('grid', None)
+        grid = active_order.get('grid', None)
         if grid is not None:
             # 移除当前委托单
             if order.vt_orderid in grid.order_ids:
@@ -1241,7 +1270,7 @@ class CtaProFutureTemplate(CtaProTemplate):
                 grid.traded_volume = 0
 
                 # 平仓完毕（cover， sell）
-                if order.offset != Offset.OPEN:
+                if active_order['offset'] != Offset.OPEN:
                     grid.open_status = False
                     grid.close_status = True
 
@@ -1801,6 +1830,7 @@ class CtaProFutureTemplate(CtaProTemplate):
                                 vt_symbol=sell_symbol,
                                 order_type=self.order_type,
                                 order_time=self.cur_datetime,
+                                lock=self.exchange==Exchange.CFFEX,
                                 grid=grid)
             if len(vt_orderids) == 0:
                 self.write_error(u'多单平仓委托失败')
@@ -1901,6 +1931,7 @@ class CtaProFutureTemplate(CtaProTemplate):
                                      vt_symbol=cover_symbol,
                                      order_type=self.order_type,
                                      order_time=self.cur_datetime,
+                                     lock=self.exchange==Exchange.CFFEX,
                                      grid=grid)
             if len(vt_orderids) == 0:
                 self.write_error(u'空单平仓委托失败')
@@ -2023,7 +2054,7 @@ class CtaProFutureTemplate(CtaProTemplate):
         target_long_grid = None
         remove_long_grid_ids = []
         for g in sorted(locked_long_grids, key=lambda grid: grid.volume):
-            if g.order_status or len(g.orderRef) > 0:
+            if g.order_status or len(g.order_ids) > 0:
                 continue
             if target_long_grid is None:
                 target_long_grid = g
@@ -2037,7 +2068,7 @@ class CtaProFutureTemplate(CtaProTemplate):
                     remain_grid = copy(g)
                     g.volume = open_volume
                     remain_grid.volume -= open_volume
-                    remain_grid.id = uuid.uuid1()
+                    remain_grid.id = str(uuid.uuid1())
                     self.gt.dn_grids.append(remain_grid)
                     self.write_log(u'添加剩余仓位到新多单网格:g.volume:{}'
                                    .format(remain_grid.volume))
@@ -2083,7 +2114,7 @@ class CtaProFutureTemplate(CtaProTemplate):
                     remain_grid = copy(g)
                     g.volume = open_volume
                     remain_grid.volume -= open_volume
-                    remain_grid.id = uuid.uuid1()
+                    remain_grid.id = str(uuid.uuid1())
                     self.gt.up_grids.append(remain_grid)
                     self.write_log(u'添加剩余仓位到新空单网格:g.volume:{}'
                                    .format(remain_grid.volume))
@@ -2148,6 +2179,8 @@ class CtaProFutureTemplate(CtaProTemplate):
         # 正在委托时,不处理
         if self.entrust != 0:
             return
+        if not self.activate_today_lock:
+            return
 
         # 多单得对锁格
         locked_long_grids = self.gt.get_opened_grids_within_types(direction=Direction.LONG, types=[LOCK_GRID])
@@ -2187,8 +2220,8 @@ class CtaProFutureTemplate(CtaProTemplate):
         self.write_log(u'空单对锁格:{}'.format([g.to_json() for g in locked_short_grids]))
 
         if locked_long_volume != locked_short_volume:
-            self.write_error(u'对锁格多空数量不一致,不能解锁.\n多:{},\n空:{}'
-                             .format(locked_long_volume, locked_short_volume))
+            self.write_error(u'{}对锁格多空数量不一致,不能解锁.\n多:{},\n空:{}'
+                             .format(self.strategy_name, locked_long_volume, locked_short_volume))
             return
 
         # 检查所有品种得昨仓是否满足数量

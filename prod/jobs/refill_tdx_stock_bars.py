@@ -1,6 +1,6 @@
 # flake8: noqa
 """
-下载通达信指数合约1分钟bar => vnpy项目目录/bar_data/
+下载通达信股票合约1分钟bar => vnpy项目目录/bar_data/
 上海股票 => SSE子目录
 深圳股票 => SZSE子目录
 """

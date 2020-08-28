@@ -88,6 +88,7 @@ class OffsetConverter:
 
         # 平今/平昨拆分
         elif req.exchange in [Exchange.SHFE, Exchange.INE]:
+            print(f'转换平今/平昨')
             return holding.convert_order_request_shfe(req)
         else:
             return [req]
@@ -262,10 +263,12 @@ class PositionHolding:
             td_available = self.long_td - self.long_td_frozen
 
         if req.volume > pos_available:
+            print(f'{req.vt_symbol}没有可用仓位')
             return []
         elif req.volume <= td_available:
             req_td = copy(req)
             req_td.offset = Offset.CLOSETODAY
+            print(f'{req.vt_symbol} 平仓=>平今')
             return [req_td]
         else:
             req_list = []
@@ -274,11 +277,13 @@ class PositionHolding:
                 req_td = copy(req)
                 req_td.offset = Offset.CLOSETODAY
                 req_td.volume = td_available
+                print(f'{req.vt_symbol} 平仓 {req_td.volume}手 =>平今')
                 req_list.append(req_td)
 
             req_yd = copy(req)
             req_yd.offset = Offset.CLOSEYESTERDAY
             req_yd.volume = req.volume - td_available
+            print(f'{req.vt_symbol} 平仓 {req_yd.volume}手 =>平昨')
             req_list.append(req_yd)
 
             return req_list

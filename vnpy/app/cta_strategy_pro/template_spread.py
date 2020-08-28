@@ -4,7 +4,10 @@
 import os
 import traceback
 from copy import copy
-from vnpy.trader.utility import append_data
+import bz2
+import pickle
+import zlib
+from vnpy.trader.utility import append_data, extract_vt_symbol
 from .template import (
     CtaPosition,
     CtaGridTrade,
@@ -13,6 +16,7 @@ from .template import (
     Direction,
     datetime,
     Offset,
+    Exchange,
     OrderType,
     OrderData,
     TradeData,
@@ -24,10 +28,14 @@ from .template import (
 class CtaSpreadTemplate(CtaTemplate):
     """CTA套利模板"""
 
+    activate_fak = False
     order_type = OrderType.LIMIT
     act_vt_symbol = ""  # 主动腿合约
     pas_vt_symbol = ""  # 被动腿合约
-
+    act_symbol = ""
+    pas_symbol = ""
+    act_exchange = None
+    pas_exchange = None
     act_vol_ratio = 1
     pas_vol_ratio = 1
 
@@ -44,6 +52,8 @@ class CtaSpreadTemplate(CtaTemplate):
     def __init__(self, cta_engine, strategy_name, vt_symbol, setting):
         """"""
         super().__init__(cta_engine, strategy_name, vt_symbol, setting)
+
+        self.parameters.append('activate_fak')
 
         # 基础组件
         self.position = CtaPosition(strategy=self)
@@ -71,15 +81,13 @@ class CtaSpreadTemplate(CtaTemplate):
         """更新配置参数"""
         super().update_setting(setting)
 
-        # 订阅主动腿/被动腿合约
-        self.cta_engine.subscribe_symbol(strategy_name=self.strategy_name, vt_symbol=self.act_vt_symbol)
-        self.cta_engine.subscribe_symbol(strategy_name=self.strategy_name, vt_symbol=self.pas_vt_symbol)
-
+        self.act_symbol, self.act_exchange = extract_vt_symbol(self.act_vt_symbol)
+        self.pas_symbol, self.pas_exchange = extract_vt_symbol(self.pas_vt_symbol)
         self.act_price_tick = self.cta_engine.get_price_tick(self.act_vt_symbol)
         self.pas_price_tick = self.cta_engine.get_price_tick(self.pas_vt_symbol)
 
         # 实盘采用FAK
-        if not self.backtesting:
+        if not self.backtesting and self.activate_fak:
             self.order_type = OrderType.FAK
 
     def display_grids(self):
@@ -94,6 +102,102 @@ class CtaSpreadTemplate(CtaTemplate):
         dn_grids_info = self.gt.to_str(direction=Direction.LONG)
         if len(self.gt.dn_grids) > 0:
             self.write_log(dn_grids_info)
+
+    def sync_data(self):
+        """同步更新数据"""
+        if not self.backtesting:
+            self.write_log(u'保存k线缓存数据')
+            self.save_klines_to_cache()
+
+
+    def save_klines_to_cache(self, kline_names: list = []):
+        """
+        保存K线数据到缓存
+        :param kline_names: 一般为self.klines的keys
+        :return:
+        """
+        if len(kline_names) == 0:
+            kline_names = list(self.klines.keys())
+
+        # 获取保存路径
+        save_path = self.cta_engine.get_data_path()
+        # 保存缓存的文件名
+        file_name = os.path.abspath(os.path.join(save_path, f'{self.strategy_name}_klines.pkb2'))
+        with bz2.BZ2File(file_name, 'wb') as f:
+            klines = {}
+            for kline_name in kline_names:
+                kline = self.klines.get(kline_name, None)
+                if kline:
+                    kline.strategy = None
+                    kline.cb_on_bar = None
+                    if kline.cb_on_period:
+                        kline.cb_on_period = None
+                    kline.cb_dict = {}
+                klines.update({kline_name: kline})
+            pickle.dump(klines, f)
+
+    def load_klines_from_cache(self, kline_names: list = []):
+        """
+        从缓存加载K线数据
+        :param kline_names:
+        :return:
+        """
+        if len(kline_names) == 0:
+            kline_names = list(self.klines.keys())
+
+        save_path = self.cta_engine.get_data_path()
+        file_name = os.path.abspath(os.path.join(save_path, f'{self.strategy_name}_klines.pkb2'))
+        try:
+            last_bar_dt = None
+            with bz2.BZ2File(file_name, 'rb') as f:
+                klines = pickle.load(f)
+                # 逐一恢复K线
+                for kline_name in kline_names:
+                    # 缓存的k线实例
+                    cache_kline = klines.get(kline_name, None)
+                    # 当前策略实例的K线实例
+                    strategy_kline = self.klines.get(kline_name, None)
+
+                    if cache_kline and strategy_kline:
+                        # 临时保存当前的回调函数
+                        cb_on_bar = strategy_kline.cb_on_bar
+                        # 缓存实例数据 =》 当前实例数据
+                        strategy_kline.__dict__.update(cache_kline.__dict__)
+
+                        # 所有K线的最后时间
+                        if last_bar_dt and strategy_kline.cur_datetime:
+                            last_bar_dt = max(last_bar_dt, strategy_kline.cur_datetime)
+                        else:
+                            last_bar_dt = strategy_kline.cur_datetime
+
+                        # 重新绑定k线策略与on_bar回调函数
+                        strategy_kline.strategy = self
+                        strategy_kline.cb_on_bar = cb_on_bar
+
+                        self.write_log(f'恢复{kline_name}缓存数据,最新bar结束时间:{last_bar_dt}')
+
+                self.write_log(u'加载缓存k线数据完毕')
+                return last_bar_dt
+        except Exception as ex:
+            self.write_error(f'加载缓存K线数据失败:{str(ex)}')
+        return None
+
+    def get_klines_snapshot(self):
+        """返回当前klines的切片数据"""
+        try:
+            d = {
+                'strategy': self.strategy_name,
+                'datetime': datetime.now()}
+            klines = {}
+            for kline_name in sorted(self.klines.keys()):
+                klines.update({kline_name: self.klines.get(kline_name).get_data()})
+            kline_names = list(klines.keys())
+            binary_data = zlib.compress(pickle.dumps(klines))
+            d.update({'kline_names': kline_names, 'klines': binary_data, 'zlib': True})
+            return d
+        except Exception as ex:
+            self.write_error(f'获取klines切片数据失败:{str(ex)}')
+            return {}
 
     def init_position(self, status_filter=[True]):
         """
@@ -125,11 +229,11 @@ class CtaSpreadTemplate(CtaTemplate):
                         continue
 
                     act_vt_symbol = grid.snapshot.get('act_vt_symbol', self.act_vt_symbol)
-                    act_open_volume = grid.snapshot.get('act_open_volume', grid.volume)
+                    act_open_volume = grid.snapshot.get('act_open_volume', grid.volume * self.act_vol_ratio)
                     act_open_price = grid.snapshot.get('act_open_price')
 
                     pas_vt_symbol = grid.snapshot.get('pas_vt_symbol', self.pas_vt_symbol)
-                    pas_open_volume = grid.snapshot.get('pas_open_volume', grid.volume)
+                    pas_open_volume = grid.snapshot.get('pas_open_volume', grid.volume * self.pas_vol_ratio)
                     pas_open_price = grid.snapshot.get('pas_open_price')
                     if act_vt_symbol != self.act_vt_symbol:
                         pos_symbols.add(act_vt_symbol)
@@ -165,11 +269,11 @@ class CtaSpreadTemplate(CtaTemplate):
                     if not grid.open_status:
                         continue
                     act_vt_symbol = grid.snapshot.get('act_vt_symbol', self.act_vt_symbol)
-                    act_open_volume = grid.snapshot.get('act_open_volume', grid.volume)
+                    act_open_volume = grid.snapshot.get('act_open_volume', grid.volume * self.act_vol_ratio)
                     act_open_price = grid.snapshot.get('act_open_price')
 
                     pas_vt_symbol = grid.snapshot.get('pas_vt_symbol', self.pas_vt_symbol)
-                    pas_open_volume = grid.snapshot.get('pas_open_volume', grid.volume)
+                    pas_open_volume = grid.snapshot.get('pas_open_volume', grid.volume * self.pas_vol_ratio)
                     pas_open_price = grid.snapshot.get('pas_open_price')
 
                     if act_vt_symbol != self.act_vt_symbol:
@@ -203,8 +307,64 @@ class CtaSpreadTemplate(CtaTemplate):
                 self.write_log(f'新增订阅合约:{vt_symbol}')
                 self.cta_engine.subscribe_symbol(strategy_name=self.strategy_name, vt_symbol=vt_symbol)
 
+    def get_positions(self):
+        """
+        获取策略当前持仓(重构，使用主力合约）
+        :return: [{'vt_symbol':symbol,'direction':direction,'volume':volume]
+        """
+        if not self.position:
+            return []
+        pos_list = []
+
+        for grid in self.gt.get_opened_grids(direction=Direction.LONG):
+            act_vt_symbol = grid.snapshot.get('act_vt_symbol', self.act_vt_symbol)
+            act_open_volume = grid.snapshot.get('act_open_volume', grid.volume * self.act_vol_ratio)
+            act_open_price = grid.snapshot.get('act_open_price')
+
+            pas_vt_symbol = grid.snapshot.get('pas_vt_symbol', self.pas_vt_symbol)
+            pas_open_volume = grid.snapshot.get('pas_open_volume', grid.volume * self.pas_vol_ratio)
+            pas_open_price = grid.snapshot.get('pas_open_price')
+
+            pos_list.append({'vt_symbol': act_vt_symbol,
+                             'direction': 'long',
+                             'volume': act_open_volume,
+                             'price': act_open_price})
+
+            pos_list.append({'vt_symbol': pas_vt_symbol,
+                             'direction': 'short',
+                             'volume': pas_open_volume,
+                             'price': pas_open_price})
+
+        for grid in self.gt.get_opened_grids(direction=Direction.SHORT):
+            act_vt_symbol = grid.snapshot.get('act_vt_symbol', self.act_vt_symbol)
+            act_open_volume = grid.snapshot.get('act_open_volume', grid.volume * self.act_vol_ratio)
+            act_open_price = grid.snapshot.get('act_open_price')
+
+            pas_vt_symbol = grid.snapshot.get('pas_vt_symbol', self.pas_vt_symbol)
+            pas_open_volume = grid.snapshot.get('pas_open_volume', grid.volume * self.pas_vol_ratio)
+            pas_open_price = grid.snapshot.get('pas_open_price')
+
+            pos_list.append({'vt_symbol': act_vt_symbol,
+                             'direction': 'short',
+                             'volume': act_open_volume,
+                             'price': act_open_price})
+
+            pos_list.append({'vt_symbol': pas_vt_symbol,
+                             'direction': 'long',
+                             'volume': pas_open_volume,
+                             'price': pas_open_price})
+
+        if self.cur_datetime and (datetime.now() - self.cur_datetime).total_seconds() < 10:
+            self.write_log(u'当前持仓:{}'.format(pos_list))
+        return pos_list
+
+
     def on_start(self):
         """启动策略（必须由用户继承实现）"""
+        # 订阅主动腿/被动腿合约
+        self.cta_engine.subscribe_symbol(strategy_name=self.strategy_name, vt_symbol=self.act_vt_symbol)
+        self.cta_engine.subscribe_symbol(strategy_name=self.strategy_name, vt_symbol=self.pas_vt_symbol)
+
         self.write_log(u'启动')
         self.trading = True
         self.put_event()
@@ -335,20 +495,20 @@ class CtaSpreadTemplate(CtaTemplate):
         self.fix_order(order)
 
         if order.vt_orderid in self.active_orders:
-
+            active_order = self.active_orders[order.vt_orderid]
             if order.volume == order.traded and order.status in [Status.ALLTRADED]:
                 self.on_order_all_traded(order)
 
-            elif order.offset == Offset.OPEN and order.status in [Status.CANCELLED]:
+            elif active_order['offset'] == Offset.OPEN and order.status in [Status.CANCELLED]:
                 # 开仓委托单被撤销
                 self.on_order_open_canceled(order)
 
-            elif order.offset != Offset.OPEN and order.status in [Status.CANCELLED]:
+            elif active_order['offset'] != Offset.OPEN and order.status in [Status.CANCELLED]:
                 # 平仓委托单被撤销
                 self.on_order_close_canceled(order)
 
             elif order.status == Status.REJECTED:
-                if order.offset == Offset.OPEN:
+                if active_order['offset'] == Offset.OPEN:
                     self.write_error(u'{}委托单开{}被拒，price:{},total:{},traded:{}，status:{}'
                                      .format(order.vt_symbol, order.direction, order.price, order.volume,
                                              order.traded, order.status))
@@ -369,8 +529,8 @@ class CtaSpreadTemplate(CtaTemplate):
         if trade.offset == Offset.OPEN:
             # 更新开仓均价/数量
             if trade.vt_symbol == self.act_vt_symbol:
-                opened_price = grid.snapshot.get('act_open_price', 0)
-                opened_volume = grid.snapshot.get('act_open_volume', 0)
+                opened_price = grid.snapshot.get('act_open_price', grid.volume * self.act_vol_ratio)
+                opened_volume = grid.snapshot.get('act_open_volume', grid.volume * self.act_vol_ratio)
                 act_open_volume = opened_volume + trade.volume
                 act_open_price = (opened_price * opened_volume + trade.price * trade.volume) / act_open_volume
 
@@ -382,7 +542,7 @@ class CtaSpreadTemplate(CtaTemplate):
 
             elif trade.vt_symbol == self.pas_vt_symbol:
                 opened_price = grid.snapshot.get('pas_open_price', 0)
-                opened_volume = grid.snapshot.get('pas_open_volume', 0)
+                opened_volume = grid.snapshot.get('pas_open_volume', grid.volume * self.pas_vol_ratio)
                 pas_open_volume = opened_volume + trade.volume
                 pas_open_price = (opened_price * opened_volume + trade.price * trade.volume) / pas_open_volume
 
@@ -396,7 +556,7 @@ class CtaSpreadTemplate(CtaTemplate):
             # 更新平仓均价/数量
             if trade.vt_symbol == self.act_vt_symbol:
                 closed_price = grid.snapshot.get('act_close_price', 0)
-                closed_volume = grid.snapshot.get('act_close_volume', 0)
+                closed_volume = grid.snapshot.get('act_close_volume', grid.volume * self.act_vol_ratio)
                 act_close_volume = closed_volume + trade.volume
                 act_close_price = (closed_price * closed_volume + trade.price * trade.volume) / act_close_volume
 
@@ -408,7 +568,7 @@ class CtaSpreadTemplate(CtaTemplate):
 
             elif trade.vt_symbol == self.pas_vt_symbol:
                 closed_price = grid.snapshot.get('pas_close_price', 0)
-                closed_volume = grid.snapshot.get('pas_close_volume', 0)
+                closed_volume = grid.snapshot.get('pas_close_volume', grid.volume * self.pas_vol_ratio)
                 pas_open_volume = closed_volume + trade.volume
                 pas_open_price = (closed_price * closed_volume + trade.price * trade.volume) / pas_open_volume
 
@@ -417,6 +577,8 @@ class CtaSpreadTemplate(CtaTemplate):
                 grid.snapshot.update({'pas_close_price': pas_open_price,
                                       'pas_close_volume': pas_open_volume,
                                       'pas_vt_symbol': self.pas_vt_symbol})
+
+        self.gt.save()
 
     def on_order_all_traded(self, order: OrderData):
         """
@@ -448,7 +610,8 @@ class CtaSpreadTemplate(CtaTemplate):
 
                     self.update_pos(price=grid.close_price,
                                     volume=grid.volume,
-                                    operation='cover' if grid.direction == Direction.SHORT else 'sell')
+                                    operation='cover' if grid.direction == Direction.SHORT else 'sell',
+                                    dt=self.cur_datetime)
 
                     self.write_log(f'移除网格:{grid.to_json()}')
                     self.gt.remove_grids_by_ids(direction=grid.direction, ids=[grid.id])
@@ -460,13 +623,15 @@ class CtaSpreadTemplate(CtaTemplate):
                     self.write_log(f'{grid.direction.value}单已开仓完毕,,手数:{grid.volume}, 详细:{grid.snapshot}')
                     self.update_pos(price=grid.open_price,
                                     volume=grid.volume,
-                                    operation='short' if grid.direction == Direction.SHORT else 'buy')
+                                    operation='short' if grid.direction == Direction.SHORT else 'buy',
+                                    dt=self.cur_datetime)
                 # 网格的所有委托单部分执行完毕
             else:
                 self.write_log(f'剩余委托单号:{grid.order_ids}')
 
         # 在策略得活动订单中，移除
         self.active_orders.pop(order.vt_orderid, None)
+        self.gt.save()
 
     def on_order_open_canceled(self, order: OrderData):
         """
@@ -492,6 +657,8 @@ class CtaSpreadTemplate(CtaTemplate):
         self.write_log(u'{} 委托信息:{}'.format(order.vt_orderid, old_order))
         old_order['traded'] = order.traded
         order_vt_symbol = copy(old_order['vt_symbol'])
+        order_symbol, order_exchange = extract_vt_symbol(order_vt_symbol)
+
         order_volume = old_order['volume'] - old_order['traded']
         if order_volume <= 0:
             msg = u'{} {}{}需重新开仓数量为{}，不再开仓' \
@@ -521,6 +688,7 @@ class CtaSpreadTemplate(CtaTemplate):
 
             if grid:
                 if order.vt_orderid in grid.order_ids:
+                    self.write_log(f'移除grid中order_ids:{order.vt_orderid}')
                     grid.order_ids.remove(order.vt_orderid)
 
                 # 网格的所有委托单已经执行完毕
@@ -556,6 +724,7 @@ class CtaSpreadTemplate(CtaTemplate):
             vt_orderids = self.buy(price=buy_price,
                                    volume=order_volume,
                                    vt_symbol=order_vt_symbol,
+                                   lock=order_exchange==Exchange.CFFEX,
                                    order_type=OrderType.FAK,
                                    order_time=self.cur_datetime,
                                    grid=grid)
@@ -568,6 +737,11 @@ class CtaSpreadTemplate(CtaTemplate):
             for vt_orderid in vt_orderids:
                 info = self.active_orders.get(vt_orderid, None)
                 info.update({'retry': order_retry})
+
+            if grid:
+                if order.vt_orderid in grid.order_ids:
+                    self.write_log(f'移除grid中order_ids:{order.vt_orderid}')
+                    grid.order_ids.remove(order.vt_orderid)
 
             self.gt.save()
             # 删除旧的委托记录
@@ -592,6 +766,7 @@ class CtaSpreadTemplate(CtaTemplate):
             vt_orderids = self.short(price=short_price,
                                      volume=order_volume,
                                      vt_symbol=order_vt_symbol,
+                                     lock=order_exchange==Exchange.CFFEX,
                                      order_type=OrderType.FAK,
                                      order_time=self.cur_datetime,
                                      grid=grid)
@@ -606,6 +781,11 @@ class CtaSpreadTemplate(CtaTemplate):
                 info = self.active_orders.get(vt_orderid, None)
                 info.update({'retry': order_retry})
 
+            if grid:
+                if order.vt_orderid in grid.order_ids:
+                    self.write_log(f'移除grid中order_ids:{order.vt_orderid}')
+                    grid.order_ids.remove(order.vt_orderid)
+
             self.gt.save()
             # 删除旧的委托记录
             self.write_log(u'移除旧的委托记录:{}'.format(order.vt_orderid))
@@ -616,6 +796,7 @@ class CtaSpreadTemplate(CtaTemplate):
             self.write_log(u'委托单状态:{}=>{}'.format(pre_status, old_order.get('status')))
             if grid:
                 if order.vt_orderid in grid.order_ids:
+                    self.write_log(f'移除grid中order_ids:{order.vt_orderid}')
                     grid.order_ids.remove(order.vt_orderid)
 
                 if not grid.order_ids:
@@ -644,6 +825,8 @@ class CtaSpreadTemplate(CtaTemplate):
         old_order['traded'] = order.traded
         # order_time = old_order['order_time']
         order_vt_symbol = copy(old_order['vt_symbol'])
+        order_symbol,order_exchange = extract_vt_symbol(order_vt_symbol)
+
         order_volume = old_order['volume'] - old_order['traded']
         if order_volume <= 0:
             msg = u'{} {}{}重新平仓数量为{}，不再平仓' \
@@ -656,7 +839,7 @@ class CtaSpreadTemplate(CtaTemplate):
 
         order_price = old_order['price']
         order_type = old_order.get('order_type', OrderType.LIMIT)
-        order_retry = old_order['retry']
+        order_retry = old_order.get('retry',1)
         grid = old_order.get('grid', None)
         if order_retry > 10:
             msg = u'{} 平仓撤单 {}/{}手， 重试平仓次数{}>10' \
@@ -665,6 +848,7 @@ class CtaSpreadTemplate(CtaTemplate):
             self.send_wechat(msg)
             if grid:
                 if order.vt_orderid in grid.order_ids:
+                    self.write_log(f'移除grid中order_ids:{order.vt_orderid}')
                     grid.order_ids.remove(order.vt_orderid)
                 if not grid.order_ids:
                     grid.order_status = False
@@ -695,6 +879,7 @@ class CtaSpreadTemplate(CtaTemplate):
             vt_orderids = self.cover(price=cover_price,
                                      volume=order_volume,
                                      vt_symbol=order_vt_symbol,
+                                     lock=order_exchange==Exchange.CFFEX,
                                      order_type=OrderType.FAK,
                                      order_time=self.cur_datetime,
                                      grid=grid)
@@ -705,7 +890,10 @@ class CtaSpreadTemplate(CtaTemplate):
             for vt_orderid in vt_orderids:
                 info = self.active_orders.get(vt_orderid)
                 info.update({'retry': order_retry})
-
+            if grid:
+                if order.vt_orderid in grid.order_ids:
+                    self.write_log(f'移除grid中order_ids:{order.vt_orderid}')
+                    grid.order_ids.remove(order.vt_orderid)
             self.gt.save()
             self.write_log(u'移除活动订单:{}'.format(order.vt_orderid))
             self.active_orders.pop(order.vt_orderid, None)
@@ -728,6 +916,7 @@ class CtaSpreadTemplate(CtaTemplate):
             vt_orderids = self.sell(price=sell_price,
                                     volume=order_volume,
                                     vt_symbol=order_vt_symbol,
+                                    lock=order_exchange==Exchange.CFFEX,
                                     order_type=OrderType.FAK,
                                     order_time=self.cur_datetime,
                                     grid=grid)
@@ -739,7 +928,10 @@ class CtaSpreadTemplate(CtaTemplate):
             for vt_orderid in vt_orderids:
                 info = self.active_orders.get(vt_orderid)
                 info.update({'retry': order_retry})
-
+            if grid:
+                if order.vt_orderid in grid.order_ids:
+                    self.write_log(f'移除grid中order_ids:{order.vt_orderid}')
+                    grid.order_ids.remove(order.vt_orderid)
             self.gt.save()
 
             self.write_log(u'移除活动订单:{}'.format(order.vt_orderid))
@@ -751,6 +943,7 @@ class CtaSpreadTemplate(CtaTemplate):
             self.write_log(u'委托单状态:{}=>{}'.format(pre_status, old_order.get('status')))
             if grid:
                 if order.vt_orderid in grid.order_ids:
+                    self.write_log(f'移除grid中order_ids:{order.vt_orderid}')
                     grid.order_ids.remove(order.vt_orderid)
                 if len(grid.order_ids) == 0:
                     grid.order_status = False
@@ -781,6 +974,7 @@ class CtaSpreadTemplate(CtaTemplate):
         for vt_orderid in list(self.active_orders.keys()):
             order_info = self.active_orders[vt_orderid]
             order_vt_symbol = order_info.get('vt_symbol', self.vt_symbol)
+            order_symbol, order_exchange = extract_vt_symbol(order_vt_symbol)
             order_time = order_info['order_time']
             order_volume = order_info['volume'] - order_info['traded']
             order_grid = order_info['grid']
@@ -789,18 +983,23 @@ class CtaSpreadTemplate(CtaTemplate):
             over_seconds = (dt - order_time).total_seconds()
 
             # 只处理未成交的限价委托单
-            if order_status in [Status.NOTTRADED] and (order_type == OrderType.LIMIT):
+            if order_status in [Status.SUBMITTING, Status.NOTTRADED] and (order_type == OrderType.LIMIT):
                 if over_seconds > self.cancel_seconds or force:  # 超过设置的时间还未成交
                     self.write_log(u'超时{}秒未成交，取消委托单：vt_orderid:{},order:{}'
                                    .format(over_seconds, vt_orderid, order_info))
-                    order_info.update({'status': Status.CANCELING})
+                    order_info.update({'status': Status.CANCELLING})
                     self.active_orders.update({vt_orderid: order_info})
                     ret = self.cancel_order(str(vt_orderid))
                     if not ret:
                         self.write_log(u'撤单失败,更新状态为撤单成功')
                         order_info.update({'status': Status.CANCELLED})
                         self.active_orders.update({vt_orderid: order_info})
-
+                    else:
+                        if order_grid:
+                            if vt_orderid in order_grid.order_ids:
+                                order_grid.order_ids.remove(vt_orderid)
+                            if len(order_grid.order_ids) == 0:
+                                order_grid.order_status = False
                 continue
 
             # 处理状态为‘撤销’的委托单
@@ -822,6 +1021,7 @@ class CtaSpreadTemplate(CtaTemplate):
                             vt_orderids = self.short(price=short_price,
                                                      volume=order_volume,
                                                      vt_symbol=order_vt_symbol,
+                                                     lock=order_exchange == Exchange.CFFEX,
                                                      order_type=order_type,
                                                      order_time=self.cur_datetime,
                                                      grid=order_grid)
@@ -840,6 +1040,7 @@ class CtaSpreadTemplate(CtaTemplate):
                             vt_orderids = self.buy(price=buy_price,
                                                    volume=order_volume,
                                                    vt_symbol=order_vt_symbol,
+                                                   lock=order_exchange == Exchange.CFFEX,
                                                    order_type=order_type,
                                                    order_time=self.cur_datetime,
                                                    grid=order_grid)
@@ -859,6 +1060,7 @@ class CtaSpreadTemplate(CtaTemplate):
                             vt_orderids = self.sell(price=sell_price,
                                                     volume=order_volume,
                                                     vt_symbol=order_vt_symbol,
+                                                    lock=order_exchange == Exchange.CFFEX,
                                                     order_type=order_type,
                                                     order_time=self.cur_datetime,
                                                     grid=order_grid)
@@ -875,6 +1077,7 @@ class CtaSpreadTemplate(CtaTemplate):
                             vt_orderids = self.cover(price=cover_price,
                                                      volume=order_volume,
                                                      vt_symbol=order_vt_symbol,
+                                                     lock=order_exchange == Exchange.CFFEX,
                                                      order_type=order_type,
                                                      order_time=self.cur_datetime,
                                                      grid=order_grid)
@@ -925,8 +1128,8 @@ class CtaSpreadTemplate(CtaTemplate):
             return True
 
         # leg1 接近跌停价（10个minDiff 以内）
-        if self.cur_act_tick.limie_down > 0 \
-                and self.cur_act_tick.bid_price_1 - 10 * self.act_price_tick < self.cur_act_tick.limie_down:
+        if self.cur_act_tick.limit_down > 0 \
+                and self.cur_act_tick.bid_price_1 - 10 * self.act_price_tick < self.cur_act_tick.limit_down:
             self.write_log(u'主动腿 bid_price_1{} 接近跌停价{}'
                            .format(self.cur_act_tick.bid_price_1, self.cur_act_tick.limit_up))
             return True
@@ -939,8 +1142,8 @@ class CtaSpreadTemplate(CtaTemplate):
             return True
 
         # leg2 接近跌停价（10个minDiff 以内）
-        if self.cur_pas_tick.limie_down > 0 \
-                and self.cur_pas_tick.bid_price_1 - 10 * self.pas_price_tick < self.cur_pas_tick.limie_down:
+        if self.cur_pas_tick.limit_down > 0 \
+                and self.cur_pas_tick.bid_price_1 - 10 * self.pas_price_tick < self.cur_pas_tick.limit_down:
             self.write_log(u'被动腿 bid_price_1{} 接近跌停价{}'
                            .format(self.cur_pas_tick.bid_price_1, self.cur_pas_tick.limit_up))
             return True
@@ -976,28 +1179,31 @@ class CtaSpreadTemplate(CtaTemplate):
 
         # 开空主动腿
         act_vt_orderids = self.short(vt_symbol=self.act_vt_symbol,
-                                     price=self.cur_act_tick.bid_price1,
+                                     lock=self.act_exchange == Exchange.CFFEX,
+                                     price=self.cur_act_tick.bid_price_1,
                                      volume=grid.volume * self.act_vol_ratio,
                                      order_type=self.order_type,
                                      order_time=self.cur_datetime,
                                      grid=grid)
         if not act_vt_orderids:
             self.write_error(f'spd_short，{self.act_vt_symbol}开空仓{grid.volume * self.act_vol_ratio}手失败，'
-                             f'委托价:{self.cur_act_tick.bid_price1}')
+                             f'委托价:{self.cur_act_tick.bid_price_1}')
             return []
 
         # 开多被动腿
         pas_vt_orderids = self.buy(vt_symbol=self.pas_vt_symbol,
-                                   price=self.cur_pas_tick.ask_price1,
+                                   lock=self.pas_exchange==Exchange.CFFEX,
+                                   price=self.cur_pas_tick.ask_price_1,
                                    volume=grid.volume * self.pas_vol_ratio,
                                    order_type=self.order_type,
                                    order_time=self.cur_datetime,
                                    grid=grid)
         if not pas_vt_orderids:
             self.write_error(f'spd_short，{self.pas_vt_symbol}开多仓{grid.volume * self.pas_vol_ratio}手失败，'
-                             f'委托价:{self.cur_pas_tick.ask_price1}')
+                             f'委托价:{self.cur_pas_tick.ask_price_1}')
             return []
-
+        grid.snapshot.update({"act_vt_symbol": self.act_vt_symbol, "act_open_volume": grid.volume * self.act_vol_ratio,
+                              "pas_vt_symbol": self.pas_vt_symbol, "pas_open_volume": grid.volume * self.pas_vol_ratio})
         grid.order_status = True
         grid.order_datetime = self.cur_datetime
 
@@ -1035,28 +1241,31 @@ class CtaSpreadTemplate(CtaTemplate):
 
         # 开多主动腿
         act_vt_orderids = self.buy(vt_symbol=self.act_vt_symbol,
-                                   price=self.cur_act_tick.ask_price1,
+                                   lock=self.act_exchange==Exchange.CFFEX,
+                                   price=self.cur_act_tick.ask_price_1,
                                    volume=grid.volume * self.act_vol_ratio,
                                    order_type=self.order_type,
                                    order_time=self.cur_datetime,
                                    grid=grid)
         if not act_vt_orderids:
             self.write_error(f'spd_short，{self.act_vt_symbol}开多仓{grid.volume * self.act_vol_ratio}手失败，'
-                             f'委托价:{self.cur_act_tick.ask_price1}')
+                             f'委托价:{self.cur_act_tick.ask_price_1}')
             return []
 
         # 开空被动腿
         pas_vt_orderids = self.short(vt_symbol=self.pas_vt_symbol,
-                                     price=self.cur_pas_tick.bid_price1,
+                                     lock=self.pas_exchange==Exchange.CFFEX,
+                                     price=self.cur_pas_tick.bid_price_1,
                                      volume=grid.volume * self.pas_vol_ratio,
                                      order_type=self.order_type,
                                      order_time=self.cur_datetime,
                                      grid=grid)
         if not pas_vt_orderids:
             self.write_error(f'spd_short，{self.pas_vt_symbol}开空仓{grid.volume * self.pas_vol_ratio}手失败，'
-                             f'委托价:{self.cur_pas_tick.bid_price1}')
+                             f'委托价:{self.cur_pas_tick.bid_price_1}')
             return []
-
+        grid.snapshot.update({"act_vt_symbol": self.act_vt_symbol, "act_open_volume": grid.volume * self.act_vol_ratio,
+                              "pas_vt_symbol": self.pas_vt_symbol, "pas_open_volume": grid.volume * self.pas_vol_ratio})
         grid.order_status = True
         grid.order_datetime = self.cur_datetime
         vt_orderids = act_vt_orderids.extend(pas_vt_orderids)
@@ -1066,7 +1275,7 @@ class CtaSpreadTemplate(CtaTemplate):
     # ----------------------------------------------------------------------
     def spd_sell(self, grid: CtaGrid, force: bool = False):
         """非标准合约的套利平正套指令"""
-        self.write_log(u'套利平正套单,price={0,volume={}'.format(grid.close_price, grid.volume))
+        self.write_log(u'套利平正套单,price={},volume={}'.format(grid.close_price, grid.volume))
         if self.entrust != 0:
             self.write_log(u'正在委托，不平仓')
             return []
@@ -1084,48 +1293,51 @@ class CtaSpreadTemplate(CtaTemplate):
             self.write_log(u'实际价差{}不满足:{}'.format(self.cur_spd_tick.bid_price_1, grid.close_price))
             return []
 
+        # 获取账号持仓
         self.act_pos = self.cta_engine.get_position_holding(vt_symbol=self.act_vt_symbol)
         self.pas_pos = self.cta_engine.get_position_holding(vt_symbol=self.pas_vt_symbol)
-
         if not all([self.act_pos, self.pas_pos]):
-            self.write_error('主动腿/被动退得持仓数据不存在')
+            self.write_error('主动腿/被动腿的账号持仓数据不存在')
             return []
 
-        act_close_volume = grid.snapshot.get('act_open_volume')
-        pas_close_volume = grid.snapshot.get('pas_open_volume')
+        # 获取需要平仓的主动腿、被动腿volume
+        act_close_volume = grid.snapshot.get('act_open_volume', grid.volume * self.act_vol_ratio)
+        pas_close_volume = grid.snapshot.get('pas_open_volume', grid.volume * self.pas_vol_ratio)
 
+        # 检查账号持仓是否满足平仓目标
         if self.act_pos.long_pos < act_close_volume:
             self.write_error(f'账号 {self.act_vt_symbol} 多单持仓{self.act_pos.long_pos}'
                              f'今仓{self.act_pos.long_td}/昨{self.act_pos.long_yd}, 不满足{act_close_volume}')
             return []
-
         if self.pas_pos.short_pos < pas_close_volume:
             self.write_error(f'账号 {self.pas_vt_symbol} 多单持仓{self.pas_pos.short_pos}'
                              f'今仓{self.pas_pos.short_td}/昨{self.pas_pos.short_yd}, 不满足{act_close_volume}')
             return []
 
-        # 主动腿多单平仓
-        act_vt_orderids = self.sell(vt_symbol=self.act_vt_symbol,
-                                    price=self.cur_act_tick.bid_price1,
-                                    volume=grid.volume * self.act_vol_ratio,
-                                    order_type=self.order_type,
-                                    order_time=self.cur_datetime,
-                                    grid=grid)
-        if not act_vt_orderids:
-            self.write_error(f'spd_sell，{self.act_vt_symbol}多单平仓{grid.volume * self.act_vol_ratio}手失败，'
-                             f'委托价:{self.cur_act_tick.bid_price1}')
-            return []
-
         # 被动腿空单平仓
         pas_vt_orderids = self.cover(vt_symbol=self.pas_vt_symbol,
-                                     price=self.cur_pas_tick.ask_price1,
+                                     lock=self.pas_exchange == Exchange.CFFEX,
+                                     price=self.cur_pas_tick.ask_price_1,
                                      volume=grid.volume * self.pas_vol_ratio,
                                      order_type=self.order_type,
                                      order_time=self.cur_datetime,
                                      grid=grid)
         if not pas_vt_orderids:
             self.write_error(f'spd_sell，{self.pas_vt_symbol}空单平仓{grid.volume * self.pas_vol_ratio}手失败，'
-                             f'委托价:{self.cur_pas_tick.ask_price1}')
+                             f'委托价:{self.cur_pas_tick.ask_price_1}')
+            return []
+
+        # 主动腿多单平仓
+        act_vt_orderids = self.sell(vt_symbol=self.act_vt_symbol,
+                                    lock=self.act_exchange==Exchange.CFFEX,
+                                    price=self.cur_act_tick.bid_price_1,
+                                    volume=grid.volume * self.act_vol_ratio,
+                                    order_type=self.order_type,
+                                    order_time=self.cur_datetime,
+                                    grid=grid)
+        if not act_vt_orderids:
+            self.write_error(f'spd_sell，{self.act_vt_symbol}多单平仓{grid.volume * self.act_vol_ratio}手失败，'
+                             f'委托价:{self.cur_act_tick.bid_price_1}')
             return []
 
         grid.order_status = True
@@ -1155,41 +1367,50 @@ class CtaSpreadTemplate(CtaTemplate):
             self.write_log(u'实际价差{}不满足:{}'.format(self.cur_spd_tick.ask_price_1, grid.close_price))
             return []
 
-        act_close_volume = grid.snapshot.get('act_open_volume')
-        pas_close_volume = grid.snapshot.get('pas_open_volume')
+        # 获取账号内主动腿和被动腿的持仓
+        self.act_pos = self.cta_engine.get_position_holding(vt_symbol=self.act_vt_symbol)
+        self.pas_pos = self.cta_engine.get_position_holding(vt_symbol=self.pas_vt_symbol)
 
+        if not all([self.act_pos, self.pas_pos]):
+            self.write_error('主动腿/被动退得持仓数据不存在')
+            return []
+
+        # 检查主动腿、被动腿，是否满足
+        act_close_volume = grid.snapshot.get('act_open_volume', grid.volume * self.act_vol_ratio)
+        pas_close_volume = grid.snapshot.get('pas_open_volume', grid.volume * self.pas_vol_ratio)
         if self.act_pos.short_pos < act_close_volume:
             self.write_error(f'账号 {self.act_vt_symbol} 空单持仓{self.act_pos.short_pos}'
                              f'今仓{self.act_pos.short_td}/昨{self.act_pos.short_yd}, 不满足{act_close_volume}')
             return []
-
         if self.pas_pos.long_pos < pas_close_volume:
             self.write_error(f'账号 {self.pas_vt_symbol} 多单持仓{self.pas_pos.longt_pos}'
                              f'今仓{self.pas_pos.long_td}/昨{self.pas_pos.long_yd}, 不满足{act_close_volume}')
             return []
 
-        # 主动腿空单平仓
-        act_vt_orderids = self.cover(vt_symbol=self.act_vt_symbol,
-                                     price=self.cur_act_tick.ask_price1,
-                                     volume=grid.volume * self.act_vol_ratio,
-                                     order_type=self.order_type,
-                                     order_time=self.cur_datetime,
-                                     grid=grid)
-        if not act_vt_orderids:
-            self.write_error(f'spd_cover{self.act_vt_symbol}空单平仓{grid.volume * self.act_vol_ratio}手失败，'
-                             f'委托价:{self.cur_act_tick.ask_price1}')
-            return []
-
         # 被动腿多单平仓
         pas_vt_orderids = self.sell(vt_symbol=self.pas_vt_symbol,
-                                    price=self.cur_pas_tick.bid_price1,
+                                    lock=self.pas_exchange == Exchange.CFFEX,
+                                    price=self.cur_pas_tick.bid_price_1,
                                     volume=grid.volume * self.pas_vol_ratio,
                                     order_type=self.order_type,
                                     order_time=self.cur_datetime,
                                     grid=grid)
         if not pas_vt_orderids:
             self.write_error(f'spd_cover，{self.pas_vt_symbol}多单平仓{grid.volume * self.pas_vol_ratio}手失败，'
-                             f'委托价:{self.cur_pas_tick.bid_price1}')
+                             f'委托价:{self.cur_pas_tick.bid_price_1}')
+            return []
+
+        # 主动腿空单平仓
+        act_vt_orderids = self.cover(vt_symbol=self.act_vt_symbol,
+                                     lock=self.act_exchange==Exchange.CFFEX,
+                                     price=self.cur_act_tick.ask_price_1,
+                                     volume=grid.volume * self.act_vol_ratio,
+                                     order_type=self.order_type,
+                                     order_time=self.cur_datetime,
+                                     grid=grid)
+        if not act_vt_orderids:
+            self.write_error(f'spd_cover{self.act_vt_symbol}空单平仓{grid.volume * self.act_vol_ratio}手失败，'
+                             f'委托价:{self.cur_act_tick.ask_price_1}')
             return []
 
         grid.order_status = True

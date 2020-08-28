@@ -237,6 +237,11 @@ class CtaEngine(BaseEngine):
                 # 推送到事件
                 self.put_all_strategy_pos_event(all_strategy_pos)
 
+        for strategy in self.strategies.values():
+            if strategy.inited:
+                self.call_strategy_func(strategy, strategy.on_timer)
+
+
     def process_tick_event(self, event: Event):
         """处理tick到达事件"""
         tick = event.data
@@ -1742,7 +1747,11 @@ class CtaEngine(BaseEngine):
 
         self.strategy_setting[strategy_name] = new_config
 
-        save_json(self.setting_filename, self.strategy_setting)
+        sorted_setting = OrderedDict()
+        for k in sorted(self.strategy_setting.keys()):
+            sorted_setting.update({k: self.strategy_setting.get(k)})
+
+        save_json(self.setting_filename, sorted_setting)
 
     def remove_strategy_setting(self, strategy_name: str):
         """
@@ -1752,7 +1761,10 @@ class CtaEngine(BaseEngine):
             return
         self.write_log(f'移除CTA股票引擎{strategy_name}的配置')
         self.strategy_setting.pop(strategy_name)
-        save_json(self.setting_filename, self.strategy_setting)
+        sorted_setting = OrderedDict()
+        for k in sorted(self.strategy_setting.keys()):
+            sorted_setting.update({k: self.strategy_setting.get(k)})
+        save_json(self.setting_filename, sorted_setting)
 
     def put_stop_order_event(self, stop_order: StopOrder):
         """

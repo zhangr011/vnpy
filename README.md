@@ -10,6 +10,19 @@ github 链接： https://github.com/msincenselee/vnpy
 gitee  链接： https://gitee.com/vnpy2/vnpy
 
 ###Fork版本主要改进如下
+16、EasyTrade股票接入（国金证券）
+
+    - vnpy.api.easytrader, 
+        + 直接使用，无需pip install easytrader；
+        + 任然需要安装组件 pip install -r vnpy/api/easytrader/requirement.txt
+    - vnpy.gateway.gj 国金证券的gateway
+        + 使用了tdx作为股票基础数据
+        + 使用了天勤作为行情服务
+        + 使用了easytrader的remote_client作为接入.
+    - prod.stock_qj 运行例子
+        + run_es_restful_server.py 放在A机器，安装国金全能客户端。
+        + run_main_gj01.py 放在B机器，运行vn_trader客户端
+        
 15、天勤行情接入
     
     - vnpy.data.tq 定制downloder，扩展下载字段

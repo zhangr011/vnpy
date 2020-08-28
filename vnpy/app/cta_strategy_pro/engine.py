@@ -1519,13 +1519,13 @@ class CtaEngine(BaseEngine):
 
             # 新增处理SPD结尾得特殊自定义套利合约
             try:
-                if strategy.vt_symbol.endswith('SPD') and len(pos_list) > 0:
+                if strategy.vt_symbol.endswith('.SPD') and len(pos_list) > 0:
                     old_pos_list = copy(pos_list)
                     pos_list = []
                     for pos in old_pos_list:
                         # SPD合约
                         spd_vt_symbol = pos.get('vt_symbol', None)
-                        if spd_vt_symbol is not None and spd_vt_symbol.endswith('SPD'):
+                        if spd_vt_symbol is not None and spd_vt_symbol.endswith('.SPD'):
                             spd_symbol, spd_exchange = extract_vt_symbol(spd_vt_symbol)
                             spd_setting = self.main_engine.get_all_custom_contracts(rtn_setting=True).get(spd_symbol, None)
 
@@ -1814,6 +1814,8 @@ class CtaEngine(BaseEngine):
             symbol, exchange = extract_vt_symbol(vt_symbol)
             self.main_engine.subscribe(req=SubscribeRequest(symbol=symbol, exchange=exchange),
                                        gateway_name=gateway_name)
+            self.write_log(f'{vt_symbol}无最新tick，订阅行情')
+
         if volume > 0 and tick:
             contract = self.main_engine.get_contract(vt_symbol)
             req = OrderRequest(
@@ -1906,7 +1908,11 @@ class CtaEngine(BaseEngine):
 
         self.strategy_setting[strategy_name] = new_config
 
-        save_json(self.setting_filename, self.strategy_setting)
+        sorted_setting = OrderedDict()
+        for k in sorted(self.strategy_setting.keys()):
+            sorted_setting.update({k: self.strategy_setting.get(k)})
+
+        save_json(self.setting_filename, sorted_setting)
 
     def remove_strategy_setting(self, strategy_name: str):
         """
@@ -1916,7 +1922,11 @@ class CtaEngine(BaseEngine):
             return
         self.write_log(f'移除CTA引擎{strategy_name}的配置')
         self.strategy_setting.pop(strategy_name)
-        save_json(self.setting_filename, self.strategy_setting)
+        sorted_setting = OrderedDict()
+        for k in sorted(self.strategy_setting.keys()):
+            sorted_setting.update({k: self.strategy_setting.get(k)})
+
+        save_json(self.setting_filename, sorted_setting)
 
     def put_stop_order_event(self, stop_order: StopOrder):
         """

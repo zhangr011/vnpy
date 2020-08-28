@@ -3,7 +3,8 @@
 #__author__ = 'yangyang'
 # 修改：
 # 1， 输入单个合约时，标题不再扩展为 合约.标题
-# 2.  下载tick时，5当行情都下载
+# 2.  下载tick时，5档行情都下载
+# 3.  五档行情变量调整适合vnpy的命名方式
 
 import csv
 from datetime import date, datetime
@@ -120,6 +121,10 @@ class DataDownloader:
             "focus_datetime": self._start_dt_nano,
             "focus_position": 0,
         }
+        if len(self._symbol_list) ==1:
+            single_exchange, single_symbol = self._symbol_list[0].split('.')
+        else:
+            single_exchange, single_symbol = None, None
         # 还没有发送过任何请求, 先请求定位左端点
         await self._api._send_chan.send(chart_info)
         chart = _get_obj(self._api._data, ["charts", chart_info["chart_id"]])
@@ -167,7 +172,13 @@ class DataDownloader:
                                 # 写入文件头
                                 csv_header = ["datetime"]
                                 for symbol in self._symbol_list:
+                                    # 单一合约时，添加合约和交易所
+                                    if single_exchange:
+                                        csv_header.extend(['symbol', 'exchange'])
+
                                     for col in data_cols:
+                                        if col.startswith('bid_') or col.startswith('ask_'):
+                                            col = col[:-1] + '_' + col[-1]
                                         if len(self._symbol_list) > 2:
                                             csv_header.append(symbol + "." + col)
                                         else:
@@ -175,6 +186,11 @@ class DataDownloader:
 
                                 csv_writer.writerow(csv_header)
                             row = [self._nano_to_str(item["datetime"])]
+
+                            # 单一合约时，添加合约和交易所
+                            if single_exchange:
+                                row.extend([single_symbol, single_exchange])
+
                             for col in data_cols:
                                 row.append(self._get_value(item, col))
                             for i in range(1, len(self._symbol_list)):
@@ -183,7 +199,11 @@ class DataDownloader:
                                 k = {} if tid == -1 else serials[i]["data"].get(str(tid), {})
                                 for col in data_cols:
                                     row.append(self._get_value(k, col))
-                            csv_writer.writerow(row)
+                            # 抛弃盘前的脏数据
+                            if self._dur_nano == 0 and str(row[3]) == 'nan':
+                                p = 1
+                            else:
+                                csv_writer.writerow(row)
                             current_id += 1
                             self._current_dt_nano = item["datetime"]
                         # 当前 id 已超出订阅范围, 需重新订阅后续数据
@@ -213,5 +233,5 @@ class DataDownloader:
     def _nano_to_str(nano):
         dt = datetime.fromtimestamp(nano // 1000000000)
         s = dt.strftime('%Y-%m-%d %H:%M:%S')
-        s += '.' + str(int(nano % 1000000000)).zfill(9)
+        s += '.' + str(int(nano % 1000000000)).zfill(9)[:3]
         return s
