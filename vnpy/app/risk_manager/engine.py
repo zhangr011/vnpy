@@ -13,6 +13,12 @@ from vnpy.trader.utility import load_json, save_json
 
 APP_NAME = "RiskManager"
 
+"""
+中信证券期权新要求：
+-系统须具备撤单比控制控能，对单日客户账户委托撤单比例进行控制（当委托笔数大于预定阀值时启用），撤单比=撤单笔数/(总委托笔数-废单笔数)*100%；
+-交易系统须具备废单比控制功能，对单日客户账户委托废单比例进行控制（当委托笔数大于预定阀值时启用），废单比=废单委托笔数/总委托笔数*100%； 
+-系统需具备成交持仓比控制功能，对当日客户账户成交持仓比例进行控制（当账户成交量大于1000张时启用），各期权标的合约成交持仓比=成交张数/max（昨日净持仓张数，今日净持仓张数）；
+"""
 
 class RiskManagerEngine(BaseEngine):
     """"""
@@ -24,21 +30,29 @@ class RiskManagerEngine(BaseEngine):
 
         self.active = False
 
-        self.order_flow_count = 0
-        self.order_flow_limit = 500
+        self.order_flow_count = 0      # 单位时间内，委托数量计数器
+        self.order_flow_limit = 500    # 单位时间内，委托数量上限。
 
-        self.order_flow_clear = 1
-        self.order_flow_timer = 0
+        self.order_flow_clear = 1      # 单位时间，即清空委托数量计数器得秒数
+        self.order_flow_timer = 0      # 计时秒
 
-        self.order_size_limit = 1000
+        self.order_size_limit = 1000   # 单笔委托数量限制
+        self.order_volumes = 0         # 累计委托数量
+        self.trade_volumes = 0         # 累计成交数量
+        self.trade_limit = 10000       # 成交数量上限
 
-        self.trade_count = 0
-        self.trade_limit = 10000
+        self.order_cancel_limit = 5000   # 撤单数量限制
+        self.order_cancel_counts = defaultdict(int)  # 撤单次数 {合约：撤单次数}
 
-        self.order_cancel_limit = 5000
-        self.order_cancel_counts = defaultdict(int)
+        self.order_cancel_volumes = 0   # 累计撤单笔数
+        self.order_reject_volumes = 0   # 累计废单笔数
 
-        self.active_order_limit = 500
+        self.ratio_active_order_limit = 500  # 激活撤单比、废单比得订单总数量阈值
+
+        self.cancel_ratio_percent_limit = 99  # 撤单比阈值
+        self.reject_ratio_percent_limit = 99  # 废单比阈值
+
+        self.active_order_limit = 500    # 未完成订单数量
 
         # 总仓位相关(0~100+)
         self.percent_limit = 100  # 仓位比例限制
@@ -77,6 +91,10 @@ class RiskManagerEngine(BaseEngine):
         self.active_order_limit = setting["active_order_limit"]
         self.order_cancel_limit = setting["order_cancel_limit"]
         self.percent_limit = setting.get('percent_limit', 100)
+        self.ratio_active_order_limit = setting.get('ratio_active_order_limit', 500)
+        self.cancel_ratio_percent_limit = setting.get('cancel_ratio_percent_limit', 99)
+        self.reject_ratio_percent_limit = setting.get('reject_ratio_percent_limit', 99)
+
         if self.active:
             self.write_log("交易风控功能启动")
         else:
@@ -119,14 +137,21 @@ class RiskManagerEngine(BaseEngine):
     def process_order_event(self, event: Event):
         """"""
         order = event.data
+        if order.status in [Status.ALLTRADED, Status.REJECTED, Status.CANCELLED]:
+            self.order_volumes += order.volume
+
+        if order.status == Status.REJECTED:
+            self.order_reject_volumes += order.volume
+
         if order.status != Status.CANCELLED:
             return
         self.order_cancel_counts[order.symbol] += 1
+        self.order_cancel_volumes += order.volume
 
     def process_trade_event(self, event: Event):
         """"""
         trade = event.data
-        self.trade_count += trade.volume
+        self.trade_volumes += trade.volume
 
     def process_timer_event(self, event: Event):
         """"""
@@ -221,9 +246,9 @@ class RiskManagerEngine(BaseEngine):
             return False
 
         # Check trade volume
-        if self.trade_count >= self.trade_limit:
+        if self.trade_volumes >= self.trade_limit:
             self.write_log(
-                f"今日总成交合约数量{self.trade_count}，超过限制{self.trade_limit}")
+                f"今日总成交合约数量{self.trade_volumes}，超过限制{self.trade_limit}")
             return False
 
         # Check flow count
@@ -249,6 +274,15 @@ class RiskManagerEngine(BaseEngine):
         if req.offset == Offset.OPEN and self.gateway_dict.get(gateway_name, 0) > self.percent_limit:
             self.write_log(f'当前资金仓位{self.gateway_dict[gateway_name]}超过仓位限制:{self.percent_limit}')
             return False
+
+        # 激活撤单比，废单比
+        if self.order_volumes > self.ratio_active_order_limit:
+            if self.order_reject_volumes > 0  and (self.order_reject_volumes/self.order_volumes) * 100 > self.reject_ratio_percent_limit:
+                self.write_log(f'当前订单总数:{self.order_volumes}, 废单总数:{self.order_reject_volumes}, 超过阈值{self.reject_ratio_percent_limit}%')
+                return False
+            if self.order_cancel_volumes > 0  and (self.order_cancel_volumes/self.order_volumes) * 100 > self.cancel_ratio_percent_limit:
+                self.write_log(f'当前订单总数:{self.order_volumes}, 撤单总数:{self.order_reject_volumes}, 超过阈值{self.cancel_ratio_percent_limit}%')
+                return False
 
         # Add flow count if pass all checks
         self.order_flow_count += 1
