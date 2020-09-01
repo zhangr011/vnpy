@@ -3,11 +3,11 @@ import logging
 from copy import copy
 from collections import defaultdict
 from datetime import datetime
-from vnpy.trader.constant import Offset
+from vnpy.trader.constant import Offset, Direction
 from vnpy.trader.object import OrderRequest, LogData
 from vnpy.event import Event, EventEngine, EVENT_TIMER
 from vnpy.trader.engine import BaseEngine, MainEngine
-from vnpy.trader.event import EVENT_TRADE, EVENT_ORDER, EVENT_LOG, EVENT_ACCOUNT
+from vnpy.trader.event import EVENT_TRADE, EVENT_ORDER, EVENT_LOG, EVENT_ACCOUNT, EVENT_POSITION
 from vnpy.trader.constant import Status
 from vnpy.trader.utility import load_json, save_json
 
@@ -20,6 +20,7 @@ APP_NAME = "RiskManager"
 -系统需具备成交持仓比控制功能，对当日客户账户成交持仓比例进行控制（当账户成交量大于1000张时启用），各期权标的合约成交持仓比=成交张数/max（昨日净持仓张数，今日净持仓张数）；
 """
 
+
 class RiskManagerEngine(BaseEngine):
     """"""
     setting_filename = "risk_manager_setting.json"
@@ -30,29 +31,34 @@ class RiskManagerEngine(BaseEngine):
 
         self.active = False
 
-        self.order_flow_count = 0      # 单位时间内，委托数量计数器
-        self.order_flow_limit = 500    # 单位时间内，委托数量上限。
+        self.order_flow_count = 0  # 单位时间内，委托数量计数器
+        self.order_flow_limit = 500  # 单位时间内，委托数量上限。
 
-        self.order_flow_clear = 1      # 单位时间，即清空委托数量计数器得秒数
-        self.order_flow_timer = 0      # 计时秒
+        self.order_flow_clear = 1  # 单位时间，即清空委托数量计数器得秒数
+        self.order_flow_timer = 0  # 计时秒
 
-        self.order_size_limit = 1000   # 单笔委托数量限制
-        self.order_volumes = 0         # 累计委托数量
-        self.trade_volumes = 0         # 累计成交数量
-        self.trade_limit = 10000       # 成交数量上限
+        self.order_size_limit = 1000  # 单笔委托数量限制
+        self.order_volumes = 0  # 累计委托数量
+        self.trade_volumes = 0  # 累计成交数量
+        self.trade_limit = 10000  # 成交数量上限
 
-        self.order_cancel_limit = 5000   # 撤单数量限制
+        self.order_cancel_limit = 5000  # 撤单数量限制
         self.order_cancel_counts = defaultdict(int)  # 撤单次数 {合约：撤单次数}
 
-        self.order_cancel_volumes = 0   # 累计撤单笔数
-        self.order_reject_volumes = 0   # 累计废单笔数
+        self.pos_yd_counts = {}  # {vt_symbol: {'long':x, 'short':y} } 合约多单昨持仓数，# 合约空单昨持仓数
+        self.pos_td_counts = {}  # {vt_symbol: {'long':x, 'short':y} } 合约多单今持仓数, # 合约空单今持仓数
+
+        self.order_cancel_volumes = 0  # 累计撤单笔数
+        self.order_reject_volumes = 0  # 累计废单笔数
 
         self.ratio_active_order_limit = 500  # 激活撤单比、废单比得订单总数量阈值
+        self.trade_hold_active_limit = 1000  # 激活“成交持仓比例”的阈值
 
-        self.cancel_ratio_percent_limit = 99  # 撤单比阈值
-        self.reject_ratio_percent_limit = 99  # 废单比阈值
+        self.cancel_ratio_percent_limit = 99  # 撤单比风控阈值
+        self.reject_ratio_percent_limit = 99  # 废单比风控阈值
+        self.trade_hold_percent_limit = 300  # 成交/持仓比例风控阈值
 
-        self.active_order_limit = 500    # 未完成订单数量
+        self.active_order_limit = 500  # 未完成订单数量
 
         # 总仓位相关(0~100+)
         self.percent_limit = 100  # 仓位比例限制
@@ -94,6 +100,8 @@ class RiskManagerEngine(BaseEngine):
         self.ratio_active_order_limit = setting.get('ratio_active_order_limit', 500)
         self.cancel_ratio_percent_limit = setting.get('cancel_ratio_percent_limit', 99)
         self.reject_ratio_percent_limit = setting.get('reject_ratio_percent_limit', 99)
+        self.trade_hold_active_limit = setting.get('trade_hold_active_limit', 1000)
+        self.trade_hold_percent_limit = setting.get('trade_hold_percent_limit', 300)
 
         if self.active:
             self.write_log("交易风控功能启动")
@@ -110,7 +118,12 @@ class RiskManagerEngine(BaseEngine):
             "trade_limit": self.trade_limit,
             "active_order_limit": self.active_order_limit,
             "order_cancel_limit": self.order_cancel_limit,
-            "percent_limit": self.percent_limit
+            "percent_limit": self.percent_limit,
+            "ratio_active_order_limit": self.ratio_active_order_limit,
+            "cancel_ratio_percent_limit": self.cancel_ratio_percent_limit,
+            "reject_ratio_percent_limit": self.reject_ratio_percent_limit,
+            "trade_hold_active_limit": self.trade_hold_active_limit,
+            "trade_hold_percent_limit": self.trade_hold_percent_limit
         }
         return setting
 
@@ -132,10 +145,11 @@ class RiskManagerEngine(BaseEngine):
         self.event_engine.register(EVENT_TRADE, self.process_trade_event)
         self.event_engine.register(EVENT_TIMER, self.process_timer_event)
         self.event_engine.register(EVENT_ORDER, self.process_order_event)
+        self.event_engine.register(EVENT_POSITION, self.process_position_event)
         self.event_engine.register(EVENT_ACCOUNT, self.process_account_event)
 
     def process_order_event(self, event: Event):
-        """"""
+        """委托更新（增加计数器）"""
         order = event.data
         if order.status in [Status.ALLTRADED, Status.REJECTED, Status.CANCELLED]:
             self.order_volumes += order.volume
@@ -149,9 +163,28 @@ class RiskManagerEngine(BaseEngine):
         self.order_cancel_volumes += order.volume
 
     def process_trade_event(self, event: Event):
-        """"""
+        """交易更新（增加计数器）"""
         trade = event.data
         self.trade_volumes += trade.volume
+
+    def process_position_event(self, event: Event):
+        """持仓更新"""
+        pos = event.data
+        if pos.direction in [Direction.LONG, Direction.NET]:
+            yd = self.pos_yd_counts.get(pos.vt_symbol, {})
+            td = self.pos_td_counts.get(pos.vt_symbol, {})
+            yd.update({'long': pos.yd_volume})
+            td.update({'long': pos.volume - pos.yd_volume})
+            self.pos_yd_counts[pos.vt_symbol] = yd
+            self.pos_td_counts[pos.vt_symbol] = td
+
+        if pos.direction in [Direction.SHORT]:
+            yd = self.pos_yd_counts.get(pos.vt_symbol, {})
+            td = self.pos_td_counts.get(pos.vt_symbol, {})
+            yd.update({'short': pos.yd_volume})
+            td.update({'short': pos.volume - pos.yd_volume})
+            self.pos_yd_counts[pos.vt_symbol] = yd
+            self.pos_td_counts[pos.vt_symbol] = td
 
     def process_timer_event(self, event: Event):
         """"""
@@ -277,12 +310,32 @@ class RiskManagerEngine(BaseEngine):
 
         # 激活撤单比，废单比
         if self.order_volumes > self.ratio_active_order_limit:
-            if self.order_reject_volumes > 0  and (self.order_reject_volumes/self.order_volumes) * 100 > self.reject_ratio_percent_limit:
-                self.write_log(f'当前订单总数:{self.order_volumes}, 废单总数:{self.order_reject_volumes}, 超过阈值{self.reject_ratio_percent_limit}%')
+            if self.order_reject_volumes > 0 and (
+                    self.order_reject_volumes / self.order_volumes) * 100 > self.reject_ratio_percent_limit:
+                self.write_log(
+                    f'当前订单总数:{self.order_volumes}, 废单总数:{self.order_reject_volumes}, 超过阈值{self.reject_ratio_percent_limit}%')
                 return False
-            if self.order_cancel_volumes > 0  and (self.order_cancel_volumes/self.order_volumes) * 100 > self.cancel_ratio_percent_limit:
-                self.write_log(f'当前订单总数:{self.order_volumes}, 撤单总数:{self.order_reject_volumes}, 超过阈值{self.cancel_ratio_percent_limit}%')
+            if self.order_cancel_volumes > 0 and (
+                    self.order_cancel_volumes / self.order_volumes) * 100 > self.cancel_ratio_percent_limit:
+                self.write_log(
+                    f'当前订单总数:{self.order_volumes}, 撤单总数:{self.order_reject_volumes}, 超过阈值{self.cancel_ratio_percent_limit}%')
                 return False
+
+        # 激活成交持仓风控
+        if self.trade_volumes > self.trade_hold_active_limit:
+            # 昨仓持仓总数
+            yd_volumes = sum([max(yd.get('long', 0), yd.get('short', 0)) for yd in self.pos_yd_counts.values()])
+            # 今仓持仓总数
+            td_volumes = sum([max(td.get('long', 0), td.get('short', 0)) for td in self.pos_td_counts.values()])
+
+            hold_volumes = max(yd_volumes, td_volumes)
+
+            if hold_volumes > 0:
+                if (self.trade_volumes / hold_volumes) * 100 > self.trade_hold_percent_limit:
+                    self.write_log(
+                        f'当前成交总数:{self.trade_volumes}, 昨仓净持仓总数:{yd_volumes},今仓净持仓总数{td_volumes}: '
+                        f'max净持仓数:{hold_volumes}, 成交/持仓比, 超过阈值{self.trade_hold_percent_limit}%')
+                    return False
 
         # Add flow count if pass all checks
         self.order_flow_count += 1
