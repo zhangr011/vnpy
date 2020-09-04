@@ -413,14 +413,14 @@ def import_module_by_str(import_module_name):
             mod = import_module(loaded_modules)
 
             comp = modules[-1]
-            if not hasattr(mod, comp):
-                loaded_modules = '.'.join([loaded_modules, comp])
-                print('realod {}'.format(loaded_modules))
-                mod = reload(loaded_modules)
-            else:
-                print('from {} import {}'.format(loaded_modules, comp))
-                mod = getattr(mod, comp)
-            return mod
+            #if not hasattr(mod, comp):
+            # loaded_modules = '.'.join([loaded_modules, comp])
+            print('realod {}'.format(loaded_modules))
+            mod = reload(mod)
+            #else:
+            #    print('from {} import {}'.format(loaded_modules, comp))
+            comp = getattr(mod, comp)
+            return comp
 
     except Exception as ex:
         print('import {} fail,{},{}'.format(import_module_name, str(ex), traceback.format_exc()))

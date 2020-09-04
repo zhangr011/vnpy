@@ -282,12 +282,12 @@ class SoptGateway(BaseGateway):
         self.td_api.close()
         self.md_api.close()
 
-    def write_error(self, msg: str, error: dict):
-        """"""
-        error_id = error["ErrorID"]
-        error_msg = error["ErrorMsg"]
-        msg = f"{msg}，代码：{error_id}，信息：{error_msg}"
-        self.write_log(msg)
+    #def write_error(self, msg: str, error: dict):
+    #    """"""
+    #    error_id = error["ErrorID"]
+    #    error_msg = error["ErrorMsg"]
+    #    msg = f"{msg}，代码：{error_id}，信息：{error_msg}"
+    #    self.write_log(msg)
 
     def process_timer_event(self, event):
         """"""
@@ -597,7 +597,7 @@ class SoptTdApi(TdApi):
         )
         self.gateway.on_order(order)
 
-        self.gateway.write_error("交易委托失败", error)
+        self.gateway.write_error(f"交易委托失败:{symbol} {order.direction.value} {order.offset.value} {order.price}, {order.volume}", error)
 
     def onRspOrderAction(self, data: dict, error: dict, reqid: int, last: bool):
         """"""
@@ -630,6 +630,7 @@ class SoptTdApi(TdApi):
             position = PositionData(
                 accountid=self.userid,
                 symbol=data["InstrumentID"],
+                name=symbol_name_map[data["InstrumentID"]],
                 exchange=symbol_exchange_map[data["InstrumentID"]],
                 direction=DIRECTION_SOPT2VT[data["PosiDirection"]],
                 gateway_name=self.gateway_name
@@ -805,7 +806,7 @@ class SoptTdApi(TdApi):
 
         timestamp = f"{data['InsertDate']} {data['InsertTime']}"
         dt = datetime.strptime(timestamp, "%Y%m%d %H:%M:%S")
-        dt = CHINA_TZ.localize(dt)
+        #dt = CHINA_TZ.localize(dt)
 
         order = OrderData(
             accountid=self.userid,

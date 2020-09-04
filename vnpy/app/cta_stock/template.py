@@ -8,7 +8,7 @@ import traceback
 import zlib
 import json
 from abc import ABC
-from copy import copy
+from copy import copy,deepcopy
 from typing import Any, Callable, List, Dict
 from logging import INFO, ERROR
 from datetime import datetime
@@ -385,7 +385,6 @@ class StockPolicy(CtaPolicy):
                 last_signal_time = None
             self.signals.update({k: {'last_signal': last_signal, 'last_signal_time': last_signal_time}})
 
-
     def to_json(self):
         """转换至json文件"""
         j = super().to_json()
@@ -394,12 +393,13 @@ class StockPolicy(CtaPolicy):
         d = {}
         for kline_name, signal in self.signals.items():
             last_signal_time = signal.get('last_signal_time', None)
-            d.update({kline_name:
-                          {'last_signal': signal.get('last_signal', ''),
+            c_signal = {}
+            c_signal.update(signal)
+            c_signal.update({'last_signal': signal.get('last_signal', ''),
                            'last_signal_time': last_signal_time.strftime(
                                '%Y-%m-%d %H:%M:%S') if last_signal_time is not None else ""
-                           }
-                      })
+                           })
+            d.update({kline_name: c_signal})
         j['signals'] = d
         return j
 

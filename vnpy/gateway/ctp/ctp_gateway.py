@@ -1007,8 +1007,8 @@ class CtpTdApi(TdApi):
                 pricetick=data["PriceTick"],
                 gateway_name=self.gateway_name
             )
-            # 保证金费率
-            contract.margin_rate = max(data.get('LongMarginRatio', 0), data.get('ShortMarginRatio', 0))
+            # 保证金费率(期权合约的保证金比例数值可能不对，所以设置个0.2的最大值)
+            contract.margin_rate = min(0.2,max(data.get('LongMarginRatio', 0), data.get('ShortMarginRatio', 0)))
             if contract.margin_rate == 0:
                 contract.margin_rate = 0.1
 

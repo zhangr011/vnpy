@@ -58,7 +58,7 @@ class OptionEngine(BaseEngine):
         super().__init__(main_engine, event_engine, APP_NAME)
 
         self.portfolios: Dict[str, PortfolioData] = {}
-        self.instruments: Dict[str, InstrumentData] = {}
+        self.instruments: Dict[str, InstrumentData] = {}   # vt_symbol: 合约
         self.active_portfolios: Dict[str, PortfolioData] = {}
 
         self.timer_count: int = 0

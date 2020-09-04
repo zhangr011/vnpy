@@ -1211,7 +1211,8 @@ class CtaEngine(BaseEngine):
         if module_name:
             new_class_name = module_name + '.' + class_name
             self.write_log(u'转换策略为全路径:{}'.format(new_class_name))
-
+            old_strategy_class = self.classes[class_name]
+            self.write_log(f'旧策略ID:{id(old_strategy_class)}')
             strategy_class = import_module_by_str(new_class_name)
             if strategy_class is None:
                 err_msg = u'加载策略模块失败:{}'.format(new_class_name)
@@ -1219,7 +1220,10 @@ class CtaEngine(BaseEngine):
                 return False, err_msg
 
             self.write_log(f'重新加载模块成功，使用新模块:{new_class_name}')
+            self.write_log(f'新策略ID:{id(strategy_class)}')
             self.classes[class_name] = strategy_class
+        else:
+            self.write_log(f'没有{class_name}的module_name,无法重新加载模块')
 
         # 停止当前策略实例的运行，撤单
         self.stop_strategy(strategy_name)
