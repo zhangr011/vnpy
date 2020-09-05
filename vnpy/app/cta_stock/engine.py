@@ -237,8 +237,9 @@ class CtaEngine(BaseEngine):
                 # 推送到事件
                 self.put_all_strategy_pos_event(all_strategy_pos)
 
-        for strategy in self.strategies.values():
-            if strategy.inited:
+        for strategy_name in list(self.strategies.keys()):
+            strategy = self.strategies.get(strategy_name, None)
+            if strategy and strategy.inited:
                 self.call_strategy_func(strategy, strategy.on_timer)
 
 

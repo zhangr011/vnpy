@@ -1,6 +1,7 @@
 
 import os
 import sys
+import traceback
 from datetime import datetime
 from functools import lru_cache
 from vnpy.event import EventEngine, Event
@@ -101,40 +102,55 @@ class AlgoEngine(BaseEngine):
     def process_tick_event(self, event: Event):
         """"""
         tick = event.data
-
-        algos = self.symbol_algo_map.get(tick.vt_symbol, None)
-        if algos:
-            for algo in algos:
-                algo.update_tick(tick)
+        try:
+            algos = self.symbol_algo_map.get(tick.vt_symbol, None)
+            if algos:
+                for algo in algos:
+                    algo.update_tick(tick)
+        except Exception as ex:
+            self.write_error(f'algo ontick exception:{str(ex)}')
+            self.write_error(traceback.format_exc())
 
     def process_timer_event(self, event: Event):
         """"""
         # Generate a list of algos first to avoid dict size change
-        algos = list(self.algos.values())
+        try:
+            algos = list(self.algos.values())
 
-        for algo in algos:
-            algo.update_timer()
+            for algo in algos:
+                algo.update_timer()
+        except Exception as ex:
+            self.write_error(f'algo ontimer exception:{str(ex)}')
+            self.write_error(traceback.format_exc())
 
     def process_trade_event(self, event: Event):
         """"""
-        trade = event.data
-        self.offset_converter.update_trade(trade)
-        algo = self.orderid_algo_map.get(trade.vt_orderid, None)
-        if algo:
-            algo.update_trade(trade)
+        try:
+            trade = event.data
+            self.offset_converter.update_trade(trade)
+            algo = self.orderid_algo_map.get(trade.vt_orderid, None)
+            if algo:
+                algo.update_trade(trade)
+        except Exception as ex:
+            self.write_error(f'algo ontrade exception:{str(ex)}')
+            self.write_error(traceback.format_exc())
 
     def process_order_event(self, event: Event):
         """"""
-        order = event.data
-        self.offset_converter.update_order(order)
-        algo = self.orderid_algo_map.get(order.vt_orderid, None)
-        if algo:
-            algo.update_order(order)
+        try:
+            order = event.data
+            self.offset_converter.update_order(order)
+            algo = self.orderid_algo_map.get(order.vt_orderid, None)
+            if algo:
+                algo.update_order(order)
+
+        except Exception as ex:
+            self.write_error(f'algo onorder exception:{str(ex)}')
+            self.write_error(traceback.format_exc())
 
     def process_position_event(self, event: Event):
         """"""
         position = event.data
-
         self.offset_converter.update_position(position)
 
     def start_algo(self, setting: dict):
@@ -152,9 +168,14 @@ class AlgoEngine(BaseEngine):
         """"""
         algo = self.algos.get(algo_name, None)
         if algo:
-            algo.stop()
-            self.algos.pop(algo_name)
-            return True
+            if algo.stop():
+                self.algos.pop(algo_name)
+                return True
+            else:
+                self.write_error(f'停止算法实例{algo_name}失败，内部正在执行中，不能马上停止')
+        else:
+            self.write_error(f'停止算法实例{algo_name}失败，实例不存在')
+        return False
 
     def stop_all(self):
         """"""

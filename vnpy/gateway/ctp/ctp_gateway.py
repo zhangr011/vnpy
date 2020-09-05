@@ -154,6 +154,7 @@ OPTIONTYPE_CTP2VT = {
 MAX_FLOAT = sys.float_info.max
 
 symbol_exchange_map = {}
+option_name_map = {}
 symbol_name_map = {}
 symbol_size_map = {}
 index_contracts = {}
@@ -295,6 +296,7 @@ class CtpGateway(BaseGateway):
                 contract_dict = c.get_contracts()
                 for vt_symbol, contract in contract_dict.items():
                     contract.gateway_name = self.gateway_name
+                    symbol_exchange_map[contract.symbol] = contract.exchange
                     self.on_contract(contract)
 
         except Exception as ex:  # noqa
@@ -383,6 +385,7 @@ class CtpGateway(BaseGateway):
 
                         # 增加映射（ leg1 对应的合成器列表映射)
                         leg1_symbol = setting.get('leg1_symbol')
+                        leg1_exchange = Exchange(setting.get('leg1_exchange'))
                         combiner_list = self.tick_combiner_map.get(leg1_symbol, [])
                         if combiner not in combiner_list:
                             self.write_log(u'添加Leg1:{}与合成器得映射'.format(leg1_symbol))
@@ -391,6 +394,7 @@ class CtpGateway(BaseGateway):
 
                         # 增加映射（ leg2 对应的合成器列表映射)
                         leg2_symbol = setting.get('leg2_symbol')
+                        leg2_exchange = Exchange(setting.get('leg2_exchange'))
                         combiner_list = self.tick_combiner_map.get(leg2_symbol, [])
                         if combiner not in combiner_list:
                             self.write_log(u'添加Leg2:{}与合成器得映射'.format(leg2_symbol))
@@ -400,14 +404,14 @@ class CtpGateway(BaseGateway):
                         self.write_log(u'订阅leg1:{}'.format(leg1_symbol))
                         leg1_req = SubscribeRequest(
                             symbol=leg1_symbol,
-                            exchange=symbol_exchange_map.get(leg1_symbol, Exchange.LOCAL)
+                            exchange=leg1_exchange
                         )
                         self.subscribe(leg1_req)
 
                         self.write_log(u'订阅leg2:{}'.format(leg2_symbol))
                         leg2_req = SubscribeRequest(
                             symbol=leg2_symbol,
-                            exchange=symbol_exchange_map.get(leg1_symbol, Exchange.LOCAL)
+                            exchange=leg2_exchange
                         )
                         self.subscribe(leg2_req)
 
@@ -646,6 +650,10 @@ class CtpMdApi(MdApi):
             gateway_name=self.gateway_name
         )
 
+        # 处理一下标准套利合约的last_price
+        if '&' in symbol:
+            tick.last_price = (tick.ask_price_1 + tick.bid_price_1)/2
+
         if data["BidVolume2"] or data["AskVolume2"]:
             tick.bid_price_2 = adjust_price(data["BidPrice2"])
             tick.bid_price_3 = adjust_price(data["BidPrice3"])
@@ -757,6 +765,9 @@ class CtpTdApi(TdApi):
 
         self.accountid = self.userid
 
+        self.long_option_cost = None  # 多头期权动态市值
+        self.short_option_cost = None  # 空头期权动态市值
+
     def onFrontConnected(self):
         """"""
         self.gateway.write_log("交易服务器连接成功")
@@ -835,7 +846,7 @@ class CtpTdApi(TdApi):
         )
         self.gateway.on_order(order)
 
-        self.gateway.write_error("交易委托失败", error)
+        #self.gateway.write_error("交易委托失败", error)
 
     def onRspOrderAction(self, data: dict, error: dict, reqid: int, last: bool):
         """"""
@@ -896,7 +907,10 @@ class CtpTdApi(TdApi):
 
             # Update new position volume
             position.volume += data["Position"]
-            position.pnl += data["PositionProfit"]
+            if data["PositionProfit"] == 0 and position.symbol in option_name_map:
+                position.pnl += data["PositionCost"] - data["OpenCost"]
+            else:
+                position.pnl += data["PositionProfit"]
 
             # Calculate average position price
             if position.volume and size:
@@ -909,8 +923,34 @@ class CtpTdApi(TdApi):
             else:
                 position.frozen += data["LongFrozen"]
 
+            position.cur_price = self.gateway.prices.get(position.vt_symbol, None)
+            if position.cur_price is None:
+                position.cur_price = position.price
+                self.gateway.subscribe(SubscribeRequest(symbol=position.symbol, exchange=position.exchange))
+
         if last:
+            self.long_option_cost = None
+            self.short_option_cost = None
             for position in self.positions.values():
+                if position.symbol in option_name_map:
+                    # 重新累计多头期权动态权益
+                    if position.direction == Direction.LONG:
+                        if self.long_option_cost is None:
+                            self.long_option_cost = position.cur_price * position.volume * symbol_size_map.get(
+                                position.symbol, 0)
+                        else:
+                            self.long_option_cost += position.cur_price * position.volume * symbol_size_map.get(
+                                position.symbol, 0)
+
+                    # 重新累计空头期权动态权益
+                    if position.direction == Direction.SHORT:
+                        if self.short_option_cost is None:
+                            self.short_option_cost = position.cur_price * position.volume * symbol_size_map.get(
+                                position.symbol, 0)
+                        else:
+                            self.short_option_cost += position.cur_price * position.volume * symbol_size_map.get(
+                                position.symbol, 0)
+
                 self.gateway.on_position(position)
 
             self.positions.clear()
@@ -922,10 +962,16 @@ class CtpTdApi(TdApi):
         if len(self.accountid)== 0:
             self.accountid = data['AccountID']
 
+        balance = float(data["Balance"])
+        if self.long_option_cost is not None:
+            balance += self.long_option_cost
+        if self.short_option_cost is not None:
+            balance -= self.short_option_cost
+
         account = AccountData(
             accountid=data["AccountID"],
             pre_balance=round(float(data['PreBalance']), 7),
-            balance=round(float(data["Balance"]), 7),
+            balance=round(balance, 7),
             frozen=round(data["FrozenMargin"] + data["FrozenCash"] + data["FrozenCommission"], 7),
             gateway_name=self.gateway_name
         )
@@ -961,8 +1007,8 @@ class CtpTdApi(TdApi):
                 pricetick=data["PriceTick"],
                 gateway_name=self.gateway_name
             )
-            # 保证金费率
-            contract.margin_rate = max(data.get('LongMarginRatio', 0), data.get('ShortMarginRatio', 0))
+            # 保证金费率(期权合约的保证金比例数值可能不对，所以设置个0.2的最大值)
+            contract.margin_rate = min(0.2,max(data.get('LongMarginRatio', 0), data.get('ShortMarginRatio', 0)))
             if contract.margin_rate == 0:
                 contract.margin_rate = 0.1
 
@@ -979,6 +1025,7 @@ class CtpTdApi(TdApi):
                 contract.option_strike = data["StrikePrice"]
                 contract.option_index = str(data["StrikePrice"])
                 contract.option_expiry = datetime.strptime(data["ExpireDate"], "%Y%m%d")
+                option_name_map[contract.symbol] = contract.name
 
             self.gateway.on_contract(contract)
 
@@ -1072,6 +1119,7 @@ class CtpTdApi(TdApi):
             traded=data["VolumeTraded"],
             status=STATUS_CTP2VT[data["OrderStatus"]],
             time=data["InsertTime"],
+            cancel_time=data["CancelTime"],
             gateway_name=self.gateway_name
         )
         self.gateway.on_order(order)
@@ -1846,7 +1894,7 @@ class TqMdApi():
         """"""
         try:
             from tqsdk import TqApi
-            self.api = TqApi()
+            self.api = TqApi(url="wss://u.shinnytech.com/t/md/front/mobile")
         except Exception as e:
             self.gateway.write_log(f'天勤行情API接入异常'.format(str(e)))
         if self.api:

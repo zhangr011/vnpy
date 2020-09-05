@@ -1154,7 +1154,12 @@ class CtaProFutureTemplate(CtaProTemplate):
         self.put_event()
 
     def on_trade(self, trade: TradeData):
-        """交易更新"""
+        """
+        交易更新
+        支持股指期货的对锁单或者解锁
+        :param trade:
+        :return:
+        """
         self.write_log(u'{},交易更新事件:{},当前持仓：{} '
                        .format(self.cur_datetime,
                                trade.__dict__,
@@ -1168,30 +1173,45 @@ class CtaProFutureTemplate(CtaProTemplate):
         dist_record['volume'] = trade.volume
         dist_record['price'] = trade.price
         dist_record['symbol'] = trade.vt_symbol
+        if trade.exchange == Exchange.CFFEX:
+            if trade.direction == Direction.LONG:
+                if abs(self.position.short_pos) >= trade.volume:
+                    self.position.short_pos += trade.volume
+                else:
+                    self.position.long_pos += trade.volume
+            else:
+                if self.position.long_pos >= trade.volume:
+                    self.position.long_pos -= trade.volume
+                else:
+                    self.position.short_pos -= trade.volume
 
-        if trade.direction == Direction.LONG and trade.offset == Offset.OPEN:
-            dist_record['operation'] = 'buy'
-            self.position.open_pos(trade.direction, volume=trade.volume)
+            self.position.pos = self.position.long_pos + self.position.short_pos
             dist_record['long_pos'] = self.position.long_pos
             dist_record['short_pos'] = self.position.short_pos
+        else:
+            if trade.direction == Direction.LONG and trade.offset == Offset.OPEN:
+                dist_record['operation'] = 'buy'
+                self.position.open_pos(trade.direction, volume=trade.volume)
+                dist_record['long_pos'] = self.position.long_pos
+                dist_record['short_pos'] = self.position.short_pos
 
-        if trade.direction == Direction.SHORT and trade.offset == Offset.OPEN:
-            dist_record['operation'] = 'short'
-            self.position.open_pos(trade.direction, volume=trade.volume)
-            dist_record['long_pos'] = self.position.long_pos
-            dist_record['short_pos'] = self.position.short_pos
+            if trade.direction == Direction.SHORT and trade.offset == Offset.OPEN:
+                dist_record['operation'] = 'short'
+                self.position.open_pos(trade.direction, volume=trade.volume)
+                dist_record['long_pos'] = self.position.long_pos
+                dist_record['short_pos'] = self.position.short_pos
 
-        if trade.direction == Direction.LONG and trade.offset != Offset.OPEN:
-            dist_record['operation'] = 'cover'
-            self.position.close_pos(trade.direction, volume=trade.volume)
-            dist_record['long_pos'] = self.position.long_pos
-            dist_record['short_pos'] = self.position.short_pos
+            if trade.direction == Direction.LONG and trade.offset != Offset.OPEN:
+                dist_record['operation'] = 'cover'
+                self.position.close_pos(trade.direction, volume=trade.volume)
+                dist_record['long_pos'] = self.position.long_pos
+                dist_record['short_pos'] = self.position.short_pos
 
-        if trade.direction == Direction.SHORT and trade.offset != Offset.OPEN:
-            dist_record['operation'] = 'sell'
-            self.position.close_pos(trade.direction, volume=trade.volume)
-            dist_record['long_pos'] = self.position.long_pos
-            dist_record['short_pos'] = self.position.short_pos
+            if trade.direction == Direction.SHORT and trade.offset != Offset.OPEN:
+                dist_record['operation'] = 'sell'
+                self.position.close_pos(trade.direction, volume=trade.volume)
+                dist_record['long_pos'] = self.position.long_pos
+                dist_record['short_pos'] = self.position.short_pos
 
         self.save_dist(dist_record)
         self.pos = self.position.pos
@@ -1632,9 +1652,14 @@ class CtaProFutureTemplate(CtaProTemplate):
         self.display_grids()
 
     def on_stop_order(self, stop_order: StopOrder):
+        """
+        停止单更新
+        需要自己重载，处理各类触发、撤单等情况
+        """
         # self.write_log(f'停止单触发:{stop_order.__dict__}')
         if StopOrderStatus.CANCELLED == stop_order.status:
             self.active_orders.pop(stop_order.stop_orderid)
+
 
     def cancel_all_orders(self):
         """
@@ -1821,7 +1846,8 @@ class CtaProFutureTemplate(CtaProTemplate):
                 grid.volume -= grid.traded_volume
                 grid.traded_volume = 0
 
-            if grid_pos.long_pos <grid.volume:
+            # 非股指，才需要检查现有仓位
+            if self.exchange!= Exchange.CFFEX and grid_pos.long_pos <grid.volume:
                 self.write_error(f'账号{sell_symbol}多单持仓:{grid_pos.long_pos}不满足平仓:{grid.volume}要求:')
                 return False
 
@@ -1922,8 +1948,9 @@ class CtaProFutureTemplate(CtaProTemplate):
                 grid.volume -= grid.traded_volume
                 grid.traded_volume = 0
 
-            if grid_pos.short_pos < grid.volume:
-                self.write_error(f'账号{cover_symbol}多单持仓:{grid_pos.short_pos}不满足平仓:{grid.volume}要求:')
+            # 非股指，需要检查是否有持仓
+            if self.exchange!=Exchange.CFFEX and grid_pos.short_pos < grid.volume:
+                self.write_error(f'账号{cover_symbol}空单持仓:{grid_pos.short_pos}不满足平仓:{grid.volume}要求:')
                 return False
 
             vt_orderids = self.cover(price=cover_price,

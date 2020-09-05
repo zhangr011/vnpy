@@ -248,6 +248,8 @@ class RohonGateway(BaseGateway):
         self.tdx_api = None
         self.rabbit_api = None
         self.tq_api = None
+        # 是否输出debug信息
+        self.debug = False
 
         self.subscribed_symbols = set()  # 已订阅合约代码
 
@@ -268,6 +270,8 @@ class RohonGateway(BaseGateway):
         product_info = setting["产品信息"]
         rabbit_dict = setting.get('rabbit', None)
         tq_dict = setting.get('tq', None)
+        self.debug = setting.get('debug',False)
+
         if not td_address.startswith("tcp://"):
             td_address = "tcp://" + td_address
         if not md_address.startswith("tcp://"):
@@ -284,6 +288,7 @@ class RohonGateway(BaseGateway):
                 contract_dict = c.get_contracts()
                 for vt_symbol, contract in contract_dict.items():
                     contract.gateway_name = self.gateway_name
+                    symbol_exchange_map[contract.symbol] = contract.exchange
                     self.on_contract(contract)
 
         except Exception as ex:  # noqa
@@ -373,6 +378,7 @@ class RohonGateway(BaseGateway):
 
                         # 增加映射（ leg1 对应的合成器列表映射)
                         leg1_symbol = setting.get('leg1_symbol')
+                        leg1_exchange = Exchange(setting.get('leg1_exchange'))
                         combiner_list = self.tick_combiner_map.get(leg1_symbol, [])
                         if combiner not in combiner_list:
                             self.write_log(u'添加Leg1:{}与合成器得映射'.format(leg1_symbol))
@@ -381,6 +387,7 @@ class RohonGateway(BaseGateway):
 
                         # 增加映射（ leg2 对应的合成器列表映射)
                         leg2_symbol = setting.get('leg2_symbol')
+                        leg2_exchange = Exchange(setting.get('leg2_exchange'))
                         combiner_list = self.tick_combiner_map.get(leg2_symbol, [])
                         if combiner not in combiner_list:
                             self.write_log(u'添加Leg2:{}与合成器得映射'.format(leg2_symbol))
@@ -390,14 +397,14 @@ class RohonGateway(BaseGateway):
                         self.write_log(u'订阅leg1:{}'.format(leg1_symbol))
                         leg1_req = SubscribeRequest(
                             symbol=leg1_symbol,
-                            exchange=symbol_exchange_map.get(leg1_symbol, Exchange.LOCAL)
+                            exchange=leg1_exchange
                         )
                         self.subscribe(leg1_req)
 
                         self.write_log(u'订阅leg2:{}'.format(leg2_symbol))
                         leg2_req = SubscribeRequest(
                             symbol=leg2_symbol,
-                            exchange=symbol_exchange_map.get(leg1_symbol, Exchange.LOCAL)
+                            exchange=leg2_exchange
                         )
                         self.subscribe(leg2_req)
 
@@ -635,6 +642,10 @@ class RohonMdApi(MdApi):
             ask_volume_1=data["AskVolume1"],
             gateway_name=self.gateway_name
         )
+
+        # 处理一下标准套利合约的last_price
+        if '&' in symbol:
+            tick.last_price = (tick.ask_price_1 + tick.bid_price_1)/2
 
         if data["BidVolume2"] or data["AskVolume2"]:
             tick.bid_price_2 = adjust_price(data["BidPrice2"])
@@ -908,6 +919,9 @@ class RohonTdApi(TdApi):
 
     def onRspQryTradingAccount(self, data: dict, error: dict, reqid: int, last: bool):
         """"""
+        if self.gateway.debug:
+            print(f'onRspQryTradingAccount')
+
         if "AccountID" not in data:
             return
         if len(self.accountid)== 0:
@@ -941,6 +955,9 @@ class RohonTdApi(TdApi):
         """
         Callback of instrument query.
         """
+        #if self.gateway.debug:
+        #    print(f'onRspQryInstrument')
+
         product = PRODUCT_ROHON2VT.get(data["ProductClass"], None)
         if product:
             contract = ContractData(
@@ -1025,6 +1042,9 @@ class RohonTdApi(TdApi):
         """
         Callback of order status update.
         """
+        if self.gateway.debug:
+            print(f'onRtnOrder')
+
         symbol = data["InstrumentID"]
         exchange = symbol_exchange_map.get(symbol, "")
         if not exchange:
@@ -1070,6 +1090,9 @@ class RohonTdApi(TdApi):
         """
         Callback of trade status update.
         """
+        if self.gateway.debug:
+            print(f'onRtnTrade')
+
         symbol = data["InstrumentID"]
         exchange = symbol_exchange_map.get(symbol, "")
         if not exchange:
@@ -1176,6 +1199,9 @@ class RohonTdApi(TdApi):
         """
         Send new order.
         """
+        if self.gateway.debug:
+            print(f'send_order:{req.__dict__}')
+
         if req.offset not in OFFSET_VT2ROHON:
             self.gateway.write_log("请选择开平方向")
             return ""
@@ -1247,6 +1273,8 @@ class RohonTdApi(TdApi):
         """
         Query account balance data.
         """
+        if self.gateway.debug:
+            print(f'query_account')
         self.reqid += 1
         self.reqQryTradingAccount({}, self.reqid)
 
@@ -1254,6 +1282,9 @@ class RohonTdApi(TdApi):
         """
         Query position holding data.
         """
+        if self.gateway.debug:
+            print(f'query_position')
+
         if not symbol_exchange_map:
             return
 
@@ -1267,6 +1298,9 @@ class RohonTdApi(TdApi):
 
     def close(self):
         """"""
+        if self.gateway.debug:
+            print(f'td close')
+
         if self.connect_status:
             self.exit()
 
@@ -1708,7 +1742,7 @@ class SubMdApi():
 
             tick = TickData(gateway_name=self.gateway_name,
                             exchange=Exchange(d.get('exchange')),
-                            symbol=d.get('symbol'),
+                            symbol=symbol,
                             datetime=dt)
             d.pop('exchange', None)
             d.pop('symbol', None)
@@ -2190,7 +2224,7 @@ class TickCombiner(object):
             ratio_tick.date = tick.date
             ratio_tick.time = tick.time
 
-            # 比率tick
+            # 比率tick = (腿1 * 腿1 手数 / 腿2价格 * 腿2手数) 百分比
             ratio_tick.ask_price_1 = 100 * self.last_leg1_tick.ask_price_1 * self.leg1_ratio \
                                      / (self.last_leg2_tick.bid_price_1 * self.leg2_ratio)  # noqa
             ratio_tick.ask_price_1 = round_to(

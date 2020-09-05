@@ -322,6 +322,21 @@ def ceil_to(value: float, target: float) -> float:
     return result
 
 
+def get_digits(value: float) -> int:
+    """
+    Get number of digits after decimal point.
+    """
+    value_str = str(value)
+
+    if "e-" in value_str:
+        _, buf = value_str.split("e-")
+        return int(buf)
+    elif "." in value_str:
+        _, buf = value_str.split(".")
+        return len(buf)
+    else:
+        return 0
+
 def print_dict(d: dict):
     """返回dict的字符串类型"""
     return '\n'.join([f'{key}:{d[key]}' for key in sorted(d.keys())])
@@ -404,14 +419,14 @@ def import_module_by_str(import_module_name):
             mod = import_module(loaded_modules)
 
             comp = modules[-1]
-            if not hasattr(mod, comp):
-                loaded_modules = '.'.join([loaded_modules, comp])
-                print('realod {}'.format(loaded_modules))
-                mod = reload(loaded_modules)
-            else:
-                print('from {} import {}'.format(loaded_modules, comp))
-                mod = getattr(mod, comp)
-            return mod
+            #if not hasattr(mod, comp):
+            # loaded_modules = '.'.join([loaded_modules, comp])
+            print('realod {}'.format(loaded_modules))
+            mod = reload(mod)
+            #else:
+            #    print('from {} import {}'.format(loaded_modules, comp))
+            comp = getattr(mod, comp)
+            return comp
 
     except Exception as ex:
         print('import {} fail,{},{}'.format(import_module_name, str(ex), traceback.format_exc()))
@@ -709,6 +724,10 @@ class BarGenerator:
 
         # Filter tick data with 0 last price
         if not tick.last_price:
+            return
+
+        # Filter tick data with older timestamp
+        if self.last_tick and tick.datetime < self.last_tick.datetime:
             return
 
         if not self.bar:

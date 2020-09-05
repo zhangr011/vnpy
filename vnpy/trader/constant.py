@@ -57,6 +57,7 @@ class Product(Enum):
     FOREX = "外汇"
     SPOT = "现货"
     ETF = "ETF"
+    LOF = "LOF"
     BOND = "债券"
     WARRANT = "权证"
     SPREAD = "价差"

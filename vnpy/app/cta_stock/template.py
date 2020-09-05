@@ -8,7 +8,7 @@ import traceback
 import zlib
 import json
 from abc import ABC
-from copy import copy
+from copy import copy,deepcopy
 from typing import Any, Callable, List, Dict
 from logging import INFO, ERROR
 from datetime import datetime
@@ -385,7 +385,6 @@ class StockPolicy(CtaPolicy):
                 last_signal_time = None
             self.signals.update({k: {'last_signal': last_signal, 'last_signal_time': last_signal_time}})
 
-
     def to_json(self):
         """转换至json文件"""
         j = super().to_json()
@@ -394,12 +393,13 @@ class StockPolicy(CtaPolicy):
         d = {}
         for kline_name, signal in self.signals.items():
             last_signal_time = signal.get('last_signal_time', None)
-            d.update({kline_name:
-                          {'last_signal': signal.get('last_signal', ''),
+            c_signal = {}
+            c_signal.update(signal)
+            c_signal.update({'last_signal': signal.get('last_signal', ''),
                            'last_signal_time': last_signal_time.strftime(
                                '%Y-%m-%d %H:%M:%S') if last_signal_time is not None else ""
-                           }
-                      })
+                           })
+            d.update({kline_name: c_signal})
         j['signals'] = d
         return j
 
@@ -993,67 +993,62 @@ class CtaStockTemplate(CtaTemplate):
                 self.tns_finish_sell_grid(grid)
                 continue
 
-            # 定位到首个满足条件的网格，跳出循环
+            # 定位到首个满足条件的网格
             ordering_grid = grid
-            break
 
-        # 没有满足条件的网格
-        if ordering_grid is None:
-            return
+            acc_symbol_pos = self.cta_engine.get_position(
+                vt_symbol=ordering_grid.vt_symbol,
+                direction=Direction.NET)
+            if acc_symbol_pos is None:
+                self.write_error(f'{self.strategy_name}当前{ordering_grid.vt_symbol}持仓查询不到, 无法执行卖出')
+                continue
 
-        acc_symbol_pos = self.cta_engine.get_position(
-            vt_symbol=ordering_grid.vt_symbol,
-            direction=Direction.NET)
-        if acc_symbol_pos is None:
-            self.write_error(f'{self.strategy_name}当前{ordering_grid.vt_symbol}持仓查询不到, 无法执行卖出')
-            return
+            vt_symbol = ordering_grid.vt_symbol
+            sell_volume = ordering_grid.volume - ordering_grid.traded_volume
 
-        vt_symbol = ordering_grid.vt_symbol
-        sell_volume = ordering_grid.volume - ordering_grid.traded_volume
+            if sell_volume > acc_symbol_pos.volume:
+                self.write_error(u'账号{}持仓{},不满足减仓目标:{}'
+                                   .format(vt_symbol, acc_symbol_pos.volume, sell_volume))
+                continue
 
-        if sell_volume > acc_symbol_pos.volume:
-            self.write_error(u'账号{}持仓{},不满足减仓目标:{}'
-                               .format(vt_symbol, acc_symbol_pos.volume, sell_volume))
-            return
+            # 实盘运行时，要加入市场买卖量的判断
+            if not self.backtesting:
+                symbol_tick = self.cta_engine.get_tick(vt_symbol)
+                if symbol_tick is None:
+                    self.cta_engine.subscribe_symbol(strategy_name=self.strategy_name, vt_symbol=vt_symbol)
+                    self.write_log(f'获取不到{vt_symbol}得tick,无法根据市场深度进行计算')
+                    continue
 
-        # 实盘运行时，要加入市场买卖量的判断
-        if not self.backtesting:
-            symbol_tick = self.cta_engine.get_tick(vt_symbol)
-            if symbol_tick is None:
-                self.cta_engine.subscribe_symbol(strategy_name=self.strategy_name, vt_symbol=vt_symbol)
-                self.write_log(f'获取不到{vt_symbol}得tick,无法根据市场深度进行计算')
-                return
+                symbol_volume_tick = self.cta_engine.get_volume_tick(vt_symbol)
+                # 根据市场计算，前5档买单数量
+                if all([symbol_tick.ask_volume_1, symbol_tick.ask_volume_2, symbol_tick.ask_volume_3,
+                        symbol_tick.ask_volume_4, symbol_tick.ask_volume_5]) \
+                        and all(
+                    [symbol_tick.bid_volume_1, symbol_tick.bid_volume_2, symbol_tick.bid_volume_3, symbol_tick.bid_volume_4,
+                     symbol_tick.bid_volume_5]):
+                    market_ask_volumes = symbol_tick.ask_volume_1 + symbol_tick.ask_volume_2 + symbol_tick.ask_volume_3 + symbol_tick.ask_volume_4 + symbol_tick.ask_volume_5
+                    market_bid_volumes = symbol_tick.bid_volume_1 + symbol_tick.bid_volume_2 + symbol_tick.bid_volume_3 + symbol_tick.bid_volume_4 + symbol_tick.bid_volume_5
+                    org_sell_volume = sell_volume
+                    if market_bid_volumes > 0 and market_ask_volumes > 0 and org_sell_volume >= 2 * symbol_volume_tick:
+                        sell_volume = min(market_bid_volumes / 4, market_ask_volumes / 4, sell_volume)
+                        sell_volume = max(round_to(value=sell_volume, target=symbol_volume_tick), symbol_volume_tick)
+                        if org_sell_volume != sell_volume:
+                            self.write_log(u'修正批次卖出{}数量:{}=>{}'.format(vt_symbol, org_sell_volume, sell_volume))
 
-            symbol_volume_tick = self.cta_engine.get_volume_tick(vt_symbol)
-            # 根据市场计算，前5档买单数量
-            if all([symbol_tick.ask_volume_1, symbol_tick.ask_volume_2, symbol_tick.ask_volume_3,
-                    symbol_tick.ask_volume_4, symbol_tick.ask_volume_5]) \
-                    and all(
-                [symbol_tick.bid_volume_1, symbol_tick.bid_volume_2, symbol_tick.bid_volume_3, symbol_tick.bid_volume_4,
-                 symbol_tick.bid_volume_5]):
-                market_ask_volumes = symbol_tick.ask_volume_1 + symbol_tick.ask_volume_2 + symbol_tick.ask_volume_3 + symbol_tick.ask_volume_4 + symbol_tick.ask_volume_5
-                market_bid_volumes = symbol_tick.bid_volume_1 + symbol_tick.bid_volume_2 + symbol_tick.bid_volume_3 + symbol_tick.bid_volume_4 + symbol_tick.bid_volume_5
-                org_sell_volume = sell_volume
-                if market_bid_volumes > 0 and market_ask_volumes > 0 and org_sell_volume >= 2 * symbol_volume_tick:
-                    sell_volume = min(market_bid_volumes / 4, market_ask_volumes / 4, sell_volume)
-                    sell_volume = max(round_to(value=sell_volume, target=symbol_volume_tick), symbol_volume_tick)
-                    if org_sell_volume != sell_volume:
-                        self.write_log(u'修正批次卖出{}数量:{}=>{}'.format(vt_symbol, org_sell_volume, sell_volume))
-
-        # 获取当前价格
-        sell_price = self.cta_engine.get_price(vt_symbol) - self.cta_engine.get_price_tick(vt_symbol)
-        # 发出委托卖出
-        vt_orderids = self.sell(
-            vt_symbol=vt_symbol,
-            price=sell_price,
-            volume=sell_volume,
-            order_time=self.cur_datetime,
-            grid=ordering_grid)
-        if vt_orderids is None or len(vt_orderids) == 0:
-            self.write_error(f'{vt_symbol} 委托卖出失败，委托价:{sell_price} 数量:{sell_volume}')
-            return
-        else:
-            self.write_log(f'{vt_symbol} 已委托卖出，{sell_volume},委托价:{sell_price}, 数量:{sell_volume}')
+            # 获取当前价格
+            sell_price = self.cta_engine.get_price(vt_symbol) - self.cta_engine.get_price_tick(vt_symbol)
+            # 发出委托卖出
+            vt_orderids = self.sell(
+                vt_symbol=vt_symbol,
+                price=sell_price,
+                volume=sell_volume,
+                order_time=self.cur_datetime,
+                grid=ordering_grid)
+            if vt_orderids is None or len(vt_orderids) == 0:
+                self.write_error(f'{vt_symbol} 委托卖出失败，委托价:{sell_price} 数量:{sell_volume}')
+                continue
+            else:
+                self.write_log(f'{vt_symbol} 已委托卖出，{sell_volume},委托价:{sell_price}, 数量:{sell_volume}')
 
 
     def tns_finish_sell_grid(self, grid):
@@ -1128,68 +1123,63 @@ class CtaStockTemplate(CtaTemplate):
                 self.tns_finish_buy_grid(grid)
                 return
 
-            # 定位到首个满足条件的网格，跳出循环
+            # 定位到首个满足条件的网格，
             ordering_grid = grid
-            break
 
-        # 没有满足条件的网格
-        if ordering_grid is None:
-            return
+            balance, availiable, _, _ = self.cta_engine.get_account()
+            if availiable <= 0:
+                self.write_error(u'当前可用资金不足'.format(availiable))
+                continue
+            vt_symbol = ordering_grid.vt_symbol
+            cur_price = self.cta_engine.get_price(vt_symbol)
+            if cur_price is None:
+                self.write_error(f'暂时不能获取{vt_symbol}最新价格')
+                continue
 
-        balance, availiable, _, _ = self.cta_engine.get_account()
-        if availiable <= 0:
-            self.write_error(u'当前可用资金不足'.format(availiable))
-            return
-        vt_symbol = ordering_grid.vt_symbol
-        cur_price = self.cta_engine.get_price(vt_symbol)
-        if cur_price is None:
-            self.write_error(f'暂时不能获取{vt_symbol}最新价格')
-            return
+            buy_volume = ordering_grid.volume - ordering_grid.traded_volume
+            min_trade_volume = self.cta_engine.get_volume_tick(vt_symbol)
+            if availiable < buy_volume * cur_price:
+                self.write_error(f'可用资金{availiable},不满足买入{vt_symbol},数量:{buy_volume} X价格{cur_price}')
+                max_buy_volume = int(availiable / cur_price)
+                max_buy_volume = max_buy_volume - max_buy_volume % min_trade_volume
+                if max_buy_volume <= min_trade_volume:
+                    continue
+                # 计划买入数量，与可用资金买入数量的差别
+                diff_volume = buy_volume - max_buy_volume
+                # 降低计划买入数量
+                self.write_log(f'总计划{vt_symbol}买入数量:{ordering_grid.volume}=>{ordering_grid.volume - diff_volume}')
+                ordering_grid.volume -= diff_volume
+                self.gt.save()
+                buy_volume = max_buy_volume
 
-        buy_volume = ordering_grid.volume - ordering_grid.traded_volume
-        min_trade_volume = self.cta_engine.get_volume_tick(vt_symbol)
-        if availiable < buy_volume * cur_price:
-            self.write_error(f'可用资金{availiable},不满足买入{vt_symbol},数量:{buy_volume} X价格{cur_price}')
-            max_buy_volume = int(availiable / cur_price)
-            max_buy_volume = max_buy_volume - max_buy_volume % min_trade_volume
-            if max_buy_volume <= min_trade_volume:
-                return
-            # 计划买入数量，与可用资金买入数量的差别
-            diff_volume = buy_volume - max_buy_volume
-            # 降低计划买入数量
-            self.write_log(f'总计划{vt_symbol}买入数量:{ordering_grid.volume}=>{ordering_grid.volume - diff_volume}')
-            ordering_grid.volume -= diff_volume
-            self.gt.save()
-            buy_volume = max_buy_volume
+            # 实盘运行时，要加入市场买卖量的判断
+            if not self.backtesting and 'market' in ordering_grid.snapshot:
+                symbol_tick = self.cta_engine.get_tick(vt_symbol)
+                # 根据市场计算，前5档买单数量
+                if all([symbol_tick.ask_volume_1, symbol_tick.ask_volume_2, symbol_tick.ask_volume_3,
+                        symbol_tick.ask_volume_4, symbol_tick.ask_volume_5]) \
+                        and all(
+                    [symbol_tick.bid_volume_1, symbol_tick.bid_volume_2, symbol_tick.bid_volume_3, symbol_tick.bid_volume_4,
+                     symbol_tick.bid_volume_5]):
+                    market_ask_volumes = symbol_tick.ask_volume_1 + symbol_tick.ask_volume_2 + symbol_tick.ask_volume_3 + symbol_tick.ask_volume_4 + symbol_tick.ask_volume_5
+                    market_bid_volumes = symbol_tick.bid_volume_1 + symbol_tick.bid_volume_2 + symbol_tick.bid_volume_3 + symbol_tick.bid_volume_4 + symbol_tick.bid_volume_5
+                    if market_bid_volumes > 0 and market_ask_volumes > 0:
+                        buy_volume = min(market_bid_volumes / 4, market_ask_volumes / 4, buy_volume)
+                        buy_volume = max(buy_volume - buy_volume % min_trade_volume, min_trade_volume)
 
-        # 实盘运行时，要加入市场买卖量的判断
-        if not self.backtesting and 'market' in ordering_grid.snapshot:
-            symbol_tick = self.cta_engine.get_tick(vt_symbol)
-            # 根据市场计算，前5档买单数量
-            if all([symbol_tick.ask_volume_1, symbol_tick.ask_volume_2, symbol_tick.ask_volume_3,
-                    symbol_tick.ask_volume_4, symbol_tick.ask_volume_5]) \
-                    and all(
-                [symbol_tick.bid_volume_1, symbol_tick.bid_volume_2, symbol_tick.bid_volume_3, symbol_tick.bid_volume_4,
-                 symbol_tick.bid_volume_5]):
-                market_ask_volumes = symbol_tick.ask_volume_1 + symbol_tick.ask_volume_2 + symbol_tick.ask_volume_3 + symbol_tick.ask_volume_4 + symbol_tick.ask_volume_5
-                market_bid_volumes = symbol_tick.bid_volume_1 + symbol_tick.bid_volume_2 + symbol_tick.bid_volume_3 + symbol_tick.bid_volume_4 + symbol_tick.bid_volume_5
-                if market_bid_volumes > 0 and market_ask_volumes > 0:
-                    buy_volume = min(market_bid_volumes / 4, market_ask_volumes / 4, buy_volume)
-                    buy_volume = max(buy_volume - buy_volume % min_trade_volume, min_trade_volume)
+            buy_price = cur_price + self.cta_engine.get_price_tick(vt_symbol) * 10
 
-        buy_price = cur_price + self.cta_engine.get_price_tick(vt_symbol) * 10
-
-        vt_orderids = self.buy(
-            vt_symbol=vt_symbol,
-            price=buy_price,
-            volume=buy_volume,
-            order_time=self.cur_datetime,
-            grid=ordering_grid)
-        if vt_orderids is None or len(vt_orderids) == 0:
-            self.write_error(f'委托买入失败，{vt_symbol} 委托价:{buy_price} 数量:{buy_volume}')
-            return
-        else:
-            self.write_log(f'{self.strategy_name}, {vt_orderids},已委托买入，{vt_symbol} 委托价:{buy_price} 数量:{buy_volume}')
+            vt_orderids = self.buy(
+                vt_symbol=vt_symbol,
+                price=buy_price,
+                volume=buy_volume,
+                order_time=self.cur_datetime,
+                grid=ordering_grid)
+            if vt_orderids is None or len(vt_orderids) == 0:
+                self.write_error(f'委托买入失败，{vt_symbol} 委托价:{buy_price} 数量:{buy_volume}')
+                continue
+            else:
+                self.write_log(f'{self.strategy_name}, {vt_orderids},已委托买入，{vt_symbol} 委托价:{buy_price} 数量:{buy_volume}')
 
     def tns_finish_buy_grid(self, grid):
         """

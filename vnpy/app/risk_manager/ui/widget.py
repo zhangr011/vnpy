@@ -33,6 +33,14 @@ class RiskManager(QtWidgets.QDialog):
         self.cancel_limit_spin = RiskManagerSpinBox()
         self.percent_limit_spin = RiskManagerSpinBox()
 
+        self.ratio_active_limit_spin = RiskManagerSpinBox()
+        self.reject_limit_percent_spin = RiskManagerSpinBox()
+        self.cancel_limit_percent_spin = RiskManagerSpinBox()
+
+        self.trade_hold_active_limit_spin = RiskManagerSpinBox()
+        self.trade_hold_percent_limit_spin = RiskManagerSpinBox()
+
+
         save_button = QtWidgets.QPushButton("保存")
         save_button.clicked.connect(self.save_setting)
 
@@ -46,6 +54,12 @@ class RiskManager(QtWidgets.QDialog):
         form.addRow("活动委托上限（笔）", self.active_limit_spin)
         form.addRow("合约撤单上限（笔）", self.cancel_limit_spin)
         form.addRow("资金仓位上限(%)", self.percent_limit_spin)
+        form.addRow("激活废单/撤单(笔)", self.ratio_active_limit_spin)
+        form.addRow("废单比上限(%)", self.reject_limit_percent_spin)
+        form.addRow("撤单比上限(%)", self.cancel_limit_percent_spin)
+        form.addRow("激活成交/持仓比阈值（笔）" ,self.trade_hold_active_limit_spin)
+        form.addRow("成交/持仓比上限(%)", self.trade_hold_percent_limit_spin)
+
         form.addRow(save_button)
 
         self.setLayout(form)
@@ -71,6 +85,11 @@ class RiskManager(QtWidgets.QDialog):
             "active_order_limit": self.active_limit_spin.value(),
             "order_cancel_limit": self.cancel_limit_spin.value(),
             "percent_limit": self.percent_limit_spin.value(),
+            "ratio_active_order_limit": self.ratio_active_limit_spin.value(),
+            "cancel_ratio_percent_limit": self.cancel_limit_percent_spin.value(),
+            "reject_ratio_percent_limit": self.reject_limit_percent_spin.value(),
+            "trade_hold_active_limit": self.trade_hold_active_limit_spin.value(),
+            "trade_hold_percent_limit": self.trade_hold_percent_limit_spin.value()
         }
 
         self.rm_engine.update_setting(setting)
@@ -93,6 +112,11 @@ class RiskManager(QtWidgets.QDialog):
         self.active_limit_spin.setValue(setting["active_order_limit"])
         self.cancel_limit_spin.setValue(setting["order_cancel_limit"])
         self.percent_limit_spin.setValue(setting.get('percent_limit', 100))
+        self.ratio_active_limit_spin.setValue(setting.get('ratio_active_order_limit', 500))
+        self.cancel_limit_percent_spin.setValue(setting.get('cancel_ratio_percent_limit', 90))
+        self.reject_limit_percent_spin.setValue(setting.get('reject_ratio_percent_limit', 90))
+        self.trade_hold_active_limit_spin.setValue(setting.get('trade_hold_active_limit', 1000))
+        self.trade_hold_percent_limit_spin.setValue(setting.get("trade_hold_percent_limit", 300))
 
     def exec_(self):
         """"""
