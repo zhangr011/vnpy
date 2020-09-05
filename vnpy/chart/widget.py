@@ -68,7 +68,8 @@ class ChartWidget(pg.PlotWidget):
         Add plot area.
         """
         # Create plot object
-        plot = pg.PlotItem(axisItems={'bottom': self._x_axis})
+        # plot = pg.PlotItem(axisItems={'bottom': self._x_axis})
+        plot = pg.PlotItem()
         plot.setMenuEnabled(False)
         plot.setClipToView(True)
         plot.hideAxis('left')
