@@ -18,7 +18,7 @@ from vnpy.trader.constant import (
     OrderType,
     Interval,
 )
-from vnpy.trader.object import TickData
+from vnpy.trader.object import TickData, BarData
 from vnpy.trader.utility import extract_vt_symbol, get_trading_date
 import pandas as pd
 import csv
@@ -128,7 +128,7 @@ class TqFutureData():
     def __init__(self, strategy=None):
         self.strategy = strategy    # 传进来策略实例，这样可以写日志到策略实例
 
-        self.api = TqApi(TqSim())
+        self.api = TqApi(TqSim(), url="wss://u.shinnytech.com/t/md/front/mobile")
 
     def get_tick_serial(self, vt_symbol: str):
         # 获取最新的8964个数据 tick的话就相当于只有50分钟左右
@@ -190,6 +190,51 @@ class TqFutureData():
                 self.write_log(f'从缓存文件读取{vt_symbol}，交易日{trading_day}异常：{str(ex)}')
 
         return []
+
+    def get_bars(self, vt_symbol: str, start_date: datetime=None, end_date: datetime = None):
+        """
+        获取历史bar（受限于最大长度8964根bar）
+        :param vt_symbol:
+        :param start_date:
+        :param end_date:
+        :return:
+        """
+
+        self.write_log(f"从天勤请求合约:{vt_symbol}开始时间：{start_date}的历史1分钟bar数据")
+        symbol, exchange = extract_vt_symbol(vt_symbol)
+
+        # 获取一分钟数据
+        df = self.api.get_kline_serial(symbol=f'{exchange.value}.{symbol}', duration_seconds=60, data_length=8964)
+        bars = []
+        if df is None:
+            self.write_error(f'返回空白dataframe')
+            return []
+
+        for index, row in df.iterrows():
+            bar_datetime = datetime.strptime(self._nano_to_str(row['datetime']), "%Y-%m-%d %H:%M:%S.%f")
+            if start_date:
+                if bar_datetime < start_date:
+                    continue
+            if end_date:
+                if bar_datetime > end_date:
+                    continue
+            bar = BarData(
+                symbol=symbol,
+                exchange=exchange,
+                datetime=bar_datetime,
+                open_price=row['open'],
+                close_price=row['close'],
+                high_price=row['high'],
+                low_price=row['low'],
+                volume=row['volume'],
+                open_interest=row['close_oi'],
+                trading_day=get_trading_date(bar_datetime),
+                gateway_name='tq'
+            )
+            bars.append(bar)
+
+        return bars
+
 
     def get_ticks(self, vt_symbol: str, start_date: datetime, end_date: datetime = None):
         """获取历史tick"""
@@ -291,6 +336,7 @@ class TqFutureData():
         else:
             self.strategy.write_error(msg)
 
+
 if __name__ == '__main__':
     # tqsdk = Query_tqsdk_data(strategy=self)   # 在策略中使用
     tqsdk = TqFutureData()
@@ -298,11 +344,15 @@ if __name__ == '__main__':
     #tick_df = tqsdk.query_tick_history_data(vt_symbol="ni2009.SHFE", start_date=pd.to_datetime("2020-07-22"))
     #print(tick_df)
 
-    ticks = tqsdk.get_runtime_ticks("ni2009.SHFE")
+    #ticks = tqsdk.get_runtime_ticks("ni2009.SHFE")
 
-    print(ticks[0])
+    #print(ticks[0])
 
-    print(ticks[-1])
+    #print(ticks[-1])
+    bars = tqsdk.get_bars(vt_symbol='ni2011.SHFE')
+    print(bars[0])
+    print(bars[-1])
+
 
 
 

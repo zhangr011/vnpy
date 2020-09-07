@@ -87,6 +87,7 @@ class BackTestingEngine(object):
         # 引擎类型为回测
         self.engine_type = EngineType.BACKTESTING
         self.contract_type = 'future'  # future, stock, digital
+        self.using_99_contract = True
 
         # 回测策略相关
         self.classes = {}  # 策略类，class_name: stategy_class
@@ -450,6 +451,10 @@ class BackTestingEngine(object):
 
         self.debug = test_setting.get('debug', False)
 
+        if 'using_99_contract' in test_setting:
+            self.using_99_contract = test_setting.get('using_99_contract')
+            self.write_log(f'是否使用指数合约:{self.using_99_contract}')
+
         # 更新数据目录
         if 'data_path' in test_setting:
             self.data_path = test_setting.get('data_path')
@@ -711,20 +716,26 @@ class BackTestingEngine(object):
             symbol, exchange = extract_vt_symbol(vt_symbol)
         elif self.contract_type == 'future':
             symbol = vt_symbol
-            underly_symbol = get_underlying_symbol(symbol).upper()
-            exchange = self.get_exchange(f'{underly_symbol}99')
+            if self.using_99_contract:
+                underly_symbol = get_underlying_symbol(symbol).upper()         # WJ: 当需要回测A1701.DCE时，不能替换成99合约。
+                exchange = self.get_exchange(f'{underly_symbol}99')
+            else:
+                exchange = self.get_exchange(symbol)
             vt_symbol = '.'.join([symbol, exchange.value])
+            strategy_setting.update({'vt_symbol': vt_symbol})
         else:
             symbol = vt_symbol
             exchange = Exchange.LOCAL
             vt_symbol = '.'.join([symbol, exchange.value])
-
-        # 在期货组合回测，中需要把一般配置的主力合约，更换为指数合约
-        if '99' not in symbol and exchange != Exchange.SPD and self.contract_type == 'future':
-            underly_symbol = get_underlying_symbol(symbol).upper()
-            self.write_log(u'更新vt_symbol为指数合约:{}=>{}'.format(vt_symbol, underly_symbol + '99.' + exchange.value))
-            vt_symbol = underly_symbol.upper() + '99.' + exchange.value
             strategy_setting.update({'vt_symbol': vt_symbol})
+
+        # 在期货组合回测时，如果直接使用运行得配置，需要把一般配置的主力合约，更换为指数合约
+        if self.using_99_contract:
+            if '99' not in symbol and exchange != Exchange.SPD and self.contract_type == 'future':
+                underly_symbol = get_underlying_symbol(symbol).upper()
+                self.write_log(u'更新vt_symbol为指数合约:{}=>{}'.format(vt_symbol, underly_symbol + '99.' + exchange.value))
+                vt_symbol = underly_symbol.upper() + '99.' + exchange.value
+                strategy_setting.update({'vt_symbol': vt_symbol})
 
         # 属于自定义套利合约
         if exchange == Exchange.SPD:
@@ -2186,6 +2197,9 @@ class BackTestingEngine(object):
             'test_setting': self.test_setting,  # 回测参数
             'strategy_setting': self.strategy_setting,  # 策略参数
         }
+        # 去除包含"."的域
+        if 'symbol_datas' in d['test_setting'].keys():
+            d['test_setting'].pop('symbol_datas')
 
         #  保存入数据库
         self.mongo_api.db_insert(

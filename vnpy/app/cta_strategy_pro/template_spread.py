@@ -403,10 +403,14 @@ class CtaSpreadTemplate(CtaTemplate):
 
         # 找到委托单记录
         order_info = None
+        # 优先从活动订单获取
         if trade.vt_orderid in self.active_orders.keys():
             order_info = self.active_orders.get(trade.vt_orderid)
-        if trade.vt_orderid in self.history_orders.keys():
-            order_info = self.history_orders.get(trade.vt_orderid)
+        # 如果找不到，可能被移动到历史订单中，从历史订单获取
+        if not order_info:
+            if trade.vt_orderid in self.history_orders.keys():
+                order_info = self.history_orders.get(trade.vt_orderid)
+       # 找到委托记录
         if order_info is not None:
             # 委托单记录 =》 找到 Grid
             grid = order_info.get('grid')

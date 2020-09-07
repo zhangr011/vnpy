@@ -226,8 +226,8 @@ class PortfolioTestingEngine(BackTestingEngine):
             if exchange == Exchange.SPD:
                 try:
                     active_symbol, active_rate, passive_symbol, passive_rate, spd_type = symbol.split('-')
-                    active_vt_symbol = '.'.join([active_symbol, self.get_exchange(symbol=active_symbol)])
-                    passive_vt_symbol = '.'.join([passive_symbol, self.get_exchange(symbol=passive_symbol)])
+                    active_vt_symbol = '.'.join([active_symbol, self.get_exchange(symbol=active_symbol).value])
+                    passive_vt_symbol = '.'.join([passive_symbol, self.get_exchange(symbol=passive_symbol).value])
                     self.load_bar_csv_to_df(active_vt_symbol, self.bar_csv_file.get(active_symbol))
                     self.load_bar_csv_to_df(passive_vt_symbol, self.bar_csv_file.get(passive_symbol))
                 except Exception as ex:
@@ -282,6 +282,8 @@ class PortfolioTestingEngine(BackTestingEngine):
                 str_td = str(bar_data.get('trading_day', ''))
                 if len(str_td) == 8:
                     bar.trading_day = str_td[0:4] + '-' + str_td[4:6] + '-' + str_td[6:8]
+                elif len(str_td) == 10:
+                    bar.trading_day = str_td
                 else:
                     bar.trading_day = get_trading_date(bar_datetime)
 
@@ -472,6 +474,9 @@ def single_test(test_setting: dict, strategy_setting: dict):
         engine.run_portfolio_test(strategy_setting)
         # 回测结果，保存
         engine.show_backtesting_result()
+
+        # 保存策略得内部数据
+        engine.save_strategy_data()
 
     except Exception as ex:
         print('组合回测异常{}'.format(str(ex)))

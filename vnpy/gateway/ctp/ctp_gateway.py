@@ -926,7 +926,13 @@ class CtpTdApi(TdApi):
             position.cur_price = self.gateway.prices.get(position.vt_symbol, None)
             if position.cur_price is None:
                 position.cur_price = position.price
-                self.gateway.subscribe(SubscribeRequest(symbol=position.symbol, exchange=position.exchange))
+                # 交易所有时候会给一些奇怪得套利合约，并且主动腿和被动腿是相同得，排除掉这些垃圾合约
+                if position.symbol.startswith('SP') and '&' in position.symbol:
+                    act_symbol, pas_symbol = position.symbol.split(' ')[-1].split('&')
+                    if act_symbol != pas_symbol:
+                        self.gateway.subscribe(SubscribeRequest(symbol=position.symbol, exchange=position.exchange))
+                else:
+                    self.gateway.subscribe(SubscribeRequest(symbol=position.symbol, exchange=position.exchange))
 
         if last:
             self.long_option_cost = None
