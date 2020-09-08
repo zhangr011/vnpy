@@ -1541,10 +1541,10 @@ class GridKline(QtWidgets.QWidget):
                 continue
 
             # 创建K线图表
-            canvas = KLineWidget(display_vol=False, display_sub=True)
+            canvas = KLineWidget(display_vol=True, display_sub=True)
             canvas.show()
             # K线标题
-            canvas.KLtitle.setText(f'{kline_name}', size='18pt')
+            canvas.KLtitle.setText(f'{kline_name}', size='9pt')
             canvas.title = f'{kline_name}'
             # 主图指标
             main_indicators = kline_setting.get('main_indicators', [])
