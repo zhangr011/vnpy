@@ -258,12 +258,9 @@ class MyStringAxis(pg.AxisItem):
         """
         last_time = None
         for t in self.x_strings:
-            if last_time is None:
+            if t >= t_value:
                 last_time = t
-                continue
-            if t > t_value:
                 break
-            last_time = t
 
         x = self.tdict.get(last_time, 0)
         return x
