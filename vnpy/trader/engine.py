@@ -41,10 +41,13 @@ from .object import (
     ContractData
 )
 from .setting import SETTINGS
-from .utility import get_folder_path, TRADER_DIR
+from .utility import get_folder_path, TRADER_DIR, get_file_path
 
 # 专有的logger文件
 from .util_logger import setup_logger
+
+import bz2
+import pickle
 
 
 class MainEngine:
@@ -449,9 +452,7 @@ class OmsEngine(BaseEngine):
 
     def load_contracts(self) -> None:
         """从本地缓存加载合约字典"""
-        import bz2
-        import pickle
-        contract_file_name = 'vn_contract.pkb2'
+        contract_file_name = get_file_path('vn_contract.pkb2')
         if not os.path.exists(contract_file_name):
             return
         try:
@@ -488,9 +489,7 @@ class OmsEngine(BaseEngine):
 
     def save_contracts(self) -> None:
         """持久化合约对象到缓存文件"""
-        import bz2
-        import pickle
-        contract_file_name = 'vn_contract.pkb2'
+        contract_file_name = get_file_path('vn_contract.pkb2')
         with bz2.BZ2File(contract_file_name, 'wb') as f:
             if len(self.today_contracts) > 0:
                 self.write_log(f'保存今日合约对象到缓存文件')
