@@ -983,8 +983,8 @@ class BackTestingEngine(object):
                 order.status = Status.CANCELLED
                 order.cancel_time = str(self.last_dt)
                 del self.active_limit_orders[vt_orderid]
-                if strategy:
-                    strategy.on_order(order)
+                if order_strategy:
+                    order_strategy.on_order(order)
 
         # 撤销本地停止单
         for stop_orderid in list(self.active_stop_orders.keys()):

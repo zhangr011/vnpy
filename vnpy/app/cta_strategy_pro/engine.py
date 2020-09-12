@@ -1076,7 +1076,7 @@ class CtaEngine(BaseEngine):
 
         if strategy.trading:
             msg = f"{strategy_name}已经启动，请勿重复操作"
-            self.write_error(msg)
+            self.write_log(msg)
             return False, msg
 
         self.call_strategy_func(strategy, strategy.on_start)

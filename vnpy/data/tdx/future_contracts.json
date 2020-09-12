@@ -1,605 +1,1435 @@
 {
     "A": {
         "underlying_symbol": "A",
-        "mi_symbol": "a2009",
-        "full_symbol": "A2009",
+        "mi_symbol": "a2101",
+        "full_symbol": "A2101",
         "exchange": "DCE",
-        "margin_rate": 0.08,
+        "margin_rate": 0.1,
         "symbol_size": 10,
-        "price_tick": 1.0
+        "price_tick": 1.0,
+        "open_interesting": 123,
+        "symbols": [
+            "A2009",
+            "A2011",
+            "A2101",
+            "A2103",
+            "A2105",
+            "A2107"
+        ]
     },
     "AG": {
         "underlying_symbol": "AG",
-        "mi_symbol": "ag2007",
-        "full_symbol": "AG2007",
+        "mi_symbol": "ag2012",
+        "full_symbol": "AG2012",
         "exchange": "SHFE",
         "margin_rate": 0.1,
         "symbol_size": 15,
-        "price_tick": 1.0
+        "price_tick": 1.0,
+        "open_interesting": 652,
+        "symbols": [
+            "AG2009",
+            "AG2010",
+            "AG2011",
+            "AG2012",
+            "AG2101",
+            "AG2102",
+            "AG2103",
+            "AG2104",
+            "AG2105",
+            "AG2106",
+            "AG2107",
+            "AG2108"
+        ]
     },
     "AL": {
         "underlying_symbol": "AL",
-        "mi_symbol": "al2006",
-        "full_symbol": "AL2006",
+        "mi_symbol": "al2010",
+        "full_symbol": "AL2010",
         "exchange": "SHFE",
         "margin_rate": 0.1,
         "symbol_size": 5,
-        "price_tick": 5.0
+        "price_tick": 5.0,
+        "open_interesting": 134,
+        "symbols": [
+            "AL2009",
+            "AL2010",
+            "AL2011",
+            "AL2012",
+            "AL2101",
+            "AL2102",
+            "AL2103",
+            "AL2104",
+            "AL2105",
+            "AL2106",
+            "AL2107",
+            "AL2108"
+        ]
     },
     "AP": {
         "underlying_symbol": "AP",
         "mi_symbol": "AP010",
         "full_symbol": "AP2010",
         "exchange": "CZCE",
-        "margin_rate": 0.08,
+        "margin_rate": 0.1,
         "symbol_size": 10,
-        "price_tick": 1.0
+        "price_tick": 1.0,
+        "open_interesting": 188275,
+        "symbols": [
+            "AP2010",
+            "AP2011",
+            "AP2012",
+            "AP2101",
+            "AP2103",
+            "AP2105"
+        ]
     },
     "AU": {
         "underlying_symbol": "AU",
-        "mi_symbol": "au2006",
-        "full_symbol": "AU2006",
+        "mi_symbol": "au2012",
+        "full_symbol": "AU2012",
         "exchange": "SHFE",
-        "margin_rate": 0.08,
+        "margin_rate": 0.1,
         "symbol_size": 1000,
-        "price_tick": 0.02
+        "price_tick": 0.02,
+        "open_interesting": 35,
+        "symbols": [
+            "AU2009",
+            "AU2010",
+            "AU2011",
+            "AU2012",
+            "AU2102",
+            "AU2104",
+            "AU2106",
+            "AU2108"
+        ]
     },
     "B": {
         "underlying_symbol": "B",
-        "mi_symbol": "b2006",
-        "full_symbol": "B2006",
+        "mi_symbol": "b2010",
+        "full_symbol": "B2010",
         "exchange": "DCE",
-        "margin_rate": 0.08,
+        "margin_rate": 0.1,
         "symbol_size": 10,
-        "price_tick": 1.0
+        "price_tick": 1.0,
+        "open_interesting": 111,
+        "symbols": [
+            "B2009",
+            "B2010",
+            "B2011",
+            "B2012",
+            "B2101",
+            "B2102",
+            "B2103",
+            "B2104",
+            "B2105",
+            "B2106",
+            "B2107",
+            "B2108"
+        ]
     },
     "BB": {
         "underlying_symbol": "BB",
-        "mi_symbol": "bb2101",
-        "full_symbol": "BB2101",
+        "mi_symbol": "bb2105",
+        "full_symbol": "BB2105",
         "exchange": "DCE",
-        "margin_rate": 0.2,
+        "margin_rate": 0.1,
         "symbol_size": 500,
-        "price_tick": 0.05
+        "price_tick": 0.05,
+        "open_interesting": 2,
+        "symbols": [
+            "BB2009",
+            "BB2010",
+            "BB2011",
+            "BB2012",
+            "BB2101",
+            "BB2102",
+            "BB2103",
+            "BB2104",
+            "BB2105",
+            "BB2106",
+            "BB2107",
+            "BB2108"
+        ]
     },
     "BU": {
         "underlying_symbol": "BU",
-        "mi_symbol": "bu2006",
-        "full_symbol": "BU2006",
+        "mi_symbol": "bu2012",
+        "full_symbol": "BU2012",
         "exchange": "SHFE",
-        "margin_rate": 0.11,
+        "margin_rate": 0.1,
         "symbol_size": 10,
-        "price_tick": 2.0
+        "price_tick": 2.0,
+        "open_interesting": 1025,
+        "symbols": [
+            "BU2009",
+            "BU2010",
+            "BU2011",
+            "BU2012",
+            "BU2101",
+            "BU2102",
+            "BU2103",
+            "BU2106",
+            "BU2109",
+            "BU2112",
+            "BU2203",
+            "BU2206"
+        ]
     },
     "C": {
         "underlying_symbol": "C",
-        "mi_symbol": "c2009",
-        "full_symbol": "C2009",
+        "mi_symbol": "c2101",
+        "full_symbol": "C2101",
         "exchange": "DCE",
-        "margin_rate": 0.06,
+        "margin_rate": 0.1,
         "symbol_size": 10,
-        "price_tick": 1.0
+        "price_tick": 1.0,
+        "open_interesting": 1337,
+        "symbols": [
+            "C2009",
+            "C2011",
+            "C2101",
+            "C2103",
+            "C2105",
+            "C2107"
+        ]
     },
     "CF": {
         "underlying_symbol": "CF",
-        "mi_symbol": "CF009",
-        "full_symbol": "CF2009",
+        "mi_symbol": "CF101",
+        "full_symbol": "CF2101",
         "exchange": "CZCE",
-        "margin_rate": 0.07,
+        "margin_rate": 0.1,
         "symbol_size": 5,
-        "price_tick": 5.0
+        "price_tick": 5.0,
+        "open_interesting": 1431,
+        "symbols": [
+            "CF2009",
+            "CF2011",
+            "CF2101",
+            "CF2103",
+            "CF2105",
+            "CF2107"
+        ]
     },
     "CJ": {
         "underlying_symbol": "CJ",
-        "mi_symbol": "CJ009",
-        "full_symbol": "CJ2009",
+        "mi_symbol": "CJ101",
+        "full_symbol": "CJ2101",
         "exchange": "CZCE",
-        "margin_rate": 0.07,
+        "margin_rate": 0.1,
         "symbol_size": 5,
-        "price_tick": 5.0
+        "price_tick": 5.0,
+        "open_interesting": 34982,
+        "symbols": [
+            "CJ2009",
+            "CJ2012",
+            "CJ2101",
+            "CJ2103",
+            "CJ2105",
+            "CJ2107"
+        ]
     },
     "CS": {
         "underlying_symbol": "CS",
-        "mi_symbol": "cs2009",
-        "full_symbol": "CS2009",
+        "mi_symbol": "cs2101",
+        "full_symbol": "CS2101",
         "exchange": "DCE",
-        "margin_rate": 0.06,
+        "margin_rate": 0.1,
         "symbol_size": 10,
-        "price_tick": 1.0
+        "price_tick": 1.0,
+        "open_interesting": 252,
+        "symbols": [
+            "CS2009",
+            "CS2011",
+            "CS2101",
+            "CS2103",
+            "CS2105",
+            "CS2107"
+        ]
     },
     "CU": {
         "underlying_symbol": "CU",
-        "mi_symbol": "cu2006",
-        "full_symbol": "CU2006",
+        "mi_symbol": "cu2010",
+        "full_symbol": "CU2010",
         "exchange": "SHFE",
         "margin_rate": 0.1,
         "symbol_size": 5,
-        "price_tick": 10.0
+        "price_tick": 10.0,
+        "open_interesting": 180,
+        "symbols": [
+            "CU2009",
+            "CU2010",
+            "CU2011",
+            "CU2012",
+            "CU2101",
+            "CU2102",
+            "CU2103",
+            "CU2104",
+            "CU2105",
+            "CU2106",
+            "CU2107",
+            "CU2108"
+        ]
     },
     "CY": {
         "underlying_symbol": "CY",
-        "mi_symbol": "CY009",
-        "full_symbol": "CY2009",
+        "mi_symbol": "CY101",
+        "full_symbol": "CY2101",
         "exchange": "CZCE",
-        "margin_rate": 0.07,
+        "margin_rate": 0.1,
         "symbol_size": 5,
-        "price_tick": 5.0
+        "price_tick": 5.0,
+        "open_interesting": 1,
+        "symbols": [
+            "CY2009",
+            "CY2010",
+            "CY2011",
+            "CY2012",
+            "CY2101",
+            "CY2102",
+            "CY2103",
+            "CY2104",
+            "CY2105",
+            "CY2106",
+            "CY2107",
+            "CY2108"
+        ]
     },
     "EB": {
         "underlying_symbol": "EB",
-        "mi_symbol": "eb2009",
-        "full_symbol": "EB2009",
+        "mi_symbol": "eb2101",
+        "full_symbol": "EB2101",
         "exchange": "DCE",
-        "margin_rate": 0.11,
+        "margin_rate": 0.1,
         "symbol_size": 5,
-        "price_tick": 1.0
+        "price_tick": 1.0,
+        "open_interesting": 115,
+        "symbols": [
+            "EB2009",
+            "EB2010",
+            "EB2011",
+            "EB2012",
+            "EB2101",
+            "EB2102",
+            "EB2103",
+            "EB2104",
+            "EB2105",
+            "EB2106",
+            "EB2107",
+            "EB2108"
+        ]
     },
     "EG": {
         "underlying_symbol": "EG",
-        "mi_symbol": "eg2009",
-        "full_symbol": "EG2009",
+        "mi_symbol": "eg2101",
+        "full_symbol": "EG2101",
         "exchange": "DCE",
-        "margin_rate": 0.11,
+        "margin_rate": 0.1,
         "symbol_size": 10,
-        "price_tick": 1.0
+        "price_tick": 1.0,
+        "open_interesting": 722,
+        "symbols": [
+            "EG2009",
+            "EG2010",
+            "EG2011",
+            "EG2012",
+            "EG2101",
+            "EG2102",
+            "EG2103",
+            "EG2104",
+            "EG2105",
+            "EG2106",
+            "EG2107",
+            "EG2108"
+        ]
     },
     "FB": {
         "underlying_symbol": "FB",
-        "mi_symbol": "fb2005",
-        "full_symbol": "FB2005",
+        "mi_symbol": "fb2010",
+        "full_symbol": "FB2010",
         "exchange": "DCE",
         "margin_rate": 0.1,
         "symbol_size": 10,
-        "price_tick": 0.5
+        "price_tick": 0.5,
+        "open_interesting": 691,
+        "symbols": [
+            "FB2009",
+            "FB2010",
+            "FB2011",
+            "FB2012",
+            "FB2101",
+            "FB2102",
+            "FB2103",
+            "FB2104",
+            "FB2105",
+            "FB2106",
+            "FB2107",
+            "FB2108"
+        ]
     },
     "FG": {
         "underlying_symbol": "FG",
-        "mi_symbol": "FG009",
-        "full_symbol": "FG2009",
+        "mi_symbol": "FG104",
+        "full_symbol": "FG2104",
         "exchange": "CZCE",
-        "margin_rate": 0.05,
+        "margin_rate": 0.1,
         "symbol_size": 20,
-        "price_tick": 1.0
+        "price_tick": 1.0,
+        "open_interesting": 999,
+        "symbols": [
+            "FG2009",
+            "FG2010",
+            "FG2011",
+            "FG2012",
+            "FG2101",
+            "FG2102",
+            "FG2103",
+            "FG2104",
+            "FG2105",
+            "FG2106",
+            "FG2107",
+            "FG2108"
+        ]
     },
     "FU": {
         "underlying_symbol": "FU",
-        "mi_symbol": "fu2009",
-        "full_symbol": "FU2009",
+        "mi_symbol": "fu2101",
+        "full_symbol": "FU2101",
         "exchange": "SHFE",
-        "margin_rate": 0.11,
+        "margin_rate": 0.1,
         "symbol_size": 10,
-        "price_tick": 1.0
+        "price_tick": 1.0,
+        "open_interesting": 1669,
+        "symbols": [
+            "FU2010",
+            "FU2011",
+            "FU2012",
+            "FU2101",
+            "FU2102",
+            "FU2103",
+            "FU2104",
+            "FU2105",
+            "FU2106",
+            "FU2107",
+            "FU2108",
+            "FU2109"
+        ]
     },
     "HC": {
         "underlying_symbol": "HC",
-        "mi_symbol": "hc2010",
-        "full_symbol": "HC2010",
+        "mi_symbol": "hc2101",
+        "full_symbol": "HC2101",
         "exchange": "SHFE",
-        "margin_rate": 0.09,
+        "margin_rate": 0.1,
         "symbol_size": 10,
-        "price_tick": 1.0
+        "price_tick": 1.0,
+        "open_interesting": 586,
+        "symbols": [
+            "HC2009",
+            "HC2010",
+            "HC2011",
+            "HC2012",
+            "HC2101",
+            "HC2102",
+            "HC2103",
+            "HC2104",
+            "HC2105",
+            "HC2106",
+            "HC2107",
+            "HC2108"
+        ]
     },
     "I": {
         "underlying_symbol": "I",
-        "mi_symbol": "i2009",
-        "full_symbol": "I2009",
+        "mi_symbol": "i2101",
+        "full_symbol": "I2101",
         "exchange": "DCE",
-        "margin_rate": 0.08,
+        "margin_rate": 0.1,
         "symbol_size": 100,
-        "price_tick": 0.5
+        "price_tick": 0.5,
+        "open_interesting": 1361,
+        "symbols": [
+            "I2009",
+            "I2010",
+            "I2011",
+            "I2012",
+            "I2101",
+            "I2102",
+            "I2103",
+            "I2104",
+            "I2105",
+            "I2106",
+            "I2107",
+            "I2108"
+        ]
     },
     "IC": {
         "underlying_symbol": "IC",
-        "mi_symbol": "IC2005",
-        "full_symbol": "IC2005",
+        "mi_symbol": "IC2009",
+        "full_symbol": "IC2009",
         "exchange": "CFFEX",
-        "margin_rate": 0.12,
+        "margin_rate": 0.1,
         "symbol_size": 200,
-        "price_tick": 0.2
+        "price_tick": 0.2,
+        "open_interesting": 113728,
+        "symbols": [
+            "IC2009",
+            "IC2010",
+            "IC2012",
+            "IC2103"
+        ]
     },
     "IF": {
         "underlying_symbol": "IF",
-        "mi_symbol": "IF2006",
-        "full_symbol": "IF2006",
+        "mi_symbol": "IF2009",
+        "full_symbol": "IF2009",
         "exchange": "CFFEX",
         "margin_rate": 0.1,
         "symbol_size": 300,
-        "price_tick": 0.2
+        "price_tick": 0.2,
+        "open_interesting": 123468,
+        "symbols": [
+            "IF2009",
+            "IF2010",
+            "IF2012",
+            "IF2103"
+        ]
     },
     "IH": {
         "underlying_symbol": "IH",
-        "mi_symbol": "IH2006",
-        "full_symbol": "IH2006",
+        "mi_symbol": "IH2009",
+        "full_symbol": "IH2009",
         "exchange": "CFFEX",
         "margin_rate": 0.1,
         "symbol_size": 300,
-        "price_tick": 0.2
+        "price_tick": 0.2,
+        "open_interesting": 42735,
+        "symbols": [
+            "IH2009",
+            "IH2010",
+            "IH2012",
+            "IH2103"
+        ]
     },
     "J": {
         "underlying_symbol": "J",
-        "mi_symbol": "j2009",
-        "full_symbol": "J2009",
+        "mi_symbol": "j2101",
+        "full_symbol": "J2101",
         "exchange": "DCE",
-        "margin_rate": 0.08,
+        "margin_rate": 0.1,
         "symbol_size": 100,
-        "price_tick": 0.5
+        "price_tick": 0.5,
+        "open_interesting": 171367,
+        "symbols": [
+            "J2009",
+            "J2010",
+            "J2011",
+            "J2012",
+            "J2101",
+            "J2102",
+            "J2103",
+            "J2104",
+            "J2105",
+            "J2106",
+            "J2107",
+            "J2108"
+        ]
     },
     "JD": {
         "underlying_symbol": "JD",
-        "mi_symbol": "jd2006",
-        "full_symbol": "JD2006",
+        "mi_symbol": "jd2010",
+        "full_symbol": "JD2010",
         "exchange": "DCE",
-        "margin_rate": 0.07,
+        "margin_rate": 0.1,
         "symbol_size": 10,
-        "price_tick": 1.0
+        "price_tick": 1.0,
+        "open_interesting": 368055,
+        "symbols": [
+            "JD2009",
+            "JD2010",
+            "JD2011",
+            "JD2012",
+            "JD2101",
+            "JD2102",
+            "JD2103",
+            "JD2104",
+            "JD2105",
+            "JD2106",
+            "JD2107",
+            "JD2108"
+        ]
     },
     "JM": {
         "underlying_symbol": "JM",
-        "mi_symbol": "jm2009",
-        "full_symbol": "JM2009",
+        "mi_symbol": "jm2101",
+        "full_symbol": "JM2101",
         "exchange": "DCE",
-        "margin_rate": 0.08,
+        "margin_rate": 0.1,
         "symbol_size": 60,
-        "price_tick": 0.5
+        "price_tick": 0.5,
+        "open_interesting": 203,
+        "symbols": [
+            "JM2009",
+            "JM2010",
+            "JM2011",
+            "JM2012",
+            "JM2101",
+            "JM2102",
+            "JM2103",
+            "JM2104",
+            "JM2105",
+            "JM2106",
+            "JM2107",
+            "JM2108"
+        ]
     },
     "JR": {
         "underlying_symbol": "JR",
         "mi_symbol": "JR101",
         "full_symbol": "JR2101",
         "exchange": "CZCE",
-        "margin_rate": 0.05,
+        "margin_rate": 0.1,
         "symbol_size": 20,
-        "price_tick": 1.0
+        "price_tick": 1.0,
+        "open_interesting": 2,
+        "symbols": [
+            "JR2009",
+            "JR2011",
+            "JR2101",
+            "JR2103",
+            "JR2105",
+            "JR2107"
+        ]
     },
     "L": {
         "underlying_symbol": "L",
-        "mi_symbol": "l2009",
-        "full_symbol": "L2009",
+        "mi_symbol": "l2101",
+        "full_symbol": "L2101",
         "exchange": "DCE",
-        "margin_rate": 0.08,
+        "margin_rate": 0.1,
         "symbol_size": 5,
-        "price_tick": 5.0
+        "price_tick": 5.0,
+        "open_interesting": 383,
+        "symbols": [
+            "L2009",
+            "L2010",
+            "L2011",
+            "L2012",
+            "L2101",
+            "L2102",
+            "L2103",
+            "L2104",
+            "L2105",
+            "L2106",
+            "L2107",
+            "L2108"
+        ]
     },
     "LR": {
         "underlying_symbol": "LR",
-        "mi_symbol": "LR007",
-        "full_symbol": "LR2007",
+        "mi_symbol": "LR011",
+        "full_symbol": "LR2011",
         "exchange": "CZCE",
-        "margin_rate": 0.05,
+        "margin_rate": 0.1,
         "symbol_size": 20,
-        "price_tick": 1.0
+        "price_tick": 1.0,
+        "open_interesting": 45,
+        "symbols": [
+            "LR2011",
+            "LR2101",
+            "LR2103",
+            "LR2105",
+            "LR2107"
+        ]
     },
     "M": {
         "underlying_symbol": "M",
-        "mi_symbol": "m2009",
-        "full_symbol": "M2009",
+        "mi_symbol": "m2101",
+        "full_symbol": "M2101",
         "exchange": "DCE",
-        "margin_rate": 0.08,
+        "margin_rate": 0.1,
         "symbol_size": 10,
-        "price_tick": 1.0
+        "price_tick": 1.0,
+        "open_interesting": 1145871,
+        "symbols": [
+            "M2009",
+            "M2011",
+            "M2012",
+            "M2101",
+            "M2103",
+            "M2105",
+            "M2107",
+            "M2108"
+        ]
     },
     "MA": {
         "underlying_symbol": "MA",
-        "mi_symbol": "MA009",
-        "full_symbol": "MA2009",
+        "mi_symbol": "MA105",
+        "full_symbol": "MA2105",
         "exchange": "CZCE",
-        "margin_rate": 0.07,
+        "margin_rate": 0.1,
         "symbol_size": 10,
-        "price_tick": 1.0
+        "price_tick": 1.0,
+        "open_interesting": 4000,
+        "symbols": [
+            "MA2009",
+            "MA2010",
+            "MA2011",
+            "MA2012",
+            "MA2101",
+            "MA2102",
+            "MA2103",
+            "MA2104",
+            "MA2105",
+            "MA2106",
+            "MA2107",
+            "MA2108"
+        ]
     },
     "NI": {
         "underlying_symbol": "NI",
-        "mi_symbol": "ni2007",
-        "full_symbol": "NI2007",
+        "mi_symbol": "ni2011",
+        "full_symbol": "NI2011",
         "exchange": "SHFE",
         "margin_rate": 0.1,
         "symbol_size": 1,
-        "price_tick": 10.0
+        "price_tick": 10.0,
+        "open_interesting": 240,
+        "symbols": [
+            "NI2009",
+            "NI2010",
+            "NI2011",
+            "NI2012",
+            "NI2101",
+            "NI2102",
+            "NI2103",
+            "NI2104",
+            "NI2105",
+            "NI2106",
+            "NI2107",
+            "NI2108"
+        ]
     },
     "NR": {
         "underlying_symbol": "NR",
-        "mi_symbol": "nr2006",
-        "full_symbol": "NR2006",
+        "mi_symbol": "nr2011",
+        "full_symbol": "NR2011",
         "exchange": "INE",
-        "margin_rate": 0.11,
+        "margin_rate": 0.1,
         "symbol_size": 10,
-        "price_tick": 5.0
+        "price_tick": 5.0,
+        "open_interesting": 4,
+        "symbols": [
+            "NR2009",
+            "NR2010",
+            "NR2011",
+            "NR2012",
+            "NR2101",
+            "NR2102",
+            "NR2103",
+            "NR2104",
+            "NR2105",
+            "NR2106",
+            "NR2107",
+            "NR2108"
+        ]
     },
     "OI": {
         "underlying_symbol": "OI",
-        "mi_symbol": "OI007",
-        "full_symbol": "OI2007",
+        "mi_symbol": "OI101",
+        "full_symbol": "OI2101",
         "exchange": "CZCE",
-        "margin_rate": 0.06,
+        "margin_rate": 0.1,
         "symbol_size": 10,
-        "price_tick": 1.0
+        "price_tick": 1.0,
+        "open_interesting": 1417,
+        "symbols": [
+            "OI2009",
+            "OI2011",
+            "OI2101",
+            "OI2103",
+            "OI2105",
+            "OI2107"
+        ]
     },
     "P": {
         "underlying_symbol": "P",
-        "mi_symbol": "p2009",
-        "full_symbol": "P2009",
+        "mi_symbol": "p2101",
+        "full_symbol": "P2101",
         "exchange": "DCE",
-        "margin_rate": 0.08,
+        "margin_rate": 0.1,
         "symbol_size": 10,
-        "price_tick": 2.0
+        "price_tick": 2.0,
+        "open_interesting": 674,
+        "symbols": [
+            "P2009",
+            "P2010",
+            "P2011",
+            "P2012",
+            "P2101",
+            "P2102",
+            "P2103",
+            "P2104",
+            "P2105",
+            "P2106",
+            "P2107",
+            "P2108"
+        ]
     },
     "PB": {
         "underlying_symbol": "PB",
-        "mi_symbol": "pb2006",
-        "full_symbol": "PB2006",
+        "mi_symbol": "pb2010",
+        "full_symbol": "PB2010",
         "exchange": "SHFE",
         "margin_rate": 0.1,
         "symbol_size": 5,
-        "price_tick": 5.0
+        "price_tick": 5.0,
+        "open_interesting": 94,
+        "symbols": [
+            "PB2009",
+            "PB2010",
+            "PB2011",
+            "PB2012",
+            "PB2101",
+            "PB2102",
+            "PB2103",
+            "PB2104",
+            "PB2105",
+            "PB2106",
+            "PB2107",
+            "PB2108"
+        ]
     },
     "PM": {
         "underlying_symbol": "PM",
-        "mi_symbol": "PM101",
-        "full_symbol": "PM2101",
+        "mi_symbol": "PM103",
+        "full_symbol": "PM2103",
         "exchange": "CZCE",
-        "margin_rate": 0.05,
+        "margin_rate": 0.1,
         "symbol_size": 50,
-        "price_tick": 1.0
+        "price_tick": 1.0,
+        "open_interesting": 3,
+        "symbols": [
+            "PM2009",
+            "PM2011",
+            "PM2101",
+            "PM2103",
+            "PM2105",
+            "PM2107"
+        ]
     },
     "PP": {
         "underlying_symbol": "PP",
-        "mi_symbol": "pp2009",
-        "full_symbol": "PP2009",
+        "mi_symbol": "pp2101",
+        "full_symbol": "PP2101",
         "exchange": "DCE",
-        "margin_rate": 0.11,
+        "margin_rate": 0.1,
         "symbol_size": 5,
-        "price_tick": 1.0
+        "price_tick": 1.0,
+        "open_interesting": 697,
+        "symbols": [
+            "PP2009",
+            "PP2010",
+            "PP2011",
+            "PP2012",
+            "PP2101",
+            "PP2102",
+            "PP2103",
+            "PP2104",
+            "PP2105",
+            "PP2106",
+            "PP2107",
+            "PP2108"
+        ]
     },
     "RB": {
         "underlying_symbol": "RB",
-        "mi_symbol": "rb2010",
-        "full_symbol": "RB2010",
+        "mi_symbol": "rb2101",
+        "full_symbol": "RB2101",
         "exchange": "SHFE",
-        "margin_rate": 0.09,
+        "margin_rate": 0.1,
         "symbol_size": 10,
-        "price_tick": 1.0
+        "price_tick": 1.0,
+        "open_interesting": 1190,
+        "symbols": [
+            "RB2009",
+            "RB2010",
+            "RB2011",
+            "RB2012",
+            "RB2101",
+            "RB2102",
+            "RB2103",
+            "RB2104",
+            "RB2105",
+            "RB2106",
+            "RB2107",
+            "RB2108"
+        ]
     },
     "RI": {
         "underlying_symbol": "RI",
-        "mi_symbol": "RI101",
-        "full_symbol": "RI2101",
+        "mi_symbol": "RI009",
+        "full_symbol": "RI2009",
         "exchange": "CZCE",
-        "margin_rate": 0.05,
+        "margin_rate": 0.1,
         "symbol_size": 20,
-        "price_tick": 1.0
+        "price_tick": 1.0,
+        "open_interesting": 2,
+        "symbols": [
+            "RI2009",
+            "RI2011",
+            "RI2101",
+            "RI2103",
+            "RI2105",
+            "RI2107"
+        ]
     },
     "RM": {
         "underlying_symbol": "RM",
-        "mi_symbol": "RM009",
-        "full_symbol": "RM2009",
+        "mi_symbol": "RM101",
+        "full_symbol": "RM2101",
         "exchange": "CZCE",
-        "margin_rate": 0.06,
+        "margin_rate": 0.1,
         "symbol_size": 10,
-        "price_tick": 1.0
+        "price_tick": 1.0,
+        "open_interesting": 1318,
+        "symbols": [
+            "RM2009",
+            "RM2011",
+            "RM2101",
+            "RM2103",
+            "RM2105",
+            "RM2107",
+            "RM2108"
+        ]
     },
     "RR": {
         "underlying_symbol": "RR",
-        "mi_symbol": "rr2009",
-        "full_symbol": "RR2009",
+        "mi_symbol": "rr2012",
+        "full_symbol": "RR2012",
         "exchange": "DCE",
-        "margin_rate": 0.06,
+        "margin_rate": 0.1,
         "symbol_size": 10,
-        "price_tick": 1.0
+        "price_tick": 1.0,
+        "open_interesting": 10,
+        "symbols": [
+            "RR2009",
+            "RR2010",
+            "RR2011",
+            "RR2012",
+            "RR2101",
+            "RR2102",
+            "RR2103",
+            "RR2104",
+            "RR2105",
+            "RR2106",
+            "RR2107",
+            "RR2108"
+        ]
     },
     "RS": {
         "underlying_symbol": "RS",
         "mi_symbol": "RS011",
         "full_symbol": "RS2011",
         "exchange": "CZCE",
-        "margin_rate": 0.2,
+        "margin_rate": 0.1,
         "symbol_size": 10,
-        "price_tick": 1.0
+        "price_tick": 1.0,
+        "open_interesting": 6,
+        "symbols": [
+            "RS2009",
+            "RS2011",
+            "RS2107",
+            "RS2108"
+        ]
     },
     "RU": {
         "underlying_symbol": "RU",
-        "mi_symbol": "ru2009",
-        "full_symbol": "RU2009",
+        "mi_symbol": "ru2101",
+        "full_symbol": "RU2101",
         "exchange": "SHFE",
-        "margin_rate": 0.11,
+        "margin_rate": 0.1,
         "symbol_size": 10,
-        "price_tick": 5.0
+        "price_tick": 5.0,
+        "open_interesting": 600,
+        "symbols": [
+            "RU2009",
+            "RU2010",
+            "RU2011",
+            "RU2101",
+            "RU2103",
+            "RU2104",
+            "RU2105",
+            "RU2106",
+            "RU2107",
+            "RU2108"
+        ]
     },
     "SA": {
         "underlying_symbol": "SA",
-        "mi_symbol": "SA009",
-        "full_symbol": "SA2009",
+        "mi_symbol": "SA101",
+        "full_symbol": "SA2101",
         "exchange": "CZCE",
-        "margin_rate": 0.05,
+        "margin_rate": 0.1,
         "symbol_size": 20,
-        "price_tick": 1.0
+        "price_tick": 1.0,
+        "open_interesting": 290637,
+        "symbols": [
+            "SA2009",
+            "SA2010",
+            "SA2011",
+            "SA2012",
+            "SA2101",
+            "SA2102",
+            "SA2103",
+            "SA2104",
+            "SA2105",
+            "SA2106",
+            "SA2107",
+            "SA2108"
+        ]
     },
     "SC": {
         "underlying_symbol": "SC",
-        "mi_symbol": "sc2006",
-        "full_symbol": "SC2006",
+        "mi_symbol": "sc2010",
+        "full_symbol": "SC2010",
         "exchange": "INE",
-        "margin_rate": 0.11,
+        "margin_rate": 0.1,
         "symbol_size": 1000,
-        "price_tick": 0.1
+        "price_tick": 0.1,
+        "open_interesting": 78,
+        "symbols": [
+            "SC2010",
+            "SC2011",
+            "SC2012",
+            "SC2101",
+            "SC2102",
+            "SC2103",
+            "SC2104",
+            "SC2105",
+            "SC2106",
+            "SC2107",
+            "SC2108",
+            "SC2109",
+            "SC2112",
+            "SC2203",
+            "SC2206",
+            "SC2209",
+            "SC2212",
+            "SC2303",
+            "SC2306",
+            "SC2309"
+        ]
     },
     "SF": {
         "underlying_symbol": "SF",
-        "mi_symbol": "SF009",
-        "full_symbol": "SF2009",
+        "mi_symbol": "SF010",
+        "full_symbol": "SF2010",
         "exchange": "CZCE",
-        "margin_rate": 0.07,
+        "margin_rate": 0.1,
         "symbol_size": 5,
-        "price_tick": 2.0
+        "price_tick": 2.0,
+        "open_interesting": 46583,
+        "symbols": [
+            "SF2009",
+            "SF2010",
+            "SF2011",
+            "SF2012",
+            "SF2101",
+            "SF2102",
+            "SF2103",
+            "SF2104",
+            "SF2105",
+            "SF2106",
+            "SF2107",
+            "SF2108"
+        ]
     },
     "SM": {
         "underlying_symbol": "SM",
-        "mi_symbol": "SM009",
-        "full_symbol": "SM2009",
+        "mi_symbol": "SM101",
+        "full_symbol": "SM2101",
         "exchange": "CZCE",
-        "margin_rate": 0.07,
+        "margin_rate": 0.1,
         "symbol_size": 5,
-        "price_tick": 2.0
+        "price_tick": 2.0,
+        "open_interesting": 116292,
+        "symbols": [
+            "SM2009",
+            "SM2010",
+            "SM2011",
+            "SM2012",
+            "SM2101",
+            "SM2102",
+            "SM2103",
+            "SM2104",
+            "SM2105",
+            "SM2106",
+            "SM2107",
+            "SM2108"
+        ]
     },
     "SN": {
         "underlying_symbol": "SN",
-        "mi_symbol": "sn2006",
-        "full_symbol": "SN2006",
+        "mi_symbol": "sn2011",
+        "full_symbol": "SN2011",
         "exchange": "SHFE",
         "margin_rate": 0.1,
         "symbol_size": 1,
-        "price_tick": 10.0
+        "price_tick": 10.0,
+        "open_interesting": 29,
+        "symbols": [
+            "SN2009",
+            "SN2010",
+            "SN2011",
+            "SN2012",
+            "SN2101",
+            "SN2102",
+            "SN2103",
+            "SN2104",
+            "SN2105",
+            "SN2106",
+            "SN2107",
+            "SN2108"
+        ]
     },
     "SP": {
         "underlying_symbol": "SP",
-        "mi_symbol": "sp2009",
-        "full_symbol": "SP2009",
+        "mi_symbol": "sp2012",
+        "full_symbol": "SP2012",
         "exchange": "SHFE",
-        "margin_rate": 0.08,
+        "margin_rate": 0.1,
         "symbol_size": 10,
-        "price_tick": 2.0
+        "price_tick": 2.0,
+        "open_interesting": 249,
+        "symbols": [
+            "SP2009",
+            "SP2010",
+            "SP2011",
+            "SP2012",
+            "SP2101",
+            "SP2102",
+            "SP2103",
+            "SP2104",
+            "SP2105",
+            "SP2106",
+            "SP2107",
+            "SP2108"
+        ]
     },
     "SR": {
         "underlying_symbol": "SR",
-        "mi_symbol": "SR009",
-        "full_symbol": "SR2009",
+        "mi_symbol": "SR107",
+        "full_symbol": "SR2107",
         "exchange": "CZCE",
-        "margin_rate": 0.05,
+        "margin_rate": 0.1,
         "symbol_size": 10,
-        "price_tick": 1.0
+        "price_tick": 1.0,
+        "open_interesting": 3059,
+        "symbols": [
+            "SR2009",
+            "SR2011",
+            "SR2101",
+            "SR2103",
+            "SR2105",
+            "SR2107"
+        ]
     },
     "SS": {
         "underlying_symbol": "SS",
-        "mi_symbol": "ss2006",
-        "full_symbol": "SS2006",
-        "exchange": "SHFE",
-        "margin_rate": 0.09,
-        "symbol_size": 5,
-        "price_tick": 5.0
-    },
-    "T": {
-        "underlying_symbol": "T",
-        "mi_symbol": "T2006",
-        "full_symbol": "T2006",
-        "exchange": "CFFEX",
-        "margin_rate": 0.02,
-        "symbol_size": 10000,
-        "price_tick": 0.005
-    },
-    "TA": {
-        "underlying_symbol": "TA",
-        "mi_symbol": "TA009",
-        "full_symbol": "TA2009",
-        "exchange": "CZCE",
-        "margin_rate": 0.07,
-        "symbol_size": 5,
-        "price_tick": 2.0
-    },
-    "TF": {
-        "underlying_symbol": "TF",
-        "mi_symbol": "TF2006",
-        "full_symbol": "TF2006",
-        "exchange": "CFFEX",
-        "margin_rate": 0.012,
-        "symbol_size": 10000,
-        "price_tick": 0.005
-    },
-    "TS": {
-        "underlying_symbol": "TS",
-        "mi_symbol": "TS2006",
-        "full_symbol": "TS2006",
-        "exchange": "CFFEX",
-        "margin_rate": 0.005,
-        "symbol_size": 20000,
-        "price_tick": 0.005
-    },
-    "UR": {
-        "underlying_symbol": "UR",
-        "mi_symbol": "UR009",
-        "full_symbol": "UR2009",
-        "exchange": "CZCE",
-        "margin_rate": 0.05,
-        "symbol_size": 20,
-        "price_tick": 1.0
-    },
-    "V": {
-        "underlying_symbol": "V",
-        "mi_symbol": "v2009",
-        "full_symbol": "V2009",
-        "exchange": "DCE",
-        "margin_rate": 0.08,
-        "symbol_size": 5,
-        "price_tick": 5.0
-    },
-    "WH": {
-        "underlying_symbol": "WH",
-        "mi_symbol": "WH011",
-        "full_symbol": "WH2011",
-        "exchange": "CZCE",
-        "margin_rate": 0.07,
-        "symbol_size": 20,
-        "price_tick": 1.0
-    },
-    "WR": {
-        "underlying_symbol": "WR",
-        "mi_symbol": "wr2101",
-        "full_symbol": "WR2101",
-        "exchange": "SHFE",
-        "margin_rate": 0.09,
-        "symbol_size": 10,
-        "price_tick": 1.0
-    },
-    "Y": {
-        "underlying_symbol": "Y",
-        "mi_symbol": "y2009",
-        "full_symbol": "Y2009",
-        "exchange": "DCE",
-        "margin_rate": 0.08,
-        "symbol_size": 10,
-        "price_tick": 2.0
-    },
-    "ZC": {
-        "underlying_symbol": "ZC",
-        "mi_symbol": "ZC009",
-        "full_symbol": "ZC2009",
-        "exchange": "CZCE",
-        "margin_rate": 0.06,
-        "symbol_size": 100,
-        "price_tick": 0.2
-    },
-    "ZN": {
-        "underlying_symbol": "ZN",
-        "mi_symbol": "zn2006",
-        "full_symbol": "ZN2006",
+        "mi_symbol": "ss2011",
+        "full_symbol": "SS2011",
         "exchange": "SHFE",
         "margin_rate": 0.1,
         "symbol_size": 5,
-        "price_tick": 5.0
+        "price_tick": 5.0,
+        "open_interesting": 12,
+        "symbols": [
+            "SS2009",
+            "SS2010",
+            "SS2011",
+            "SS2012",
+            "SS2101",
+            "SS2102",
+            "SS2103",
+            "SS2104",
+            "SS2105",
+            "SS2106",
+            "SS2107",
+            "SS2108"
+        ]
     },
-    "AF": {
-        "underlying_symbol": "AF",
-        "mi_symbol": "AF2009",
-        "full_symbol": "AF2009",
-        "exchange": "CFFEX"
+    "T": {
+        "underlying_symbol": "T",
+        "mi_symbol": "T2012",
+        "full_symbol": "T2012",
+        "exchange": "CFFEX",
+        "margin_rate": 0.1,
+        "symbol_size": 10000,
+        "price_tick": 0.005,
+        "open_interesting": 61523,
+        "symbols": [
+            "T2009",
+            "T2012",
+            "T2103"
+        ]
     },
-    "EF": {
-        "underlying_symbol": "EF",
-        "mi_symbol": "EF2009",
-        "full_symbol": "EF2009",
-        "exchange": "CFFEX"
+    "TA": {
+        "underlying_symbol": "TA",
+        "mi_symbol": "TA102",
+        "full_symbol": "TA2102",
+        "exchange": "CZCE",
+        "margin_rate": 0.1,
+        "symbol_size": 5,
+        "price_tick": 2.0,
+        "open_interesting": 3082,
+        "symbols": [
+            "TA2009",
+            "TA2010",
+            "TA2011",
+            "TA2012",
+            "TA2101",
+            "TA2102",
+            "TA2103",
+            "TA2104",
+            "TA2105",
+            "TA2106",
+            "TA2107",
+            "TA2108"
+        ]
     },
-    "TL": {
-        "underlying_symbol": "TL",
-        "mi_symbol": "TL2009",
-        "full_symbol": "TL2009",
-        "exchange": "CFFEX"
+    "TF": {
+        "underlying_symbol": "TF",
+        "mi_symbol": "TF2012",
+        "full_symbol": "TF2012",
+        "exchange": "CFFEX",
+        "margin_rate": 0.1,
+        "symbol_size": 10000,
+        "price_tick": 0.005,
+        "open_interesting": 27699,
+        "symbols": [
+            "TF2009",
+            "TF2012",
+            "TF2103"
+        ]
+    },
+    "TS": {
+        "underlying_symbol": "TS",
+        "mi_symbol": "TS2012",
+        "full_symbol": "TS2012",
+        "exchange": "CFFEX",
+        "margin_rate": 0.1,
+        "symbol_size": 20000,
+        "price_tick": 0.005,
+        "open_interesting": 5922,
+        "symbols": [
+            "TS2009",
+            "TS2012",
+            "TS2103"
+        ]
+    },
+    "UR": {
+        "underlying_symbol": "UR",
+        "mi_symbol": "UR101",
+        "full_symbol": "UR2101",
+        "exchange": "CZCE",
+        "margin_rate": 0.1,
+        "symbol_size": 20,
+        "price_tick": 1.0,
+        "open_interesting": 102002,
+        "symbols": [
+            "UR2009",
+            "UR2010",
+            "UR2011",
+            "UR2012",
+            "UR2101",
+            "UR2102",
+            "UR2103",
+            "UR2104",
+            "UR2105",
+            "UR2106",
+            "UR2107",
+            "UR2108"
+        ]
+    },
+    "V": {
+        "underlying_symbol": "V",
+        "mi_symbol": "v2101",
+        "full_symbol": "V2101",
+        "exchange": "DCE",
+        "margin_rate": 0.1,
+        "symbol_size": 5,
+        "price_tick": 5.0,
+        "open_interesting": 396,
+        "symbols": [
+            "V2009",
+            "V2010",
+            "V2011",
+            "V2012",
+            "V2101",
+            "V2102",
+            "V2103",
+            "V2104",
+            "V2105",
+            "V2106",
+            "V2107",
+            "V2108"
+        ]
+    },
+    "WH": {
+        "underlying_symbol": "WH",
+        "mi_symbol": "WH101",
+        "full_symbol": "WH2101",
+        "exchange": "CZCE",
+        "margin_rate": 0.1,
+        "symbol_size": 20,
+        "price_tick": 1.0,
+        "open_interesting": 35,
+        "symbols": [
+            "WH2009",
+            "WH2011",
+            "WH2101",
+            "WH2103",
+            "WH2105",
+            "WH2107"
+        ]
+    },
+    "WR": {
+        "underlying_symbol": "WR",
+        "mi_symbol": "wr2107",
+        "full_symbol": "WR2107",
+        "exchange": "SHFE",
+        "margin_rate": 0.1,
+        "symbol_size": 10,
+        "price_tick": 1.0,
+        "open_interesting": 5,
+        "symbols": [
+            "WR2009",
+            "WR2010",
+            "WR2011",
+            "WR2012",
+            "WR2101",
+            "WR2102",
+            "WR2103",
+            "WR2104",
+            "WR2105",
+            "WR2106",
+            "WR2107",
+            "WR2108"
+        ]
+    },
+    "Y": {
+        "underlying_symbol": "Y",
+        "mi_symbol": "y2101",
+        "full_symbol": "Y2101",
+        "exchange": "DCE",
+        "margin_rate": 0.1,
+        "symbol_size": 10,
+        "price_tick": 2.0,
+        "open_interesting": 664,
+        "symbols": [
+            "Y2009",
+            "Y2011",
+            "Y2012",
+            "Y2101",
+            "Y2103",
+            "Y2105",
+            "Y2107",
+            "Y2108"
+        ]
+    },
+    "ZC": {
+        "underlying_symbol": "ZC",
+        "mi_symbol": "ZC102",
+        "full_symbol": "ZC2102",
+        "exchange": "CZCE",
+        "margin_rate": 0.1,
+        "symbol_size": 100,
+        "price_tick": 0.2,
+        "open_interesting": 394,
+        "symbols": [
+            "ZC2009",
+            "ZC2010",
+            "ZC2011",
+            "ZC2012",
+            "ZC2101",
+            "ZC2102",
+            "ZC2103",
+            "ZC2104",
+            "ZC2105",
+            "ZC2106",
+            "ZC2107",
+            "ZC2108",
+            "ZC2109"
+        ]
+    },
+    "ZN": {
+        "underlying_symbol": "ZN",
+        "mi_symbol": "zn2010",
+        "full_symbol": "ZN2010",
+        "exchange": "SHFE",
+        "margin_rate": 0.1,
+        "symbol_size": 5,
+        "price_tick": 5.0,
+        "open_interesting": 197,
+        "symbols": [
+            "ZN2009",
+            "ZN2010",
+            "ZN2011",
+            "ZN2012",
+            "ZN2101",
+            "ZN2102",
+            "ZN2103",
+            "ZN2104",
+            "ZN2105",
+            "ZN2106",
+            "ZN2107",
+            "ZN2108"
+        ]
     },
     "PG": {
         "underlying_symbol": "PG",
         "mi_symbol": "pg2011",
         "full_symbol": "PG2011",
         "exchange": "DCE",
-        "margin_rate": 0.08,
+        "margin_rate": 0.1,
         "symbol_size": 20,
+        "price_tick": 1.0,
+        "open_interesting": 59,
+        "symbols": [
+            "PG2011",
+            "PG2012",
+            "PG2101",
+            "PG2102",
+            "PG2103",
+            "PG2104",
+            "PG2105",
+            "PG2106",
+            "PG2107",
+            "PG2108"
+        ]
+    },
+    "LU": {
+        "open_interesting": 15256,
+        "symbols": [
+            "LU2101",
+            "LU2101",
+            "LU2102",
+            "LU2102",
+            "LU2103",
+            "LU2103",
+            "LU2104",
+            "LU2104",
+            "LU2105",
+            "LU2105",
+            "LU2106",
+            "LU2106",
+            "LU2107"
+        ],
+        "mi_symbol": "lu2101",
+        "full_symbol": "LU2101",
+        "margin_rate": 0.1,
+        "symbol_size": 10,
         "price_tick": 1.0
     }
 }
