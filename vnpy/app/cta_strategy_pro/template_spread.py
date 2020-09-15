@@ -429,29 +429,53 @@ class CtaSpreadTemplate(CtaTemplate):
         dist_record['price'] = price
         dist_record['symbol'] = self.vt_symbol
         dist_record['operation'] = operation
-
+        symbol, exchange = extract_vt_symbol(self.vt_symbol)
+        trade = TradeData(
+            symbol=symbol,
+            exchange=exchange,
+            volume=volume,
+            price=price,
+            datetime=self.cur_datetime,
+            orderid=self.cur_datetime.strftime('o_%Y%m%d%H%M%S%f'),
+            tradeid=self.cur_datetime.strftime('t_%Y%m%d%H%M%S%f'),
+            sys_orderid=self.cur_datetime.strftime('so_%Y%m%d%H%M%S%f'),
+            time=self.cur_datetime.strftime('%Y-%m-%d %H:%M:%S'),
+            strategy_name=self.strategy_name,
+            gateway_name='-'
+        )
         if operation == 'buy':
             self.position.open_pos(Direction.LONG, volume=volume)
             dist_record['long_pos'] = self.position.long_pos
             dist_record['short_pos'] = self.position.short_pos
+            trade.offset=Offset.OPEN
+            trade.direction=Direction.LONG
 
         if operation == 'short':
             self.position.open_pos(Direction.SHORT, volume=volume)
             dist_record['long_pos'] = self.position.long_pos
             dist_record['short_pos'] = self.position.short_pos
-
+            trade.offset = Offset.OPEN
+            trade.direction = Direction.SHORT
         if operation == 'cover':
             self.position.close_pos(Direction.LONG, volume=volume)
             dist_record['long_pos'] = self.position.long_pos
             dist_record['short_pos'] = self.position.short_pos
-
+            trade.offset = Offset.CLOSE
+            trade.direction = Direction.LONG
         if operation == 'sell':
             self.position.close_pos(Direction.SHORT, volume=volume)
             dist_record['long_pos'] = self.position.long_pos
             dist_record['short_pos'] = self.position.short_pos
+            trade.offset = Offset.CLOSE
+            trade.direction = Direction.SHORT
 
         self.save_dist(dist_record)
         self.pos = self.position.pos
+
+        # 回测时，补充self.vt_symbol的交易记录
+        if self.backtesting:
+            self.cta_engine.append_trade(trade)
+
 
     def save_dist(self, dist_data):
         """
@@ -1126,11 +1150,12 @@ class CtaSpreadTemplate(CtaTemplate):
         if len(self.active_orders) == 0:
             self.entrust = 0
 
-    def check_liquidity(self):
+    def check_liquidity(self, direction=None, ask_volume=1, bid_volume=1):
         """实盘检查流动性缺失"""
         if self.backtesting:
             return True
 
+        # 检查流动性缺失
         if not self.cur_act_tick.bid_price_1 <= self.cur_act_tick.last_price <= self.cur_act_tick.ask_price_1 \
                 and self.cur_act_tick.volume > 0:
             self.write_log(u'流动性缺失导致leg1最新价{0} /V:{1}超出买1 {2}卖1 {3}范围,'
@@ -1144,6 +1169,22 @@ class CtaSpreadTemplate(CtaTemplate):
                            .format(self.cur_pas_tick.last_price, self.cur_pas_tick.volume,
                                    self.cur_pas_tick.bid_price_1, self.cur_pas_tick.ask_price_1))
             return False
+
+        # 如果设置了方向和volume，检查是否满足
+        if direction==Direction.LONG:
+            if self.cur_act_tick.ask_volume_1 < ask_volume:
+                self.write_log(f'主动腿的卖1委量:{self.cur_act_tick.ask_volume_1}不满足：{ask_volume}')
+                return False
+            if self.cur_pas_tick.bid_volume_1 < bid_volume:
+                self.write_log(f'被动腿的买1委量:{self.cur_pas_tick.bid_volume_1}不满足：{bid_volume}')
+                return False
+        elif direction == Direction.SHORT:
+            if self.cur_act_tick.bid_volume_1 < bid_volume:
+                self.write_log(f'主动腿的买1委量:{self.cur_act_tick.bid_volume_1}不满足：{bid_volume}')
+                return False
+            if self.cur_pas_tick.ask_volume_1 < ask_volume :
+                self.write_log(f'被动腿的卖1委量:{self.cur_pas_tick.ask_volume_1}不满足：{ask_volume}')
+                return False
 
         return True
 
@@ -1199,7 +1240,10 @@ class CtaSpreadTemplate(CtaTemplate):
             self.write_log(u'强制平仓日，不开仓')
             return []
         # 检查流动性缺失
-        if not self.check_liquidity() and not force:
+        if not self.check_liquidity( direction=Direction.SHORT,
+                ask_volume=grid.volume * self.pas_vol_ratio,
+                bid_volume=grid.volume * self.act_vol_ratio
+                ) and not force:
             return []
         # 检查涨跌停距离
         if self.check_near_up_nor_down():
@@ -1265,7 +1309,12 @@ class CtaSpreadTemplate(CtaTemplate):
             self.write_log(u'强制平仓日，不开仓')
             return []
         # 检查流动性缺失
-        if not self.check_liquidity() and not force:
+        if not self.check_liquidity(
+                direction=Direction.LONG,
+                ask_volume=grid.volume * self.act_vol_ratio,
+                bid_volume=grid.volume * self.pas_vol_ratio
+                ) \
+                and not force:
             return []
         # 检查涨跌停距离
         if self.check_near_up_nor_down():
@@ -1319,7 +1368,11 @@ class CtaSpreadTemplate(CtaTemplate):
             self.write_log(u'停止状态，不平仓')
             return []
         # 检查流动性缺失
-        if not self.check_liquidity() and not force:
+        if not self.check_liquidity(
+                direction=Direction.SHORT,
+                ask_volume=grid.volume * self.pas_vol_ratio,
+                bid_volume=grid.volume * self.act_vol_ratio
+        ) and not force:
             return []
         # 检查涨跌停距离
         if self.check_near_up_nor_down():
@@ -1393,7 +1446,11 @@ class CtaSpreadTemplate(CtaTemplate):
             self.write_log(u'停止状态，不平仓')
             return []
         # 检查流动性缺失
-        if not self.check_liquidity() and not force:
+        if not self.check_liquidity(
+                direction=Direction.LONG,
+                ask_volume=grid.volume * self.act_vol_ratio,
+                bid_volume=grid.volume * self.pas_vol_ratio
+        ) and not force:
             return []
         # 检查涨跌停距离
         if self.check_near_up_nor_down():
