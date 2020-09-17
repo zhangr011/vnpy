@@ -16,7 +16,7 @@ from vnpy.data.renko.rebuild_stock import *
 if __name__ == "__main__":
 
     if len(sys.argv) < 4:
-        print(u'请输入三个参数 host symbol pricetick')
+        print(u'请输入三个参数 host symbol pricetick [ bar]')
         exit()
     print(sys.argv)
     host = sys.argv[1]
@@ -24,15 +24,25 @@ if __name__ == "__main__":
     setting = {
         "host": host,
         "db_name": STOCK_RENKO_DB_NAME,
-        "cache_folder": os.path.join(vnpy_root, 'tick_data', 'tdx', 'stock')
+        "cache_folder": os.path.join(vnpy_root, 'tick_data', 'tdx', 'stock'),
+        'bar_folder': os.path.join(vnpy_root,'bar_data')
     }
     builder = StockRenkoRebuilder(setting)
 
     symbol = sys.argv[2]
     price_tick = float(sys.argv[3])
+    if len(sys.argv) >= 5 and sys.argv[4] == 'bar':
+        using_bar = True
+    else:
+        using_bar = False
 
-    print(f'启动期货renko补全,数据库:{host}/{STOCK_RENKO_DB_NAME} 合约:{symbol}')
-    builder.start(symbol=symbol, price_tick=price_tick, height=['K3', 'K5', 'K10'], refill=True)
+    if using_bar:
+        print(f'启动股票bar=> renko补全,数据库:{host}/{STOCK_RENKO_DB_NAME} 合约:{symbol}')
+        builder.start_with_bar(symbol=symbol, price_tick=price_tick, height=['K3', 'K5', 'K10'])
+
+    else:
+        print(f'启动股票tick=> renko补全,数据库:{host}/{STOCK_RENKO_DB_NAME} 合约:{symbol}')
+        builder.start(symbol=symbol, price_tick=price_tick, height=['K3', 'K5', 'K10'], refill=True)
 
     print(f'exit refill {symbol} renkos')
 

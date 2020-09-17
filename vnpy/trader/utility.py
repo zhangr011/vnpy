@@ -1404,3 +1404,28 @@ def get_bars(csv_file: str,
             count += 1
 
     return bars
+
+
+def get_remote_file(remote_ip, remote_file_path, mode='rb'):
+    """
+    获取远程服务器的文件
+    :param remote_ip: 服务器ip地址
+    :param remote_file_path:服务器上文件路径
+    :param mode: 打开文件目录
+    :return:
+    """
+    try:
+        import paramiko
+        pkey = '/home/trade/.ssh/id_rsa'
+        key = paramiko.RSAKey.from_private_key_file(pkey)
+        paramiko.util.log_to_file('log/paramiko.log')
+        ssh = paramiko.SSHClient()
+        ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        # ssh.load_system_host_keys()
+        ssh.connect(remote_ip, username='trade', pkey=key)
+        sftp_client = ssh.open_sftp()
+        remote_file = sftp_client.open(remote_file_path, mode)
+        return remote_file
+    except Exception as ex:
+        print(u'打开远程目录异常:{}'.format(str(ex)))
+        return None

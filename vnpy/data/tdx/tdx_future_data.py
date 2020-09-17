@@ -300,8 +300,13 @@ class TdxFutureData(object):
         if '.' in symbol:
             symbol = symbol.split('.')[0]
         tdx_symbol = symbol.upper().replace('_', '')
-        tdx_symbol = tdx_symbol.replace('99', 'L9')
         underlying_symbol = get_underlying_symbol(symbol).upper()
+
+        if '99' in tdx_symbol:
+            tdx_symbol = tdx_symbol.replace('99', 'L9')
+        else:
+            tdx_symbol = get_full_symbol(symbol).upper()
+
         tdx_index_symbol = underlying_symbol + 'L9'
         vn_exchange = self._get_vn_exchange(underlying_symbol)
 

@@ -35,7 +35,7 @@ stock_list = load_json('stock_list.json')
 
 symbol_dict = api_01.symbol_dict
 
-# 逐一指数合约下载并更新
+# 逐一合约下载并更新
 for stock_code in stock_list:
     market_id = get_tdx_market_code(stock_code)
     if market_id == 0:
@@ -107,7 +107,6 @@ for stock_code in stock_list:
             writer.writerow(bar)
 
         print(f'更新{stock_code}  {stock_name} 数据 => 文件{bar_file_path}, 最后记录:{bars[-1]}')
-
 
 print('更新完毕')
 os._exit(0)
