@@ -118,11 +118,8 @@ def get_full_symbol(symbol: str):
 
     symbol_month = symbol.replace(underlying_symbol, '')
     if len(symbol_month) == 3:
-        if symbol_month[0] == '0':
-            # 支持2020年合约
-            return '{0}2{1}'.format(underlying_symbol, symbol_month)
-        else:
-            return '{0}1{1}'.format(underlying_symbol, symbol_month)
+        # 支持2020年合约
+        return '{0}2{1}'.format(underlying_symbol, symbol_month)
     else:
         return symbol
 

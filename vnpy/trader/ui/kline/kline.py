@@ -1143,7 +1143,7 @@ class KLineWidget(KeyWraper):
                 self.pi_main.addItem(arrow)
                 self.list_trade_arrow.append(arrow)
 
-    def add_trades(self, df_trades):
+    def add_trades(self, df_trades,include_symbols=[], exclude_symbols=[]):
         """
         批量导入交易记录（vnpy回测中导出的trade.csv)
         :param df_trades:
@@ -1158,6 +1158,15 @@ class KLineWidget(KeyWraper):
         else:
             col_datetime = 'time'
         for idx in df_trades.index:
+
+            # 要显示的合约
+            symbol =  df_trades['symbol'].loc[idx]
+            if len(include_symbols) > 0 and symbol not in include_symbols:
+                continue
+
+            if len(exclude_symbols) > 0 and symbol in exclude_symbols:
+                continue
+
             # 时间
             trade_time = df_trades[col_datetime].loc[idx]
             if not isinstance(trade_time, datetime) and isinstance(trade_time, str):
@@ -1496,6 +1505,43 @@ class KLineWidget(KeyWraper):
 
 class GridKline(QtWidgets.QWidget):
     """多kline同时展示，时间联动"""
+    # kline_setting说明：
+    # dict 结构，{图:配置}。  配置，也是dict结构，配置项:配置值
+    # 配置项目1：data_file，k线的csv文件，
+    #           包含时间，高低开平，volume等
+    #           包含主图/副图指标等数据
+    #           一次生成，或者在策略中，通过K线export生成
+    # 配置项目2：main_indicators，主图指标
+    #           指标变量必须在data_file文件中存在字段
+    # 配置项3：sub_indicators， 副图指标
+    #       指标变量必须在data_file文件中存在字段
+
+    # 配置项4：trade_list_file，开平仓交易记录
+    #       每条记录包含开仓，平仓，收益信息
+    #       回测时，每个策略实例，都产生trade_list.csv文件
+
+    # 配置项5:trade_file，交易记录
+    #       每条记录，为单一开仓或平仓信息
+    #       实盘时，引擎为每个策略实例产生trade.csv
+    #       回测时，引擎生成一个trade.csv，包含多个策略实例的交易
+    # 配置项6：trade_include_symbols，[symbol, symbol]
+    #       必须包含的显示交易信息的合约，例如套利合约时，只显示套利合约对，不显示主动腿、被动腿
+    # 配置项7：trade_exclude_symbols，[symbol, symbol]
+    #       排除显示交易信息的合约，例如套利合约时，只显示套利合约对，不显示主动腿、被动腿
+
+    # 配置项8: tns_file，多空事务的csv文件，
+    #       包含时间，多、空，价格
+    #       由策略生成，一般用于显示一段时间的趋势
+
+    # 配置项9: dist_file, 复杂事务的csv文件
+    #   记录自定义的逻辑记录
+    #   包含时间，价格，volume，信号识别，操作，止损价，止盈价，当前多单仓位、空单仓位等
+    #   在策略模板的dist_fieldnames定义，自行扩展
+    #   回放时，支持include、exclude，对‘操作[operation]’这个字段的值进行过滤。
+    # 配置选项10：dist_include_list， 显示dist数据时，对operation字段需要包含的内容
+    # 配置选项11：dist_exclude_list， 显示dist数据时，对operation字段需要排除的内容
+
+    # 配置项12: bi_file / duan_file / bi_zs_file / duan_zs_file，支持缠论的化线
 
     def __init__(self, parent=None, kline_settings={}, title='', relocate=True):
         self.parent = parent
@@ -1619,7 +1665,12 @@ class GridKline(QtWidgets.QWidget):
                 if trade_file and os.path.exists(trade_file):
                     print(f'loading {trade_file}')
                     df_trade = pd.read_csv(trade_file)
-                    self.kline_dict[kline_name].add_trades(df_trade)
+
+                    self.kline_dict[kline_name].add_trades(
+                        df_trades=df_trade,
+                        include_symbols=kline_setting.get('trade_include_symbols' ,[]),
+                        exclude_symbols=kline_setting.get('trade_excclude_symbols', []))
+
 
                 # 加载tns( 回测、实盘产生的）
                 tns_file = kline_setting.get('tns_file', None)
@@ -1637,7 +1688,7 @@ class GridKline(QtWidgets.QWidget):
                     df_markup.rename(columns={'operation': 'markup'}, inplace=True)
                     self.kline_dict[kline_name].add_markups(df_markup=df_markup,
                                                        include_list=kline_setting.get('dist_include_list', []),
-                                                       exclude_list=['buy', 'short', 'sell', 'cover'])
+                                                       exclude_list=kline_setting.get('dist_exclude_list',['buy', 'short', 'sell', 'cover']))
 
                 # 笔
                 bi_file = kline_setting.get('bi_file', None)

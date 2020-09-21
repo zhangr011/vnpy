@@ -873,8 +873,8 @@ class CtaStockTemplate(CtaTemplate):
         网格逐一止损/止盈检查 (根据指数价格进行止损止盈）
         :return:
         """
-        if self.entrust != 0:
-            return
+        #if self.entrust != 0:
+        #    return
 
         if not self.trading and not self.inited:
             self.write_error(u'当前不允许交易')

@@ -214,13 +214,6 @@ class XtpGateway(BaseGateway):
         self.query_functions = [self.query_account, self.query_position]
         self.event_engine.register(EVENT_TIMER, self.process_timer_event)
 
-    def write_error(self, msg: str, error: dict) -> None:
-        """"""
-        error_id = error["error_id"]
-        error_msg = error["error_msg"]
-        msg = f"{msg}，代码：{error_id}，信息：{error_msg}"
-        self.write_log(msg)
-
 
 class XtpMdApi(MdApi):
 
